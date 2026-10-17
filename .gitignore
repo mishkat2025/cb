@@ -1,0 +1,24 @@
+# data, keypoints, model weights, run artefacts: never committed (videos show faces)
+data/
+outputs/
+runs/
+checkpoints/
+*.mp4
+*.avi
+*.mov
+*.npz
+*.npy
+*.pt
+*.pth
+*.ckpt
+*.task
+*.tflite
+*.onnx
+
+# python / tooling
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ipynb_checkpoints/
+.streamlit/secrets.toml
