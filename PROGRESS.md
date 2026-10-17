@@ -4,7 +4,37 @@ Last updated 2026-10-17.
 
 **State:** Step 0 is complete for E01, E02 and the partial E03. The plan was approved with the supervisor's changes (§4). **Phase 1 has not started**; it will start in a new session. Nothing in `cvdc/` exists yet.
 
+**Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
+
 Read this together with `DESIGN_DECISIONS.md` (every open choice, with its status) and the task specification `../CVDC_implementation_prompt.md`.
+
+---
+
+## 0. Scope and limitations
+
+**In scope:** E01 (Abduction) and E02 (Adduction). That is 942 videos from 51 subjects: 24 experts, who did both exercises, and 27 non-experts, who did E01 only.
+
+**Excluded for now:** E03 and every other exercise. Nothing is extracted, trained or evaluated on them.
+- The E03 Step 0 results (§3.4) and its template decision (V3, §3.6) stay documented for later.
+- The pipeline still **discovers exercises at runtime**, with an include list in the config (`data.include_exercises: [E01, E02]`). Adding E03 or others later is a config change, not a code change.
+
+**Main results** (headline):
+1. Score prediction: total score, plus the PF and CF items reported separately.
+2. The B1 / B2 / Proposed (ST-GCN + CVDC) comparison and the with/without-CVDC ablation.
+3. The cross-view protocol: train on two views, test on the third.
+4. The embedding-to-reference distance (the "vector difference", §4 item 9).
+5. Module III assessment: rule-based errors, rule score vs expert score.
+
+**Secondary:** exercise classification (E01 vs E02). It is reported, but it is not a headline result, because 2 classes are near-trivial.
+
+**Limitations, to state in every report:**
+- **Only 2 exercises, both shoulder movements in the same region.** Exercise classification is close to trivial. Findings may not transfer to other body regions, lying exercises (E07–E09) or the wrist (E06).
+- **E02 has no non-experts.** All 384 E02 videos are from the 24 experts, scoring 24–100 (mean 74.1). So E02 has no expert vs non-expert contrast, and its low-score examples come only from imperfect expert takes.
+- **The expert/non-expert contrast exists only in E01, and it is confounded.** Non-experts are single-rep clips of 1–7 s, filmed mostly from the front and not synchronized across views (§3.3, §3.5).
+- **3 views, not the proposal's 4.** Synchronization is reconstructed in software (audio, creation time, motion), not given by the dataset.
+- **No error-type labels.** Module III errors are rule-based and evaluated qualitatively, plus by how rule deviations correlate with the expert scores.
+- **Scores are skewed toward high values.** There is an inter-view label-noise floor of 5.3 points (E01) and 4.4 points (E02) RMSE.
+- **Small sample:** 51 subjects in LOSO, and only 24 of them appear in E02.
 
 ---
 
@@ -31,7 +61,7 @@ Dataset root = `D:\cb` (the folder that contains this repo). Never modify it.
 |---|---|---|
 | `E01(Abduction)` | 558 videos | complete (matches Dataverse) |
 | `E02(Aduction)` | 384 videos | complete |
-| `E03(Lateral_Rotation)` | 199 of 550 videos | **partial**: experts P01–P12 (P04 missing `E03_P04_AL_VLL_GM`), P13 has 8 of 18 videos. P14–P24 and all 27 non-experts are missing. |
+| `E03(Lateral_Rotation)` | 199 of 550 videos | **out of scope for now (§0).** Also partial: experts P01–P12 (P04 missing `E03_P04_AL_VLL_GM`), P13 has 8 of 18 videos. P14–P24 and all 27 non-experts are missing. |
 | `__E03(Lateral_Rotation)` | `E03_P04_AL_VLL_GM.mp4_Error.txt` | download-error marker ("service temporarily unavailable"); not a data folder |
 | `Reference-Model Videos by PTs` | 14 physiotherapist demos | see §3.6 |
 | `Physiotherapist Exercise Marking.csv` | scores, 3 judges × 7 EAAQ items | all 3,686 videos |
@@ -80,7 +110,7 @@ More exercises are still downloading. **Don't touch a folder until the user anno
 8. **Non-square frames:** MediaPipe warns "NORM_RECT without IMAGE_DIMENSIONS". Check whether padding frames to square changes the landmarks.
 9. **Low-light Left views** can have poor detection (42–74% of frames in the sample).
 
-### 3.4 E03 check (requested 2026-10-17)
+### 3.4 E03 check (requested 2026-10-17; kept for later, E03 is out of scope for now)
 - **Coverage:** 199/199 parse, and all 199 have scores. The 351 E03 CSV rows without a local file are the missing videos listed in §2.
 - **Composition:** 13 subjects (P01–P13; P13 incomplete), all experts. Views 70/65/64 (F/L/R). Variations FL 38, ML 37, LL 36, O 37, HJ 26, LJ 25. 63 complete F+L+R groups.
 - **Scores:** mean 73.8, median 77.1. The histogram is bimodal only because of P02 (wrong exercise). ≥95: 18 videos. PF3/PF4 = 1 on only 10.6%.
@@ -142,7 +172,7 @@ One physiotherapist, one view per video, ~1–4 reps each. Most are 20 fps (resa
   - **V3: 7.5–10.8°**
   - v1: 16.7°
   - V2: 55–64°
-- **Proposed template: V3.** Use both arms (left mirrored) and keep only the working phase (abduction ≥ 70°).
+- **Template: V3 (confirmed by the supervisor, applied when E03 is brought into scope).** Use both arms (left mirrored) and keep only the working phase (abduction ≥ 70°).
 - V3 is ~2× slower than the dataset (~5.4 s per rep), so the **speed reference comes from expert videos**, not from the demo.
 - The pool behind this comparison is only 4 front-view videos scoring ≥ 80. Re-check when the rest of E03 arrives.
 
@@ -181,12 +211,21 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
      - include it in the per-rep JSON and the live demo overlay;
      - report how well this distance alone tracks the expert score (Spearman, and as a single-feature regressor) for B1, B2 and Proposed, to test whether CVDC makes the vector difference more meaningful;
      - show reference vs. patient embeddings on the UMAP/t-SNE plots.
+10. **Scope: E01 and E02 only** (second review, 2026-10-17). E03 is excluded from all phases for now; runtime discovery stays. The main results are defined in §0, and the limitations are stated in §0.
+
+**Confirmed in the second review** (now "decided" in `DESIGN_DECISIONS.md`):
+- the V3 template for E03 (applied later);
+- drop the duplicate `E01_P60_AF_VLR_GF`;
+- the E03 P02 handling (applied later);
+- groups synced only by creation time get `w_sync` only after motion confirms the alignment; otherwise they get `w_rep`.
 
 ## 5. Phase checklist
+All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
+
 - [x] **Step 0:** environment, inventory, labels, sync census, references (E01, E02, E03-partial)
 - [ ] **Phase 1, keypoints and preprocessing** (new session)
   - [ ] `cvdc/data/`:
-    - filename parser (runtime discovery of `E\d{2}(...)` folders; skip `__*` folders and unannounced ones);
+    - filename parser (runtime discovery of `E\d{2}(...)` folders, filtered by `data.include_exercises` = [E01, E02]; skip `__*` folders);
     - CSV join;
     - index CSV.
   - [ ] Keypoint extraction for all local videos:
@@ -239,9 +278,8 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 
 ## 6. Open items
 - **EAAQ appendix** for E02–E09: the user is looking for it. Until it arrives, only E01 has questionnaire-derived rules.
-- **E03 is incomplete** (199/550, including one failed download). Rerun the check when the user announces the full folder.
-- **Other exercises are downloading.** Run the Step 0 check (§7) for each one the user announces.
-- **Suggested download order:** E05 (circumduction, 45 subjects, strongly 3D movement), then the rest.
+- **E03 is out of scope for now**, and it is incomplete (199/550, including one failed download). If it comes back into scope, rerun the Step 0 check on the full folder and add it to `data.include_exercises`.
+- **Other exercises** stay out of scope until the supervisor says otherwise. When one is announced and brought into scope, run the Step 0 check (§7).
 
 ## 7. Re-running the Step 0 check
 See `scripts/step0/README.md` for the order and arguments. Minimum for a new exercise: `inventory.py` → `video_meta.py` → `scores.py` → `sync_av.py <EX>` → `sync_classify.py`, plus a pose sample (`select_groups_ex.py` → `extract_pose.py` → `sync_analysis3.py`) and a reference comparison.
