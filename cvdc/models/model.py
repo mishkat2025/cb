@@ -1,7 +1,8 @@
 """The full network: shared ST-GCN encoder -> embedding z; projection head (CVDC); task heads (supervised).
 
-B1 = input xy without CVDC, B2 = input xyz (MediaPipe world landmarks) without CVDC, Proposed = input xy with
-CVDC pretraining; all three use this class with the same encoder size (Phase 3 trains them).
+B1 = input xy without CVDC; B2 = input xyz (MediaPipe world landmarks) or xyz_ktpformer (KTPFormer lifted 3D)
+without CVDC; Proposed = input xy with CVDC pretraining. All use this class with the same encoder size (Phase 3
+trains them).
 """
 import torch.nn as nn
 
@@ -9,7 +10,7 @@ from ..config import exercise_codes
 from .heads import ProjectionHead, TaskHeads
 from .stgcn import STGCN
 
-INPUT_CHANNELS = {"xy": 2, "xyv": 3, "xyz": 3}
+INPUT_CHANNELS = {"xy": 2, "xyv": 3, "xyz": 3, "xyz_ktpformer": 3}
 
 
 class CVDCModel(nn.Module):

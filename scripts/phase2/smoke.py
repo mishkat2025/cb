@@ -7,10 +7,12 @@ Steps
     rep (torso units, per view); skeleton-only figure of one rep in its real and synthetic views
  3. CVDC pretraining for a few epochs on the training subjects (all sources), logging loss, positive/negative
     similarity, projection std (collapse), alignment/uniformity, step time and GPU memory
- 4. viewpoint consistency on held-out subjects before and after pretraining (embedding z and projection),
-    and cosine similarity of held-out positive pairs per source
- 5. supervised fine-tuning for a few epochs (score, CF1-CF3, quality, exercise), held-out RMSE next to the
-    predict-the-mean baseline; B2 (xyz input) and xyv input for a few steps; negatives=different_exercise_only
+ 4. viewpoint consistency on held-out subjects before and after pretraining: VCI on the mean-centred 256-d
+    embedding (primary, E13), the raw embedding and the 128-d projection; per stratum and per pair source
+ 5. supervised fine-tuning for a few epochs (score, CF1-CF3, quality, exercise) with targets standardised on
+    the training subjects (T7), held-out RMSE next to the predict-the-mean baseline; per-head gradient norms on the
+    encoder (loss weights); B1 (xy), B2 (MediaPipe xyz and KTPFormer xyz) and xyv from scratch;
+    negatives=different_exercise_only and two source switches
 
 usage: python scripts/phase2/smoke.py [--cvdc-epochs 10] [--sup-epochs 4] [--holdout 5] [--seed 0]
 Writes outputs/phase2/smoke_*.csv|json|txt and outputs/checks/phase2_*.png (skeleton-only).
@@ -38,9 +40,9 @@ from cvdc.data.cvdc_batch import CVDCBatcher  # noqa: E402
 from cvdc.data.dataset import PackData  # noqa: E402
 from cvdc.data.skeleton import JOINT_SETS  # noqa: E402
 from cvdc.data.synthetic import normalize_2d, synthetic_views  # noqa: E402
-from cvdc.eval.consistency import viewpoint_consistency  # noqa: E402
+from cvdc.eval.consistency import vci_report  # noqa: E402
 from cvdc.losses.cvdc import cvdc_loss, cvdc_stats  # noqa: E402
-from cvdc.losses.supervised import SupervisedLoss  # noqa: E402
+from cvdc.losses.supervised import SupervisedLoss, TargetScaler  # noqa: E402
 from cvdc.models.model import CVDCModel  # noqa: E402
 from cvdc.viz.skeleton import draw_skeleton  # noqa: E402
 
@@ -72,27 +74,31 @@ def encode(model, x, cfg, dev, bs=2048):
     return torch.cat(zs), torch.cat(ps)
 
 
-def heldout_consistency(model, data, cfg, dev, items, members, pairs):
-    """VCI on held-out real reps (plain packs, no augmentation) + mean cosine per pair source."""
-    x = data.inputs(items, cfg["model"]["input"])
-    z, p = encode(model, x, cfg, dev)
+def heldout_consistency(model, data, cfg, dev, items, members, pairs, train_items):
+    """VCI (E13) on real reps (plain packs, no augmentation): centred (primary; centred with the training
+    subjects' mean embedding), raw and projection; per stratum (exercise x expert/non-expert) and the centred
+    cosine of positive pairs per source."""
+    mode = cfg["model"]["input"]
+    z, p = encode(model, data.inputs(items, mode), cfg, dev)
+    z_mean = encode(model, data.inputs(train_items, mode), cfg, dev)[0].mean(0)
     m = members.iloc[items.cpu().numpy()]
     key = torch.tensor(m.set_id.to_numpy(), device=dev)
     view = torch.tensor(m.view.map("FLR".index).to_numpy(), device=dev)
     grp = data.group_code[items]
-    out = {}
-    for nm, e in (("z", z), ("proj", p)):
-        v = viewpoint_consistency(e, key, view, grp)
-        out.update({f"{nm}_{k}": v[k] for k in ("vci", "same", "other")})
-    out["n_same_view_pairs"] = v["n_same_pairs"]
+    out = {"all": vci_report(z, p, key, view, grp, z_mean)}
+    stratum = (m.exercise + "_" + m.group).to_numpy()
+    for st in sorted(set(stratum)):
+        sel = torch.tensor(stratum == st, device=dev)
+        if (m[stratum == st].n_members > 1).any():
+            out[st] = vci_report(z[sel], p[sel], key[sel], view[sel], grp[sel], z_mean)
     pos = {int(it): k for k, it in enumerate(items.cpu().numpy())}
-    zn = torch.nn.functional.normalize(z, dim=-1)
+    zn = torch.nn.functional.normalize(z - z_mean, dim=-1)
     pp = pairs[pairs.item_a.isin(pos) & pairs.item_b.isin(pos)]
     for s, g in pp.groupby("pair_source"):
         a = torch.tensor([pos[i] for i in g.item_a], device=dev)
         b = torch.tensor([pos[i] for i in g.item_b], device=dev)
-        out[f"z_cos_{s}"] = (zn[a] * zn[b]).sum(-1).mean().item()
-        out[f"n_{s}"] = len(g)
+        out["all"][f"centred_cos_{s}"] = (zn[a] * zn[b]).sum(-1).mean().item()
+        out["all"][f"n_{s}"] = len(g)
     return out
 
 
@@ -182,11 +188,40 @@ def pretrain(model, batcher, cfg, dev, epochs):
     return pd.DataFrame(rows), float(np.median(t_step[5:] if len(t_step) > 10 else t_step))
 
 
-def supervised(model, data, cfg, dev, train_items, test_items, epochs, items_list, tag, bs=256):
-    sup = SupervisedLoss(items_list, cfg["supervised"]["weights"])
+def head_gradients(model, data, cfg, dev, items, items_list, scaler, n=512):
+    """Per-head gradient norm on the shared encoder for one fixed batch (no augmentation), with and without the
+    configured loss weights: shows whether one head dominates the encoder's updates."""
+    model.train()
+    g = torch.Generator(device=items.device).manual_seed(0)
+    it = items[torch.randperm(len(items), device=items.device, generator=g)[:n]]  # random training reps, fixed seed
+    x = data.inputs(it, cfg["model"]["input"]).permute(0, 3, 1, 2).contiguous()
+    y = data.targets(it, items_list)
+    w = cfg["supervised"]["weights"]
+    sup = SupervisedLoss(items_list, {k: 1.0 for k in w}, scaler)
+    params = [q for q in model.encoder.parameters() if q.requires_grad]
+    out = {}
+    for head in ("score", "items", "quality", "exercise"):
+        with autocast(cfg, dev):
+            o = model(x, exercise=y["exercise"])
+        _, parts = sup(o, y)
+        keep = {k: v for k, v in o.items() if k in ("z", head)}
+        loss, _ = sup(keep, y)
+        g = torch.autograd.grad(loss, params, allow_unused=True)
+        norm = torch.sqrt(sum((gi.float() ** 2).sum() for gi in g if gi is not None)).item()
+        out[head] = {"loss": parts.get(head, float("nan")), "grad": norm, "weighted_grad": w[head] * norm}
+    model.zero_grad(set_to_none=True)
+    return out
+
+
+def supervised(model, data, cfg, dev, train_items, test_items, epochs, items_list, tag, bs=256, grad_check=False):
+    scaler = TargetScaler().fit(data.targets(train_items, items_list))
+    sup = SupervisedLoss(items_list, cfg["supervised"]["weights"], scaler)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg["train"]["lr"], weight_decay=cfg["train"]["weight_decay"])
     mode = cfg["model"]["input"]
-    cc = 3 if mode == "xyz" else 2
+    cc = 3 if mode.startswith("xyz") else 2
+    grads = {}
+    if grad_check:
+        grads["init"] = head_gradients(model, data, cfg, dev, train_items, items_list, scaler)
     ac = {**cfg["cvdc"]["augment"], "share_temporal_crop": False}
     g = torch.Generator(device=dev).manual_seed(cfg["train"]["seed"])
     rows, t_step = [], []
@@ -212,18 +247,20 @@ def supervised(model, data, cfg, dev, train_items, test_items, epochs, items_lis
             t_step.append(time.time() - t0)
             parts.append(dict(total=loss.item(), **p))
         tr = pd.DataFrame(parts).mean()
-        ev = evaluate(model, data, cfg, dev, test_items, items_list, train_items)
+        ev = evaluate(model, data, cfg, dev, test_items, items_list, train_items, scaler)
         rows.append(dict(model=tag, epoch=ep + 1, **{f"train_{k}": round(v, 4) for k, v in tr.items()}, **ev))
         log(f"  {tag} epoch {ep + 1}/{epochs}: train loss {tr.total:.4f} ({', '.join(f'{k} {v:.4f}' for k, v in tr.items() if k != 'total')}) | "
             f"held-out RMSE {ev['rmse']:.2f} (mean baseline {ev['rmse_mean_baseline']:.2f}), CF MAE {ev['cf_mae']:.3f}, "
             f"exercise acc {ev['exercise_acc']:.3f}")
         if not np.isfinite(tr.total):
             raise RuntimeError(f"non-finite supervised loss ({tag})")
-    return pd.DataFrame(rows), float(np.median(t_step))
+    if grad_check:
+        grads["end"] = head_gradients(model, data, cfg, dev, train_items, items_list, scaler)
+    return pd.DataFrame(rows), float(np.median(t_step)), grads
 
 
 @torch.no_grad()
-def evaluate(model, data, cfg, dev, items, items_list, train_items):
+def evaluate(model, data, cfg, dev, items, items_list, train_items, scaler):
     model.eval()
     mode = cfg["model"]["input"]
     preds = {"score": [], "items": [], "exercise": []}
@@ -231,15 +268,25 @@ def evaluate(model, data, cfg, dev, items, items_list, train_items):
         it = items[i:i + 2048]
         with autocast(cfg, dev):
             o = model(data.inputs(it, mode).permute(0, 3, 1, 2).contiguous(), exercise=data.exercise[it])
-        preds["score"].append(o["score"].float() * 100)
-        preds["items"].append(o["items"].float())
+        inv = scaler.inverse(o)  # z-scores -> score 0-100, items 0-1
+        preds["score"].append(inv["score"])
+        preds["items"].append(inv["items"])
         preds["exercise"].append(o["exercise"].argmax(-1))
     s = torch.cat(preds["score"])
     y = data.targets(items, items_list)
     mean_train = data.score[train_items].mean()
     cf = torch.cat(preds["items"])
+    grp = data.meta.group.to_numpy()[items.cpu().numpy()]
+    within = {}
+    for g in ("expert", "non-expert"):
+        sel = torch.tensor(grp == g, device=s.device)
+        if sel.any():
+            gm = data.score[train_items][torch.tensor(data.meta.group.to_numpy()[train_items.cpu().numpy()] == g,
+                                                      device=s.device)].mean()
+            within[f"rmse_{g}"] = torch.sqrt(((s[sel] - y["score"][sel]) ** 2).mean()).item()
+            within[f"rmse_group_mean_{g}"] = torch.sqrt(((gm - y["score"][sel]) ** 2).mean()).item()
     return {"rmse": torch.sqrt(((s - y["score"]) ** 2).mean()).item(),
-            "rmse_mean_baseline": torch.sqrt(((mean_train - y["score"]) ** 2).mean()).item(),
+            "rmse_mean_baseline": torch.sqrt(((mean_train - y["score"]) ** 2).mean()).item(), **within,
             "cf_mae": (cf - y["items"]).abs().nanmean().item(),
             "exercise_acc": (torch.cat(preds["exercise"]) == y["exercise"]).float().mean().item(),
             "pred_min": s.min().item(), "pred_max": s.max().item()}
@@ -266,7 +313,8 @@ def main():
     log(f"device {dev} ({torch.cuda.get_device_name() if dev == 'cuda' else 'cpu'}), torch {torch.__version__}, "
         f"amp {cfg['train']['amp']}, input {cfg['model']['input']}, sources {cfg['cvdc']['sources']}")
 
-    data = PackData(cfg, "rep", dev)
+    lifted = (resolve(cfg["preprocess"]["pack_dir"]) / f"reps_{cfg['preprocess']['joint_set']}_T{cfg['preprocess']['T_rep']}_ktpformer.npz").exists()
+    data = PackData(cfg, "rep", dev, lift="ktpformer" if lifted else None)
     members = pd.read_csv(resolve(cfg["cvdc"]["pairs"]["members_csv"]))
     pairs = pd.read_csv(resolve(cfg["cvdc"]["pairs"]["pairs_csv"]))
     log("\n# 1. pair counts (rep level, outputs/phase2/table_pair_counts.csv)")
@@ -288,7 +336,7 @@ def main():
     batcher = CVDCBatcher(data, cfg, allowed=tr_mask, seed=a.seed)
     log("  batcher:", json.dumps(batcher.summary()))
     model = CVDCModel(cfg).to(dev)
-    before = heldout_consistency(model, data, cfg, dev, te_items, members, pairs)
+    before = heldout_consistency(model, data, cfg, dev, te_items, members, pairs, tr_items)
     if dev == "cuda":
         torch.cuda.reset_peak_memory_stats()
     t0 = time.time()
@@ -298,28 +346,43 @@ def main():
     hist.to_csv(out / "smoke_cvdc_epochs.csv", index=False)
     log(f"  {a.cvdc_epochs} epochs x {len(batcher)} batches in {t_pre:.0f} s; median step {1000 * t_cvdc:.0f} ms "
         f"(~{hist['items'].mean():.0f} items per batch); peak GPU memory {mem:.2f} GB")
-    after = heldout_consistency(model, data, cfg, dev, te_items, members, pairs)
-    tr_after = heldout_consistency(model, data, cfg, dev, tr_items, members, pairs)
+    after = heldout_consistency(model, data, cfg, dev, te_items, members, pairs, tr_items)
+    tr_after = heldout_consistency(model, data, cfg, dev, tr_items, members, pairs, tr_items)
 
-    log("\n# 4. viewpoint consistency on held-out subjects (cosine; vci = same rep other view - other groups)")
-    vc = pd.DataFrame([dict(state="random init (held out)", **before), dict(state="after CVDC (held out)", **after),
-                       dict(state="after CVDC (training subjects)", **tr_after)])
+    log("\n# 4. viewpoint consistency (VCI = cosine same rep, other view - other groups; centred = primary, E13)")
+    rows = []
+    for state, res in (("random init, held out", before), ("after CVDC, held out", after),
+                       ("after CVDC, training subjects", tr_after)):
+        for st, v in res.items():
+            rows.append(dict(state=state, stratum=st, **v))
+    vc = pd.DataFrame(rows)
     vc.to_csv(out / "smoke_viewpoint_consistency.csv", index=False)
-    log(vc.round(3).T.to_string(header=False))
+    cols = ["state", "stratum", "vci_centred", "vci_raw", "vci_proj", "same_centred", "other_centred", "n_same_view_pairs"]
+    log(vc[cols].round(3).to_string(index=False))
+    log(vc[vc.stratum == "all"].filter(regex="state|centred_cos|^n_").round(3).to_string(index=False))
 
     log("\n# 5. supervised fine-tuning from the CVDC encoder (rep level: score, CF1-CF3, quality, exercise)")
     items_rep = model.heads.items
-    sup_hist, t_sup = supervised(model, data, cfg, dev, tr_items, te_items, a.sup_epochs, items_rep, "proposed_xy")
-    log("\n  B1-shaped run (xy, no CVDC), B2 (xyz world landmarks, no CVDC) and xyv, same epochs:")
-    runs = [sup_hist]
-    for mode, tag in (("xy", "b1_xy_scratch"), ("xyz", "b2_xyz_scratch"), ("xyv", "xyv_scratch")):
+    sup_hist, t_sup, _ = supervised(model, data, cfg, dev, tr_items, te_items, a.sup_epochs, items_rep, "proposed_xy")
+    log("\n  from scratch, same epochs: B1 (xy), B2 (MediaPipe xyz, KTPFormer xyz), xyv:")
+    runs, grads = [sup_hist], {}
+    modes = [("xy", "b1_xy_scratch"), ("xyz", "b2_mediapipe_xyz_scratch"), ("xyv", "xyv_scratch")]
+    if lifted:
+        modes.insert(2, ("xyz_ktpformer", "b2_ktpformer_xyz_scratch"))
+    for mode, tag in modes:
         c2 = copy.deepcopy(cfg)
         c2["model"]["input"] = mode
         torch.manual_seed(a.seed)
         m2 = CVDCModel(c2).to(dev)
-        h, _ = supervised(m2, data, c2, dev, tr_items, te_items, a.sup_epochs, items_rep, tag)
+        h, _, g = supervised(m2, data, c2, dev, tr_items, te_items, a.sup_epochs, items_rep, tag,
+                             grad_check=(mode == "xy"))
         runs.append(h)
+        grads.update(g)
     pd.concat(runs).to_csv(out / "smoke_supervised_epochs.csv", index=False)
+    log("\n  per-head gradient norm on the encoder (B1 run; weights " + json.dumps(cfg["supervised"]["weights"]) + "):")
+    G = pd.DataFrame([dict(when=w, head=h, **v) for w, d in grads.items() for h, v in d.items()])
+    G.to_csv(out / "smoke_head_gradients.csv", index=False)
+    log(G.round(4).to_string(index=False))
 
     log("\n  negatives=different_exercise_only, sources=[synthetic] and [sync]: one epoch each")
     for change in ({"loss": {"negatives": "different_exercise_only"}}, {"sources": ["synthetic"]}, {"sources": ["sync"]}):
@@ -351,7 +414,7 @@ def main():
     summary = {"device": dev, "seed": a.seed, "train_subjects": train_s, "heldout_subjects": hold_s,
                "batcher": batcher.summary(), "cvdc_epochs": a.cvdc_epochs, "cvdc_step_ms": 1000 * t_cvdc,
                "cvdc_epoch_s": t_pre / a.cvdc_epochs, "sup_step_ms": 1000 * t_sup, "peak_gpu_gb": mem,
-               "vc_before": before, "vc_after": after, "runtime_s": time.time() - t_all}
+               "vc_before": before["all"], "vc_after": after["all"], "runtime_s": time.time() - t_all}
     (out / "smoke_summary.json").write_text(json.dumps(summary, indent=1, default=float), encoding="utf-8")
     log(f"\nsmoke run done in {time.time() - t_all:.0f} s")
     (out / "smoke_log.txt").write_text("\n".join(LOG), encoding="utf-8")

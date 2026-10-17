@@ -2,7 +2,7 @@
 
 Last updated 2026-10-17.
 
-**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6); waiting for review before training at scale (Phase 3).
+**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the supervisor's fifth-review changes (§4, §6.5: standardised targets, three VCI variants, the KTPFormer lifter for B2, bf16, the runtime estimate). Waiting for review before training at scale (Phase 3).
 
 **Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
 
@@ -34,7 +34,8 @@ Read this together with `DESIGN_DECISIONS.md` (every open choice, with its statu
 - **3 views, not the proposal's 4.** Synchronization is reconstructed in software (audio, creation time, motion), not given by the dataset.
 - **No error-type labels.** Module III errors are rule-based and evaluated qualitatively, plus by how rule deviations correlate with the expert scores.
 - **Scores are skewed toward high values.** There is an inter-view label-noise floor of 5.3 points (E01) and 4.4 points (E02) RMSE.
-- **Small sample:** 51 subjects in LOSO, and only 24 of them appear in E02.
+- **Small sample:** 51 subjects (50 at rep level: P39's only clip has no detected rep), and only 24 of them appear in E02.
+- **E01 non-experts are almost all single-view for CVDC** (D12): 152 of their 181 rep sets have one view, with no sync/audio pairs and only 71 rep-matched pairs, so CVDC reaches them mostly through synthetic views. Every CVDC ablation reports them as a separate stratum.
 
 ---
 
@@ -47,6 +48,7 @@ Read this together with `DESIGN_DECISIONS.md` (every open choice, with its statu
 | Python env | `D:\cb\.venv` (Python 3.11.9, made with `uv`, lives **outside** the repo) |
 | Installed | torch 2.14.1+cu126 (GPU matmul verified), mediapipe 1.1.1, opencv-contrib 5.0, PyAV 18.1, numpy, scipy, pandas, matplotlib (`requirements.txt`) |
 | Installed in Phase 1 | pyyaml, pytest, scikit-learn, umap-learn, tensorboard, streamlit, dtaidistance (pinned in `requirements.txt`) |
+| Installed in Phase 2 | einops 0.8.2, timm 1.0.30 (KTPFormer wrapper); KTPFormer code in `third_party/` and weights in `data/models/ktpformer/` (both gitignored; no licence, A10) |
 | MediaPipe | 1.1.1 has only the **Tasks API** (`PoseLandmarker`); there is no `mp.solutions`. Models live in `data/models/` (gitignored): `pose_landmarker_lite.task`, `pose_landmarker_full.task`. The heavy pose model is approved when needed; the hand landmarker comes later for E06. |
 | Pose speed | CPU only (no GPU delegate in MediaPipe Python on Windows): ~36 fps per process at 960 px with the full model; 8 processes ≈ 290 fps (Step 0); Phase 1 full run: 12 processes ≈ 315 fps (712,585 frames in 37.6 min) |
 | Camera | **No physical webcam** (only "Camo", a virtual camera in error state), so the demo runs on video files (§4, change 1) |
@@ -225,6 +227,15 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 3. Check whether the embeddings separate experts from non-experts more than they separate scores within a group: a linear probe for the group label (balanced accuracy, AUC) next to within-group score probes, for B1, B2 and Proposed, plus a view-matched subset (E11).
 4. Keep rep-level training as the default so clip length cannot be a cue (T1, E12); the remaining cues (rep duration, rep count per set, view mix) are listed in E12.
 
+**Fifth review (2026-10-17): answers to the Phase 2 questions** (applied in §6.5):
+1. **Score loss:** standardise the score and the PF/CF targets with each training fold's mean and std only; invert for reporting; check the relative loss weights across heads.
+2. **VCI:** report raw 256-d, mean-centred 256-d and the 128-d projection; the **primary VCI is the mean-centred 256-d embedding** (what the heads and the embedding-to-reference distance use); define it once in `DESIGN_DECISIONS.md` (E13).
+3. **E01 non-experts mostly single-view:** accepted as a limitation (D12); the synthetic-views ablation must report them separately (C5).
+4. **B2 3D input:** download KTPFormer weights and build the wrapper (MotionBERT as fallback, with reasons); report B2 with MediaPipe-3D and KTPFormer-3D. DepthAnything optional, later, on a small subset only. Check and record the licence of any downloaded weights (A10).
+5. **bf16** mixed precision for training; re-measure step time (A9).
+6. **Runtime estimate** for CVDC pretraining + fine-tuning, GroupKFold and LOSO with the per-fold-encoder shortcut (E2).
+7. **Rep-matched pairs** stay at w_rep = 0.5, but the ablation reports with and without them (C5).
+
 **Third review (2026-10-17): answers to the Phase 1 questions** (applied in Phase 1, §5.6):
 1. **E02 rep signal** (wrist-path PC1) is approved for **rep segmentation only**. Module III must use joint angles: for E02 the **3D horizontal adduction angle** (upper arm vs shoulder line in the transverse plane, world landmarks).
 2. **Left-arm performances:** mirror and assess normally. First check whether expert scores (total, PF, CF) are lower for them; flag `arm_side` in the Module III output only if they are. Record the result.
@@ -354,6 +365,42 @@ How to run: `python -m cvdc.data.pairs`, then `python scripts/phase2/smoke.py` (
 - synthetic views (rotation, quarter turn, yaw-0 shape, levelling);
 - augmentations (shared vs independent crops, per-item spatial changes, joint dropout).
 
+### 6.5 Fifth-review changes (2026-10-17)
+1. **Standardised targets** (T7, `TargetScaler` in `cvdc/losses/supervised.py`): score and items are z-scored with the training subjects' mean and std, and predictions are inverted for reporting; constant items are skipped (T4). In the smoke, the training score loss now drops below the mean predictor (z-units 0.87 → 0.66 in 4 epochs from the CVDC encoder; 1.85 → 0.91 from scratch). On the 10 held-out subjects the score RMSE stays around predict-the-mean and moves by 2–5 points between epochs (last epoch: B2-MediaPipe 15.4, B2-KTPFormer 17.0, Proposed 18.0, B1 18.2, xyv 18.2, vs 15.8 for the mean; experts only: B2-MediaPipe 15.1 vs 15.2 for the expert mean). Nothing can be read from 4 untuned epochs. **Head weights:** per-head gradient norms on the encoder (512 random training reps): at initialisation items 13.8 > score 8.1 > exercise 1.7 > quality 0.7; after 4 epochs score 1.55 > items 0.50 > exercise 0.31 > quality 0.18. Score drives the encoder most once training is under way, so the weights stay 1 / 1 / 0.5 / 0.5.
+2. **VCI** (E13, `cvdc/eval/consistency.py`): three variants, primary = mean-centred 256-d. Held-out subjects after 10 CVDC epochs (`outputs/phase2/smoke_viewpoint_consistency.csv`):
+
+   | Stratum (held out) | centred z (primary): random init → CVDC | raw z | projection | same-rep view pairs |
+   |---|---|---|---|---|
+   | E01 expert | −0.01 → **0.16** | 0.00 → 0.03 | 0.00 → 0.25 | 672 |
+   | E02 expert | −0.04 → **0.06** | 0.00 → 0.03 | 0.00 → 0.22 | 740 |
+   | E01 non-expert | 0.33 → 0.48 | 0.00 → 0.07 | 0.00 → 0.49 | 13 (rep-matched only) |
+   | pooled | 0.41 → 0.80 | 0.00 → 0.15 | 0.00 → 0.53 | 1,425 |
+
+   **The pooled VCI is inflated by exercise separation:** "other groups" then include the other exercise, and a random encoder already scores 0.41 pooled but about 0 within each exercise. I propose the **within-stratum** values as the headline VCI (E13). The E01 non-expert stratum rests on 13 pairs. Training subjects after CVDC: E01 expert 0.22, E02 expert 0.18 (centred).
+3. **E01 non-experts:** recorded as limitation D12 (§0) and as a required separate stratum in every CVDC ablation (C5).
+4. **KTPFormer for B2** (A10, `cvdc/models/lifter.py`):
+   - **Licence:** the GitHub repository has **no licence** (API `license: null`), so by default all rights are reserved; the Google Drive weights state none; the model is trained on Human3.6M (non-commercial research licence). Used locally for research only; code (`third_party/KTPFormer`, commit b961951) and weights (`data/models/ktpformer/`) are gitignored and never redistributed. MotionBERT (Apache-2.0) was not needed.
+   - **Weights:** `model_243_CPN_best_epoch.bin` (Human3.6M, CPN 2D input, 243 frames; 423 MB; sha256 8687583f34f60abeb6b9feececdd08ca3d88669ee92e9c4d916d3cf27bfdd9de). It pickles a NumPy random state, so its pickle globals were listed and allow-listed for `weights_only=True` loading (no arbitrary code), then re-saved as a tensors-only state dict. 35.2 M parameters, no missing or unexpected keys.
+   - **Wrapper:** coco17 → H36M-17 (MotionBERT convention), 30 → 50 fps, 243-frame windows with stride 81, flip averaging, bf16, back to 30 fps and coco17, normalised like the world landmarks. All 936 videos (941 minus the 8 low-detection ones, plus the 3 PT demos) lifted in 13 min (860 frames/s); packs `reps_coco17_T64_ktpformer.npz` and `videos_coco17_T300_ktpformer.npz`, no NaN. Input mode `model.input: xyz_ktpformer`.
+   - **Check** (`scripts/phase2/lifter_check.py`, no labels): input scale 0.30 chosen on 40 groups. On all 246 synced 3-view groups (2,148 rep sets), the cross-view difference of the same 3D angle at the same instants, KTPFormer vs MediaPipe world: E01 shoulder elevation **12.9° vs 15.1°**; E01 elbow 24.6° vs 14.7°; E02 horizontal adduction 70.4° vs 50.5°; E02 elbow 16.4° vs 12.0°. KTPFormer has steadier bones (upper-arm length CV 0.03 vs 0.07) and half the wrist jitter. **So the H36M-trained lifter is not more view-consistent than MediaPipe on this data except for E01 shoulder elevation**; B2 is reported with both inputs.
+   - DepthAnything: not built (later, small subset).
+5. **bf16** (A9): enabled for training and evaluation. Idle-GPU step times (`outputs/phase2/bench_steps.csv`), bf16 vs fp32: CVDC step 234 vs 439 ms (281 items); supervised rep step 211 vs 404 ms (256 reps); video step 118 vs 228 ms (32 videos). `torch.compile` is unavailable (no Triton on Windows).
+6. **Runtime estimate** (E2, `scripts/phase2/bench.py`, `outputs/phase2/runtime_estimate.csv`). Assumptions: bf16, CVDC 100 epochs (64 rep sets per batch), fine-tuning 60 epochs (256 reps or 32 videos per batch), one held-out evaluation per epoch, no early stopping; actual fold sizes (GroupKFold-5 stratified: 40 training subjects per fold; rep-level LOSO: 50 folds of 49 training subjects):
+
+   | Protocol (rep level) | B1 or B2 (each) | Proposed (CVDC + fine-tune) |
+   |---|---|---|
+   | GroupKFold-5 | 0.43 h | 1.49 h (pretraining 0.21 h per fold) |
+   | LOSO-50, per-fold encoder (5 pretrains + 50 fine-tunes, C7) | 4.86 h | **5.92 h** |
+   | LOSO-50, full (a pretraining per LOSO fold; reference) | 4.86 h | 17.8 h |
+
+   - **Main LOSO table** (B1, B2-MediaPipe, B2-KTPFormer, Proposed; rep level, per-fold encoder): **≈ 20.5 h**.
+   - Each GroupKFold ablation setting (C5 source mixes, τ, embedding size, 2 vs 3 views, augmentation): ≈ 1.5 h. The 6 source mixes alone ≈ 9 h.
+   - Video-level runs (T1 comparison): B1/B2 2.85 h and Proposed 3.91 h each on LOSO; 0.25 / 1.31 h on GroupKFold.
+   - Early stopping or fewer epochs scale these linearly; linear-probe fine-tuning is cheaper (forward-only encoder).
+7. **Rep-matched pairs:** w_rep stays 0.5; the ablation adds (d′) all sources without rep-matched pairs next to (d), and (b) vs (c), so every source comparison is reported with and without them (C5).
+
+Also added: subject-independent splits with a leakage check (`cvdc/eval/splits.py`: stratified GroupKFold, LOSO, the LOSO-shortcut fold map), the input mode `xyz_ktpformer`, `python -m cvdc.data.pack --lift ktpformer`, and 15 tests (splits and leakage, target scaler, centred VCI, lifter mapping, windowing and a run on the downloaded weights): **122 tests, all passing**.
+
 ## 7. Phase checklist
 All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
 
@@ -388,9 +435,11 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - [x] pair builder for the sync / audio / rep / synthetic sources (`cvdc/data/pairs.py`);
   - [x] synthetic views (`cvdc/data/synthetic.py`);
   - [x] B2 3D input (`model.input: xyz`, MediaPipe world landmarks);
-  - [ ] optional 2D→3D lifter (KTPFormer / MotionBERT / VideoPose3D) and DepthAnything channel: not built; they need weights, to be approved first (§8).
+  - [x] KTPFormer 2D→3D lifter for B2 (`cvdc/models/lifter.py`, input `xyz_ktpformer`; fifth review, §6.5);
+  - [ ] DepthAnything channel: later, optional, on a small subset only (fifth review);
+  - [x] fifth-review changes: standardised targets, three VCI variants, bf16, runtime estimate (§6.5).
 - [ ] **Phase 3, training:**
-  - rep-level training as the default (T1, E12);
+  - rep-level training as the default (T1, E12); targets standardised per training fold (T7);
   - smoke test (3 subjects, 2 epochs);
   - **LOSO runtime estimate**;
   - CVDC pretraining and fine-tuning;
@@ -408,7 +457,9 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - GroupKFold and LOSO;
   - stats;
   - cross-view protocol;
-  - ablations (a)–(d) plus τ, embedding size, augmentation;
+  - ablations (a)–(e) and (d′) (with and without rep-matched pairs), plus τ, embedding size, augmentation; E01 non-experts as a separate stratum (C5, D12);
+  - VCI: centred 256-d (primary), raw, projection; within strata (E13);
+  - B2 with MediaPipe-3D and KTPFormer-3D inputs (A10);
   - label-noise floor;
   - baselines (mean, duration-only, group-only);
   - embedding-distance analysis;
@@ -420,11 +471,13 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
 ## 8. Open items and questions
 **Answered in the third review (2026-10-17):** the four Phase 1 questions (§4, applied in §5.6).
 
-**Open from Phase 2 (for the supervisor):**
-1. **Score loss scaling:** MSE on score / 100 gives the score head weak gradients next to the cross-entropy heads (§6.3). Proposal for Phase 3: standardise the score (and item) targets with the training fold's mean and std (T6 still decides the skew weighting).
-2. **VCI on the 256-d embedding** is compressed because the pooled ST-GCN features are non-negative (all cosines ≥ ~0.8). Proposal: report VCI on the projection and on the mean-centred embedding (centred with the training fold's mean), and keep the raw value as well.
-3. **E01 non-experts have almost no real cross-view pairs** (71 rep-matched pairs; 152 of 181 rep sets have one view), so CVDC reaches them mostly through synthetic views (§6.2).
-4. **3D lifter / depth:** B2 uses MediaPipe world landmarks (the spec default). A KTPFormer / MotionBERT / VideoPose3D wrapper and the DepthAnything channel are not built, because they need downloaded weights. Say if one is wanted, and I will ask before downloading.
+**Answered in the fifth review (2026-10-17):** the four Phase 2 questions (§4, applied in §6.5).
+
+**Open after the fifth review (for the supervisor):**
+1. **KTPFormer has no licence** (A10). It is used locally for research only and never committed. If the results are to be published or the code shared, the authors' permission may be needed; MotionBERT (Apache-2.0) is the clean alternative.
+2. **Headline VCI:** the pooled VCI is inflated by exercise separation (a random encoder scores 0.41 pooled, ~0 within each exercise). Proposal: the within-stratum centred VCI is the headline number (E13).
+3. **KTPFormer is less view-consistent than MediaPipe** on 3 of 4 angles (only E01 shoulder elevation improves; §6.5). This is reported as found; it does not change the B2 plan.
+4. **Runtime:** the main LOSO table needs ≈ 20.5 h and each ablation setting ≈ 1.5 h (§6.5). Confirm the epoch budget (100 CVDC / 60 fine-tuning) or set early stopping before Phase 3.
 
 **Open for Phase 4:** the E02 horizontal adduction angle is view-dependent in 3D and often undefined in R views (§5.6, M7a); the left-arm CF difference is borderline (no flag under the agreed rule).
 

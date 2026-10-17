@@ -65,8 +65,21 @@ Results and open questions: `PROGRESS.md` §5 and §8.
 Config: `configs/model.yaml` (merged with `configs/data.yaml`; pair weights stay in `sync.pair_weights`).
 
 ```bash
-python -m cvdc.data.pairs          # rep-level CVDC pairs from the Phase 1 caches (~12 s)
-python scripts/phase2/smoke.py     # smoke run on E01 + E02 (~3.5 min on an RTX 4060 Ti)
+python -m cvdc.data.pairs                     # rep-level CVDC pairs from the Phase 1 caches (~12 s)
+python -m cvdc.models.lifter                  # KTPFormer 3D for B2, all videos (~13 min; see below)
+python -m cvdc.data.pack --lift ktpformer     # lifted 3D packs (same items as the main packs)
+python scripts/phase2/smoke.py                # smoke run on E01 + E02 (~4 min on an RTX 4060 Ti)
+python scripts/phase2/lifter_check.py --all   # view consistency of MediaPipe vs KTPFormer 3D angles
+python scripts/phase2/bench.py                # bf16/fp32 step times and the Phase 3 runtime estimate (idle GPU)
+```
+
+**KTPFormer (B2's second 3D source; licence: none, research use only, never committed).** Clone the code
+and fetch the Human3.6M CPN checkpoint, then convert it to a tensors-only state dict (see A10 in
+`DESIGN_DECISIONS.md` for the allow-listed pickle globals):
+
+```bash
+git clone https://github.com/JihuaPeng/KTPFormer third_party/KTPFormer   # commit b961951
+# model_243_CPN_best_epoch.bin from the Google Drive folder in the KTPFormer README -> data/models/ktpformer/
 ```
 
 | Piece | Code | Notes |
@@ -79,7 +92,10 @@ python scripts/phase2/smoke.py     # smoke run on E01 + E02 (~3.5 min on an RTX 
 | pair builder | `cvdc/data/pairs.py` | `data/cvdc_pairs.csv`, `data/cvdc_members.csv`, DTW-aligned pack, `outputs/phase2/table_pair_counts.csv` |
 | synthetic views | `cvdc/data/synthetic.py` | world landmarks -> levelled yaw orbit -> pinhole projection |
 | batches | `cvdc/data/dataset.py`, `cvdc_batch.py`, `augment.py` | packs on the GPU; all views of a rep set together; per-pair weight matrix |
-| VCI | `cvdc/eval/consistency.py` | viewpoint consistency index |
+| VCI | `cvdc/eval/consistency.py` | viewpoint consistency index: centred 256-d (primary), raw, projection |
+| splits | `cvdc/eval/splits.py` | stratified GroupKFold, LOSO, leakage check |
+| lifter | `cvdc/models/lifter.py` | KTPFormer 2D→3D wrapper (input `xyz_ktpformer`) |
+| targets | `cvdc/losses/supervised.py` | per-fold standardisation of score and items (`TargetScaler`) |
 
 Smoke outputs: `outputs/phase2/smoke_log.txt` (and `smoke_*.csv`, `smoke_summary.json`); skeleton-only figures
 `outputs/checks/phase2_synthetic_views.png` and `phase2_cvdc_smoke_curves.png`. Results: `PROGRESS.md` §6.
@@ -96,11 +112,12 @@ python -m pytest -q tests
 configs/            data.yaml (data, labels, pose, preprocessing, reps, sync); model.yaml (Phase 2); exercises/EXX.yaml
 cvdc/data/          filenames, labels, index, video (PyAV), extract, skeleton, preprocess, reps, sync, pack,
                     pairs, synthetic, augment, dataset, cvdc_batch
-cvdc/models/        graph, stgcn, heads, model
+cvdc/models/        graph, stgcn, heads, model, lifter (KTPFormer wrapper)
 cvdc/losses/        cvdc (weighted multi-positive InfoNCE), supervised
 cvdc/assess/        angles, dtw (Module III follows in Phase 4)
-cvdc/eval/          consistency (VCI; the rest follows in Phase 5)
+cvdc/eval/          consistency (VCI), splits (the rest follows in Phase 5)
 cvdc/viz/           skeleton drawing, Phase 1 checks
-scripts/            run_phase1.py, phase1/ checks and report, phase2/smoke.py, step0/ (Step 0 exploration)
+scripts/            run_phase1.py, phase1/ checks and report, phase2/ (smoke, lifter_check, bench), step0/
+third_party/        local clones used by wrappers (gitignored)
 tests/              pytest
 ```

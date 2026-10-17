@@ -2,8 +2,9 @@
 of data/index.csv. Rep level (default, T1): every rep inherits its video's score, items and quality class as a
 weak label. Video level: whole videos resampled to T_video.
 
-Input modes (``model.input``, A1): ``xy`` (2D keypoints), ``xyv`` (2D + visibility) or ``xyz`` (3D MediaPipe world
-landmarks, the B2 input). The pack is small (7,095 reps x 64 frames x 17 joints), so it is held on the device.
+Input modes (``model.input``, A1): ``xy`` (2D keypoints), ``xyv`` (2D + visibility), ``xyz`` (3D MediaPipe world
+landmarks, B2) or ``xyz_ktpformer`` (3D lifted by KTPFormer from the 2D keypoints, B2; A10). The pack is small
+(7,095 reps x 64 frames x 17 joints), so it is held on the device.
 """
 import numpy as np
 import pandas as pd
@@ -14,19 +15,28 @@ from ..config import exercise_codes, resolve
 ITEMS = ["PF1", "PF2", "PF4", "CF1", "CF2", "CF3"]  # D5: PF3 is not a target
 
 
-def to_input(xy, vis, world, mode):
-    """(N, T, V, *) arrays/tensors -> (N, T, V, C) for the input mode."""
+LIFTED = {"xyz_ktpformer": "ktpformer"}
+
+
+def to_input(xy, vis, world, mode, lifted=None):
+    """(N, T, V, *) arrays/tensors -> (N, T, V, C) for the input mode (``lifted``: the lifter's 3D)."""
     if mode == "xy":
         return xy
     if mode == "xyv":
         return torch.cat([xy, vis[..., None]], -1)
     if mode == "xyz":
         return world
+    if mode in LIFTED:
+        if lifted is None:
+            raise ValueError(f"model.input {mode!r} needs the lifted pack: python -m cvdc.data.pack --lift {LIFTED[mode]}")
+        return lifted
     raise ValueError(f"model.input {mode!r}")
 
 
 class PackData:
-    def __init__(self, cfg, unit="rep", device="cpu"):
+    def __init__(self, cfg, unit="rep", device="cpu", lift=None):
+        """lift: also load the lifted 3D pack of this lifter (e.g. 'ktpformer'); None = only if
+        ``model.input`` needs it."""
         pc = cfg["preprocess"]
         T = pc["T_rep"] if unit == "rep" else pc["T_video"]
         name = f"{'reps' if unit == 'rep' else 'videos'}_{pc['joint_set']}_T{T}"
@@ -45,6 +55,13 @@ class PackData:
         self.meta = meta.reset_index(drop=True)
         with np.load(pdir / f"{name}.npz") as z:
             self.xy, self.vis, self.world = (torch.from_numpy(z[k]).to(device) for k in ("xy", "vis", "world"))
+        lift = lift or LIFTED.get(cfg["model"]["input"])
+        self.lifted = None
+        if lift:
+            with np.load(pdir / f"{name}_{lift}.npz") as z:
+                self.lifted = torch.from_numpy(z["world"]).to(device)
+            if self.lifted.shape != self.world.shape:
+                raise RuntimeError(f"lifted pack {name}_{lift} does not match the main pack")
         codes = exercise_codes(cfg)
         qn = cfg["labels"]["quality_names"]
         m = self.meta
@@ -58,7 +75,8 @@ class PackData:
         return len(self.meta)
 
     def inputs(self, idx, mode):
-        return to_input(self.xy[idx], self.vis[idx], self.world[idx], mode)
+        return to_input(self.xy[idx], self.vis[idx], self.world[idx], mode,
+                        None if self.lifted is None else self.lifted[idx])
 
     def targets(self, idx, items):
         return {"score": self.score[idx], "quality": self.quality[idx], "exercise": self.exercise[idx],

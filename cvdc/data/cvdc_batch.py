@@ -52,6 +52,8 @@ class CVDCBatcher:
         subjects), None = all."""
         cc, pc = cfg["cvdc"], cfg["preprocess"]
         self.data, self.cc, self.mode = data, cc, cfg["model"]["input"]
+        if self.mode not in ("xy", "xyv", "xyz"):
+            raise NotImplementedError(f"CVDC batches for input {self.mode!r} (B2 with a lifter is trained without CVDC)")
         self.coord_channels = 3 if self.mode == "xyz" else 2
         self.sources = set(cc["sources"])
         bad = self.sources - set(REAL) - {"synthetic"}

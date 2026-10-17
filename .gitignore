@@ -22,3 +22,6 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 .streamlit/secrets.toml
+
+# third-party code fetched for wrappers (no licence / not ours): never committed
+/third_party/

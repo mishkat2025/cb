@@ -70,3 +70,16 @@ train:                          # Phase 2 smoke settings (Phase 3 adds the full 
   amp: bf16                     # bf16 | fp16 | off
   lr: 0.001
   weight_decay: 0.0001
+
+lifter:                         # A10: B2's second 3D source. KTPFormer (Peng et al., CVPR 2024), Human3.6M model on CPN 2D
+  name: ktpformer
+  code_dir: third_party/KTPFormer   # git clone https://github.com/JihuaPeng/KTPFormer @ b961951 (no licence: never committed)
+  weights: data/models/ktpformer/ktpformer_243_cpn_state_dict.pt   # tensors-only copy of model_243_CPN_best_epoch.bin
+  frames: 243
+  fps: 50                       # H36M frame rate: 2D resampled 30 -> 50 fps, 3D back to 30 fps
+  stride: 81                    # overlapping windows, outputs averaged (243 = no overlap: 2x faster, 0.012 torso lengths off)
+  input_torso: 0.3              # median 2D torso length in H36M screen-normalised units (chosen by view consistency, A10)
+  flip_test: true               # test-time flip averaging, as in the reference evaluation
+  batch: 16                     # windows per batch (32 used 12.6 GB and spilled into shared memory on Windows)
+  amp: bf16                     # 897 vs 540 frames/s; mean joint difference to fp32 0.002 torso lengths
+  out_dir: data/cache/lift_ktpformer

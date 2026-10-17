@@ -4,8 +4,10 @@ for the configured joint set. The full-length uniform-grid sequences stay in dat
 Arrays (float32): xy (N,T,J,2), vis (N,T,J), world (N,T,J,3); plus an index CSV with one row per item
 (video_id, rep, start, end on the uniform grid).
 
-usage: python -m cvdc.data.pack [--config C]
-Writes data/cache/packs/{reps,videos}_<joint_set>_T<T>.npz and the matching .csv.
+usage: python -m cvdc.data.pack [--config C] [--lift ktpformer]
+Writes data/cache/packs/{reps,videos}_<joint_set>_T<T>.npz and the matching .csv. With ``--lift NAME`` it packs
+only the lifted 3D of cvdc/models/lifter.py (``world`` (N,T,17,3), same items and boundaries) into
+{reps,videos}_<joint_set>_T<T>_<NAME>.npz (coco17 only).
 """
 import argparse
 
@@ -33,11 +35,36 @@ def pack(items, T, joints):
     return dict(xy=np.asarray(xy, np.float32), vis=np.asarray(vis, np.float32), world=np.asarray(w3, np.float32))
 
 
+def pack_lifted(cfg, name):
+    """Lifted 3D (coco17, data/cache/lift_<name>/<video>.npz) resampled exactly like the main packs."""
+    pc = cfg["preprocess"]
+    if pc["joint_set"] != "coco17":
+        raise ValueError("lifted 3D exists for coco17 only")
+    src = resolve(cfg["lifter"]["out_dir"])
+    pdir = resolve(pc["pack_dir"])
+    for kind, T in (("reps", pc["T_rep"]), ("videos", pc["T_video"])):
+        base = f"{kind}_{pc['joint_set']}_T{T}"
+        items = pd.read_csv(pdir / f"{base}.csv")
+        cache, out = {}, []
+        for r in items.itertuples():
+            if r.video_id not in cache:
+                cache.clear()
+                with np.load(src / f"{r.video_id}.npz") as z:
+                    cache[r.video_id] = z["world"]
+            out.append(resample_fixed(cache[r.video_id][r.start:r.end + 1], T))
+        W = np.asarray(out, np.float32)
+        np.savez_compressed(pdir / f"{base}_{name}.npz", world=W)
+        print(f"{base}_{name}: world {W.shape} | NaN items: {int(np.isnan(W).any(axis=(1, 2, 3)).sum())}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config")
+    ap.add_argument("--lift", help="pack the lifted 3D of this lifter (e.g. ktpformer) instead")
     a = ap.parse_args()
     cfg = load_config(a.config)
+    if a.lift:
+        return pack_lifted(cfg, a.lift)
     pc = cfg["preprocess"]
     joints = JOINT_SETS[pc["joint_set"]]
     idx = pd.read_csv(resolve(cfg["data"]["index_csv"]))
