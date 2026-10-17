@@ -1,7 +1,7 @@
 # Step 0 inspection scripts
 
-Exploratory scripts used for the Step 0 data check (see `PROGRESS.md` §3). They will be superseded by
-`cvdc/data/` in Phase 1 (filename parser, sync classifier, rep segmentation). Keypoints only: no frames
+Exploratory scripts used for the Step 0 data check (see `PROGRESS.md` §3). They are superseded by
+`cvdc/data/` (Phase 1: filename parser, sync classifier, rep segmentation) and kept for the record. Keypoints only: no frames
 or audio are ever written; GPS tags in the video containers are never read.
 
 Dataset root = env `MOBIPHYSIO_ROOT`, default: the folder containing this repo. Run from the repo root

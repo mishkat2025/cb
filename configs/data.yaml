@@ -1,0 +1,91 @@
+# Phase 1 config: data discovery, labels, pose extraction, preprocessing, sync and reps.
+# Paths are relative to the repo root unless absolute. Env MOBIPHYSIO_ROOT overrides data.root.
+# Decision IDs (D*, P*, S*) refer to DESIGN_DECISIONS.md.
+
+data:
+  root: ..                              # D1: the folder that contains this repo
+  exercise_dir_regex: '^E\d{2}\('       # D1: exercise folders are discovered at runtime
+  skip_dir_prefix: '__'                 # D1: download-error marker folders
+  include_exercises: [E01, E02]         # D0; an empty list means every discovered exercise
+  # D2: case-insensitive; unknown variation codes are kept and reported as unknown
+  filename_regex: '^(?P<exercise>E\d{2})[ _-]*(?P<subject>P\d{1,3})[ _-]*A(?P<view>[FLR])[ _-]*V(?P<variation>[A-Z]+)[ _-]*G(?P<gender>[MF])$'
+  variations: [FL, ML, LL, LJ, HJ, O, LR]
+  views: [F, L, R]                      # S6: configurable number of views
+  expert_max_subject: 24                # D3: P01-P24 experts, P26+ non-experts
+  exclude_files: [E01_P60_AF_VLR_GF]    # D7: re-encoded copy of E01_P60_AF_VML_GF
+  scores_csv: Physiotherapist Exercise Marking.csv   # relative to data.root
+  reference_dir: Reference-Model Videos by PTs       # relative to data.root
+  exercise_config_dir: configs/exercises
+  index_csv: data/index.csv
+  ref_index_csv: data/index_ref.csv
+
+labels:
+  score_col: avg_round                  # D4: CSV "Rounding to 2 Decimal"
+  items: [PF1, PF2, PF3, PF4, CF1, CF2, CF3]   # all kept in the index; D5 drops PF3 as a target later
+  quality_bins: [50, 80]                # D6
+  quality_names: [incorrect, partially_correct, correct]
+
+pose:
+  model: data/models/pose_landmarker_full.task   # P1
+  max_side: 960                         # P2: long side before pose estimation (checked in Phase 1)
+  pad_square: false                     # P3: pad to square before pose estimation (checked in Phase 1)
+  workers: 8                            # V2: CPU processes
+  min_pose_detection_confidence: 0.5
+  min_pose_presence_confidence: 0.5
+  min_tracking_confidence: 0.5
+  kp_dir: data/cache/kp
+  ref_kp_dir: data/cache/kp_ref
+  hands_for: [E06]                      # P1: MediaPipe Hands is added for these exercises
+  hand_model: data/models/hand_landmarker.task   # not downloaded yet (needs approval, PROGRESS §4 item 7)
+
+preprocess:
+  fps: 30                               # uniform grid built from real frame timestamps (D9, M1)
+  min_detection_rate: 0.5               # P7: videos with a pose in fewer frames are excluded downstream
+  visibility_threshold: 0.5             # P5: low-visibility runs up to max_gap_s are interpolated
+  max_gap_s: 0.5                        # P5: longer low-visibility runs keep MediaPipe's estimate
+  smooth: {method: savgol, window: 7, polyorder: 2}   # 7 frames = 0.23 s at 30 fps
+  root: mid_hip                         # P5: mid_hip | mid_shoulder (hip-visibility check in Phase 1)
+  scale: torso                          # P5: median 2D torso length over the video
+  scale_3d: torso                       # world landmarks divided by the median 3D torso length
+  joint_set: coco17                     # P4: coco17 | mp33
+  out_dir: data/cache/pre
+  ref_out_dir: data/cache/pre_ref
+  T_rep: 64                             # fixed length for rep-level network input
+  T_video: 300                          # fixed length for video-level network input
+  pack_dir: data/cache/packs
+
+reps:                                   # defaults; each exercise YAML can override them
+  median_s: 0.3                         # running median before peak detection (removes 1-3 frame pose glitches)
+  prominence: 40                        # in the signal's unit (deg for angles)
+  min_distance_s: 1.0
+  min_amplitude: 40
+  rest_frac: 0.1                        # rep starts/ends where the angle is within 10% of amplitude of rest
+  pad_s: 0.1
+  min_rep_s: 0.8
+  max_rep_s: 15.0
+
+sync:
+  audio:
+    fs: 8000
+    band_hz: [100, 3800]
+    window_s: 3.0                       # S2: +-3 s lag window
+    edge_s: 2.9                         # a lag this close to the window edge is rejected
+    additivity_ms: 20                   # S2: |lag_FL + lag_LR - lag_FR| <= 20 ms
+  meta:
+    max_dc_s: 3.0                       # S3
+  motion:
+    refine_window_s: 0.3                # S4: search +-0.3 s around the device-corrected audio lag
+    global_window_s: 5.0                # fallback search without an audio lag
+    resid_threshold_ms: 42              # S4: rep-timing residual threshold (smallest Step 0 control value)
+    min_matched: 4
+    hysteresis: 0.5
+    match_tol_s: 0.5
+    min_overlap: 0.6
+  device_offsets_ms: {F-L: 126, F-R: 36} # S5: Step 0 priors (video lag - audio lag); re-estimated
+  cache_dir: data/cache/sync
+  report_csv: outputs/sync_report.csv
+  pairs_csv: outputs/sync_pairs.csv
+
+outputs:
+  phase1: outputs/phase1
+  checks: outputs/checks

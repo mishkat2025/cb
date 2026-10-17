@@ -1,0 +1,19 @@
+# E02 Adduction (in scope, D0). No EAAQ text yet (appendix pending); rep settings checked on data in Phase 1.
+code: E02
+name: adduction
+body_region: shoulder
+status: in_scope
+references:
+  primary: "Aduction.mp4"
+  backup: ["Abduction Adduction.mp4"]
+primary_angle:                   # P6: rep signal. E02 is cross-body adduction with the arm low (elevation
+  name: wrist_path_pc1           # ~10-45 deg); its direction changes with the view, so no single angle segments
+  source: world                  # it consistently. PC1 of the wrist path in the trunk frame, oriented toward the
+  side: auto                     # midline, gave the best cross-view agreement (scripts/phase1/rep_*_check.py).
+                                 # Not a joint angle: flagged to the supervisor.
+reps:
+  polarity: peak
+  prominence: 0.25               # torso lengths
+  min_amplitude: 0.25
+eaaq:
+  expected_reps: 10              # TODO: verify when the E02 EAAQ appendix is available

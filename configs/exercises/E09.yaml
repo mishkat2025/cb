@@ -1,0 +1,12 @@
+# E09 back_extension -- out of scope for now (D0).
+# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+code: E09
+name: back_extension
+body_region: trunk
+status: "TODO: verify when data is available"
+references:
+  primary: "Back Extension.mp4"
+  backup: []
+primary_angle: null              # TODO: verify when data is available
+reps: {}
+eaaq: {}

@@ -2,7 +2,7 @@
 
 Last updated 2026-10-17.
 
-**State:** Step 0 is complete for E01, E02 and the partial E03. The plan was approved with the supervisor's changes (§4). **Phase 1 has not started**; it will start in a new session. Nothing in `cvdc/` exists yet.
+**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5). Phase 2 (models) has not started. Four questions for the supervisor came out of Phase 1 (§7).
 
 **Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
 
@@ -46,9 +46,9 @@ Read this together with `DESIGN_DECISIONS.md` (every open choice, with its statu
 | GPU | NVIDIA RTX 4060 Ti 16 GB (driver supports CUDA 13.4) |
 | Python env | `D:\cb\.venv` (Python 3.11.9, made with `uv`, lives **outside** the repo) |
 | Installed | torch 2.14.1+cu126 (GPU matmul verified), mediapipe 1.1.1, opencv-contrib 5.0, PyAV 18.1, numpy, scipy, pandas, matplotlib (`requirements.txt`) |
-| Not yet installed | scikit-learn, umap-learn, tensorboard, pyyaml, streamlit, DTW library, pytest (install and pin in Phase 1) |
+| Installed in Phase 1 | pyyaml, pytest, scikit-learn, umap-learn, tensorboard, streamlit, dtaidistance (pinned in `requirements.txt`) |
 | MediaPipe | 1.1.1 has only the **Tasks API** (`PoseLandmarker`); there is no `mp.solutions`. Models live in `data/models/` (gitignored): `pose_landmarker_lite.task`, `pose_landmarker_full.task`. The heavy pose model is approved when needed; the hand landmarker comes later for E06. |
-| Pose speed | CPU only (no GPU delegate in MediaPipe Python on Windows): ~36 fps per process at 960 px with the full model; 8 processes ≈ 290 fps |
+| Pose speed | CPU only (no GPU delegate in MediaPipe Python on Windows): ~36 fps per process at 960 px with the full model; 8 processes ≈ 290 fps (Step 0); Phase 1 full run: 12 processes ≈ 315 fps (712,585 frames in 37.6 min) |
 | Camera | **No physical webcam** (only "Camo", a virtual camera in error state), so the demo runs on video files (§4, change 1) |
 | Disk | D: ~730 GB free; local videos ~42 GB |
 | Git | this repo (`cvdc-physio/`); identity `mishkat <sbmishkat10@gmail.com>` |
@@ -67,7 +67,7 @@ Dataset root = `D:\cb` (the folder that contains this repo). Never modify it.
 | `Physiotherapist Exercise Marking.csv` | scores, 3 judges × 7 EAAQ items | all 3,686 videos |
 | `MobiPhysio.md` | dataset README | names E08 "Both Leg Flexion" (the paper says Lumbar Flexion) |
 
-More exercises are still downloading. **Don't touch a folder until the user announces it**, then run the Step 0 check on it (§7).
+More exercises are still downloading. **Don't touch a folder until the user announces it**, then run the Step 0 check on it (§8).
 
 ## 3. Step 0 findings
 
@@ -219,31 +219,72 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 - the E03 P02 handling (applied later);
 - groups synced only by creation time get `w_sync` only after motion confirms the alignment; otherwise they get `w_rep`.
 
-## 5. Phase checklist
+## 5. Phase 1 results (2026-10-17)
+How to run: `python scripts/run_phase1.py` (README). Tables are in `outputs/phase1/`; skeleton-only figures are in `outputs/checks/`; the sync report is `outputs/sync_report.csv` (per group) and `outputs/sync_pairs.csv` (per view pair). Decisions P1–P8, S4, S5, C2, D11 and M5a in `DESIGN_DECISIONS.md` carry the numbers.
+
+### 5.1 Keypoints
+- **941/941 videos and 3 PT demos**, 712,585 frames, in 37.6 min with 12 CPU processes (MediaPipe full model; frames decoded with PyAV, which gives real timestamps and honours the rotation flag). Code: `cvdc/data/{filenames,labels,index,video,extract}.py`; index `data/index.csv`.
+- **Settings check (P2, P3):** on 12 videos, 960 px vs full resolution and padded vs unpadded frames differ by ~1% of torso length, and padding does not change the shoulder-width/torso ratio, so: 960 px, no padding.
+- **Detection:** 98.5% of frames on average; 28 videos below 90%.
+
+  | Variation | FL | ML | LJ | O | LL | HJ | LR |
+  |---|---|---|---|---|---|---|---|
+  | E01 mean frame detection | 99.6% | 99.8% | 100% | 99.0% | 96.0% | 95.6% | 100% |
+  | E02 mean frame detection | 99.5% | 99.8% | 100% | 99.1% | 96.9% | 95.1% | – |
+
+- **8 videos have a pose in < 50% of frames** and are excluded downstream (P7): `E01_P10/P11/P12_AL_VLL`, `E01_P16/P20_AL_VHJ`, `E02_P10/P11_AL_VLL`, `E02_P16_AL_VHJ`. All are left-view low-light or high-jitter takes; the other views of those groups are kept.
+- **Bug found and fixed:** upright (rotation 0) portrait videos produced padded, non-contiguous RGB rows, which MediaPipe read as garbage. This hit 4 files: both single-exercise PT demos (`Abduction .mp4`, `Aduction.mp4`) and `E01/E02_P13_AL_VLJ`, all at 0% detection. Frames are now always made contiguous, the 4 were re-extracted (now 99.6–100%), and a regression test covers it.
+- **Side views self-occlude one arm:** in AL videos the subject's left elbow/wrist reach visibility ≥ 0.5 in only 4–20% of frames; in AR videos the right elbow/wrist in 40–71%. So the AL camera faces the subject's right side. Hips are visible in ≥ 94% of frames in every view, so the root is mid-hip.
+
+### 5.2 Preprocessing
+- 30 fps grid from the real timestamps (`cvdc/data/preprocess.py`). Frames without a pose are interpolated. Low-visibility joints are interpolated only for runs ≤ 0.5 s, because longer runs are self-occlusion and interpolating them froze the moving arm (P5). Light Savitzky-Golay smoothing; mid-hip root; torso scaling in 2D and 3D.
+- Upper-body joint-frames interpolated: mean 4.2%, median 0.65%. Low-visibility joint-frames kept with MediaPipe's estimate: mean 9.8% (L views ~23%, R views ~11%).
+- Fixed-length packs (`cvdc/data/pack.py`, coco17 joints, P4): `reps_coco17_T64` (7,827 reps) and `videos_coco17_T300` (933 videos), with no NaN. T_rep = 64 matches the median rep length of 61 frames.
+
+### 5.3 Repetitions (`cvdc/data/reps.py`, P6)
+- **Signals:** E01 uses 3D shoulder elevation (prominence 30°). E02 uses the wrist path's first principal component in the trunk frame, oriented toward the midline. E02 turned out to be a **cross-body adduction with the arm low** (elevation only ~10–45°; the PT demo shows the same), so no single angle segments it consistently across views. **The E02 signal is not a joint angle** (question 1 in §7).
+- **Counts** (median per video): E01 experts 10 (F/L/R), E01 non-experts 1 (clips of 1–2 reps), E02 experts 10/9/10 (F/L/R; the R view over-counts, mean 11.5). 22 videos have 0 reps (17 of them E01 non-expert front clips).
+- **Cross-view check:** each expert F/L/R group is one performance, so its views should give the same count. Within ±1 rep: E01 69%, E02 42% (exactly equal: 32% / 15%). In audio-synced groups, rep peaks coincide across views (±0.4 s after alignment) in E01 68/71/56% and E02 70/62/48% of reps (F–L/F–R/L–R). E02 rep counting is the weakest part of Phase 1.
+- **PF4:** for E01 experts, PF4 behaves like reps/10. When PF4 = 1, 88% of videos have ≥ 10 detected reps; otherwise the median |reps − 10·PF4| is 1. For E02 there is no relation (PF4 = 0 on many 10-rep videos; D11).
+- **Timing (experts, median):** E01 rep 2.3 s, 10–90% raise 0.67 s, hold 0.9 s, lower 0.63 s. That is faster than the EAAQ's 1.5–2.5 s per raise (M5a). E01 3D peak elevation median 156° (p95 171°).
+- **Moving arm:** ~14% of expert performances use the **left** arm. In 35 of 250 expert F/L/R groups all three views pick the left arm, including front views, so it is not a left/right label swap (P8; question 2).
+- **Spot checks:** `outputs/checks/reps_<EX>_{expert,non-expert,extremes}.png` and `skeleton_*.png` (8-frame skeleton montages with the rep signal; PT demos as `skeleton_ref_*`). The failures seen are high-jitter and some left-view takes where MediaPipe loses the arm, plus low-amplitude E02 takes.
+
+### 5.4 Synchronization (`cvdc/data/sync.py`)
+- **Group classes reproduce Step 0 exactly:** E01 expert 49 audio / 78 creation time / 2 unknown; E01 non-expert 22 not synced; E02 45 / 82 / 2.
+- **Motion refinement:** 217 of 818 view pairs confirmed (synced groups: F–L 40%, F–R 31%, L–R 14%). On separate recordings (2,006 control pairs) the test falsely confirms 0.7% even with a ±5 s search. Confirmed three-view lags agree to a median of 3.2 ms (least-squares residual).
+- **Device offsets** (video lag − audio lag) re-estimated: F→L +93 ms, F→R +57 ms, L→R −44 ms, with an SD of ~50 ms.
+- **Aligned views (C2):** all 94 audio groups get three aligned views. Creation-time groups get aligned views only through motion-confirmed pairs: E01 20 groups with 3 views and 31 with 2 (27 none); E02 6 and 18 (58 none). **CVDC view pairs:** E01 238 sync / 199 rep-matched; E02 171 sync / 210 rep-matched (question 3).
+- Figures: `outputs/checks/sync_*.png` (the rep signal of each view on the aligned clock).
+
+### 5.5 Tests
+`python -m pytest -q tests`: 47 tests, all passing. They cover the filename parser, quality bins, angle geometry (elevation, signed frontal angle, wrist-path PC1), rep segmentation on synthetic signals (counts with noise, back-to-back reps, incomplete last rep, glitch robustness, NaN gaps), preprocessing (irregular timestamps, gaps, short vs long low-visibility runs, root/scale), sync (GCC-PHAT lag, motion lag and rejection, offset least squares) and frame contiguity.
+
+## 6. Phase checklist
 All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
 
 - [x] **Step 0:** environment, inventory, labels, sync census, references (E01, E02, E03-partial)
-- [ ] **Phase 1, keypoints and preprocessing** (new session)
-  - [ ] `cvdc/data/`:
+- [x] **Phase 1, keypoints and preprocessing** (2026-10-17; results in §5)
+  - [x] `cvdc/data/`:
     - filename parser (runtime discovery of `E\d{2}(...)` folders, filtered by `data.include_exercises` = [E01, E02]; skip `__*` folders);
     - CSV join;
     - index CSV.
-  - [ ] Keypoint extraction for all local videos:
+  - [x] Keypoint extraction for all local videos:
     - Tasks API; 2D (x, y, visibility) and world landmarks;
     - real frame timestamps, rotation handled, GPS never read;
     - square-padding check (§3.3 item 8);
     - per-variation detection rate.
-  - [ ] Sync classifier (audio → creation time → motion) for every group:
+  - [x] Sync classifier (audio → creation time → motion) for every group:
     - lag refinement with motion within ±0.3 s of the device-corrected audio lag;
     - `outputs/sync_report.csv`.
-  - [ ] Preprocessing:
+  - [x] Preprocessing:
     - root-centring (check hip visibility), torso scaling, interpolation, smoothing;
     - resample to fixed T, keeping the originals.
-  - [ ] Rep segmentation for every video:
+  - [x] Rep segmentation for every video:
     - reps per video;
     - plots;
     - compare against PF4 and the EAAQ "≥10 reps".
-  - [ ] Skeleton-only check renders in `outputs/checks/`.
+  - [x] Skeleton-only check renders in `outputs/checks/`.
 - [ ] **Phase 2, models:**
   - ST-GCN with shared weights;
   - projection head;
@@ -276,10 +317,17 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - `demo/live.py` on video files (real-time playback, field picker, leakage warning, .mp4 export, embedding-distance overlay);
   - `demo/app.py`.
 
-## 6. Open items
+## 7. Open items and questions
+**Questions for the supervisor (from Phase 1):**
+1. **E02 rep signal.** E02 is cross-body adduction with the arm low. No joint angle segments it consistently across views, so reps come from the wrist path's first principal component (oriented toward the midline). That is not the "primary joint angle" the spec names. Accept it, or prefer an angle with worse agreement (best: 2D wrist height, 36% vs 42% of groups within ±1 rep)?
+2. **Left-arm performances.** ~14% of expert performances use the left arm, but the E01 EAAQ says "right arm". Should Module III mirror them and assess them normally, or flag a left-arm set as an error?
+3. **Creation-time groups without motion confirmation** (27 of 78 in E01, 58 of 82 in E02) currently give only rep-matched pairs (C2). Keep it strict, or also accept their device-corrected audio lags (accurate to ~50 ms, about 1.5 frames) as synced pairs?
+4. **Speed rule.** Experts raise the arm in ~0.85–1.15 s, not the EAAQ's 1.5–2.5 s. Should Phase 4 take speed tolerances from expert data instead of the EAAQ text (M5a)?
+
+**Other open items:**
 - **EAAQ appendix** for E02–E09: the user is looking for it. Until it arrives, only E01 has questionnaire-derived rules.
 - **E03 is out of scope for now**, and it is incomplete (199/550, including one failed download). If it comes back into scope, rerun the Step 0 check on the full folder and add it to `data.include_exercises`.
-- **Other exercises** stay out of scope until the supervisor says otherwise. When one is announced and brought into scope, run the Step 0 check (§7).
+- **Other exercises** stay out of scope until the supervisor says otherwise. When one is announced and brought into scope, run the Step 0 check (§8).
 
-## 7. Re-running the Step 0 check
+## 8. Re-running the Step 0 check
 See `scripts/step0/README.md` for the order and arguments. Minimum for a new exercise: `inventory.py` → `video_meta.py` → `scores.py` → `sync_av.py <EX>` → `sync_classify.py`, plus a pose sample (`select_groups_ex.py` → `extract_pose.py` → `sync_analysis3.py`) and a reference comparison.

@@ -1,0 +1,12 @@
+# E04 medial_rotation -- out of scope for now (D0).
+# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+code: E04
+name: medial_rotation
+body_region: shoulder
+status: "TODO: verify when data is available"
+references:
+  primary: "Medial Rotation.mp4"
+  backup: []
+primary_angle: null              # TODO: verify when data is available
+reps: {}
+eaaq: {}

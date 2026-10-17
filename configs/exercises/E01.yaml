@@ -1,0 +1,21 @@
+# E01 Abduction (in scope, D0). EAAQ: dataset paper Fig. 4.
+code: E01
+name: abduction
+body_region: shoulder
+status: in_scope
+references:                      # M4: PT demos in data.reference_dir
+  primary: "Abduction .mp4"
+  backup: ["Abduction Adduction.mp4"]
+primary_angle:                   # drives rep segmentation (P6)
+  name: shoulder_elevation       # angle between upper arm and trunk line (0 = arm at side, 180 = overhead)
+  source: world                  # world (3D MediaPipe world landmarks) | image (2D)
+  side: auto                     # auto = the arm with the larger range in the video
+reps:                            # P6: chosen by cross-view rep-count agreement (scripts/phase1/rep_signal_check.py)
+  polarity: peak                 # rep = rest -> peak elevation -> rest
+  prominence: 30                 # deg
+  min_amplitude: 30              # deg
+eaaq:                            # M5, from the E01 questionnaire
+  expected_reps: 10              # PF4 "Repetition: minimum 10 times"
+  phase_s: [1.5, 2.5]            # PF2: 1.5-2.5 s to raise or to lower the arm
+  target_rom_deg: [170, 180]     # CF2: right arm 0 -> 170/180 deg, palms forward
+  moving_arm: right              # CF2: left arm stays at the side

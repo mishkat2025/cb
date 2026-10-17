@@ -1,8 +1,8 @@
 # data, keypoints, model weights, run artefacts: never committed (videos show faces)
-data/
-outputs/
-runs/
-checkpoints/
+/data/
+/outputs/
+/runs/
+/checkpoints/
 *.mp4
 *.avi
 *.mov

@@ -1,0 +1,12 @@
+# E07 hip_joint_flexion -- out of scope for now (D0).
+# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+code: E07
+name: hip_joint_flexion
+body_region: hip
+status: "TODO: verify when data is available"
+references:
+  primary: "Hip Joint Flection.mp4"
+  backup: []
+primary_angle: null              # TODO: verify when data is available
+reps: {}
+eaaq: {}

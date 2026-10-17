@@ -10,5 +10,11 @@ numpy==2.4.6
 scipy==1.17.1
 pandas==3.0.6
 matplotlib==3.11.2
-# Phase 1+ (to be pinned when installed): scikit-learn, umap-learn, tensorboard, pyyaml,
-# streamlit, dtaidistance or tslearn, pytest
+pyyaml==6.0.3
+pytest==9.1.1
+# installed in Phase 1 for later phases
+scikit-learn==1.9.1
+umap-learn==0.5.12
+tensorboard==2.21.0
+streamlit==1.66.0
+dtaidistance==2.5.1

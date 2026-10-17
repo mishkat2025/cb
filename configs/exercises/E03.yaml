@@ -1,0 +1,12 @@
+# E03 lateral_rotation -- out of scope for now (D0).
+# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+code: E03
+name: lateral_rotation
+body_region: shoulder
+status: "TODO: verify when data is available"
+references:
+  primary: "Later Rotation V3.mp4"
+  backup: []
+primary_angle: null              # TODO: verify when data is available
+reps: {}
+eaaq: {}

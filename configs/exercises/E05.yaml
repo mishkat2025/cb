@@ -1,0 +1,12 @@
+# E05 circumduction -- out of scope for now (D0).
+# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+code: E05
+name: circumduction
+body_region: shoulder
+status: "TODO: verify when data is available"
+references:
+  primary: "Circumduction.mp4"
+  backup: []
+primary_angle: null              # TODO: verify when data is available
+reps: {}
+eaaq: {}

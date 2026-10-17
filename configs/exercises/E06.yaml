@@ -1,0 +1,12 @@
+# E06 wrist_extension -- out of scope for now (D0).
+# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+code: E06
+name: wrist_extension
+body_region: wrist
+status: "TODO: verify when data is available"
+references:
+  primary: "Wrist Extension.mp4"
+  backup: []
+primary_angle: null              # TODO: verify when data is available
+reps: {}
+eaaq: {}
