@@ -1,6 +1,7 @@
-# Phase 2 config: ST-GCN encoder, projection and task heads, CVDC loss, pair builder, synthetic views and
-# augmentations. Merged into configs/data.yaml by cvdc.config.load_config (top-level keys model, heads,
-# cvdc, supervised). The CVDC pair weights per source stay in data.yaml (sync.pair_weights, C1).
+# Phase 2-3 config: ST-GCN encoder, projection and task heads, CVDC loss, pair builder, synthetic views and
+# augmentations (Phase 2); trainer, methods and evaluation (Phase 3). Merged into configs/data.yaml by
+# cvdc.config.load_config (top-level keys model, heads, supervised, cvdc, train, methods, eval, lifter). The CVDC
+# pair weights per source stay in data.yaml (sync.pair_weights, C1).
 # Decision IDs (C*, T*, A*) refer to DESIGN_DECISIONS.md.
 
 model:
@@ -64,12 +65,46 @@ cvdc:
     noise: 0.01                 # Gaussian noise, torso units
     share_temporal_crop: true   # keeps the time alignment of positives (C1); false = independent crops
 
-train:                          # Phase 2 smoke settings (Phase 3 adds the full trainer)
-  seed: 0
+train:                          # Phase 3 trainer (cvdc/train/); T1, T7-T12, A9
+  seed: 0                       # fold k uses seed + k (model init, batch order, synthetic views, augmentation)
   device: auto                  # auto | cuda | cpu
-  amp: bf16                     # bf16 | fp16 | off
+  amp: bf16                     # bf16 | off (fp16 would need a GradScaler)
   lr: 0.001
   weight_decay: 0.0001
+  unit: rep                     # T1: rep (default) | video
+  batch_size: 256               # supervised reps per batch
+  batch_size_video: 32          # supervised videos per batch (train.unit: video)
+  eval_batch: 1024              # forward-only batches (embeddings, predictions, validation)
+  max_epochs_cvdc: 100          # T8
+  max_epochs_sup: 60            # T8
+  warmup_frac: 0.05             # T9: linear warm-up over 5% of the max-epoch budget, then cosine decay to 0
+  fine_tune: full               # T10: full | linear_probe (frozen encoder incl. its BatchNorm statistics; heads only)
+  augment_supervised: true      # T11: the CVDC augmentations (A2) during supervised training, crops drawn per item
+  early_stopping:               # T8: inner validation split of the training subjects only
+    patience: 10
+    min_delta: 0.0
+    inner_frac: 0.2             # share of the training subjects of each group (expert / non-expert) held out
+    seed_offset: 1000           # inner split seed = eval.seed + seed_offset + fold
+  runs_dir: runs
+  smoke:                        # spec §7 smoke test: fold 0, 3 training subjects, 2 epochs
+    train_subjects: [2, 1]      # (experts, non-experts) the model trains on
+    val_subjects: [1, 1]        # inner validation
+    test_subjects: [2, 1]
+    epochs: 2
+
+methods:                        # E14 step (a): identical splits, preprocessing, epoch budget and encoder size
+  b1: {input: xy, cvdc: false}                  # 2D keypoints, from scratch
+  b2_mediapipe: {input: xyz, cvdc: false}       # MediaPipe world landmarks, from scratch
+  b2_ktpformer: {input: xyz_ktpformer, cvdc: false}   # KTPFormer lifted 3D (A10), from scratch
+  proposed: {input: xy, cvdc: true}             # CVDC pretraining on the fold's training subjects, then fine-tuning
+
+eval:                           # E1, E3, E9, E13, E15-E18
+  split: group_kfold
+  k: 5
+  seed: 0
+  bootstrap: {n: 2000, seed: 0, ci: 0.95}       # E17: subject-level bootstrap, percentile CIs
+  noise_floor: {E01: 5.28, E02: 4.38}           # E3: inter-view label-noise floor (score RMSE, expert groups)
+  results_dir: outputs/results/phase3a
 
 lifter:                         # A10: B2's second 3D source. KTPFormer (Peng et al., CVPR 2024), Human3.6M model on CPN 2D
   name: ktpformer

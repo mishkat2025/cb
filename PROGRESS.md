@@ -1,8 +1,8 @@
 # Progress
 
-Last updated 2026-10-17.
+Last updated 2026-10-18.
 
-**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the supervisor's fifth-review changes (§4, §6.5: standardised targets, three VCI variants, the KTPFormer lifter for B2, bf16, the runtime estimate). The user's sixth-review decisions (§4) set the Phase 3 run order: **step (a), GroupKFold-5 for the 4 main methods, is next**; it stops for review before the ablations (b) and the LOSO table (c).
+**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the supervisor's fifth-review changes (§4, §6.5: standardised targets, three VCI variants, the KTPFormer lifter for B2, bf16, the runtime estimate). The user's sixth-review decisions (§4) set the Phase 3 run order: **step (a), GroupKFold-5 for the 4 main methods, is done (§6b)** and stops here for review before the ablations (b) and the LOSO table (c).
 
 **Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
 
@@ -407,6 +407,28 @@ How to run: `python -m cvdc.data.pairs`, then `python scripts/phase2/smoke.py` (
 
 Also added: subject-independent splits with a leakage check (`cvdc/eval/splits.py`: stratified GroupKFold, LOSO, the LOSO-shortcut fold map), the input mode `xyz_ktpformer`, `python -m cvdc.data.pack --lift ktpformer`, and 15 tests (splits and leakage, target scaler, centred VCI, lifter mapping, windowing and a run on the downloaded weights): **122 tests, all passing**.
 
+## 6b. Phase 3 step (a) results: GroupKFold-5, main methods (2026-10-18)
+How to run: `python -m cvdc.train.run` then `python scripts/phase3/report_phase3a.py` (README). Full tables: `outputs/results/phase3a/summary.md` and CSVs (gitignored). Decisions T6, T8a, T9–T12, E3 (update), E15–E19 in `DESIGN_DECISIONS.md`. Same folds, inner splits (32 inner-train / 8 inner-val subjects per fold), budget, schedule and encoder for every method; test predictions pooled over the 5 folds; 95% CIs from a subject-level bootstrap (2,000 draws). All §0 limitations apply (2 shoulder exercises, confounded expert/non-expert contrast, E02 experts only, GroupKFold not LOSO).
+
+**Total score, video level (headline, E15), within groups: RMSE [95% CI] / Spearman ρ** (915 test videos with ≥ 1 rep)
+
+| Method | E01 expert (377 videos) | E02 expert (381) | E01 non-expert (157) |
+|---|---|---|---|
+| B1 (xy, scratch) | 13.29 [10.31, 17.30] / 0.06 | 17.70 [13.47, 21.86] / 0.04 | 23.12 [18.51, 27.66] / −0.18 |
+| B2-MediaPipe (xyz) | 13.84 [11.30, 17.24] / −0.05 | 16.59 [13.01, 20.25] / 0.13 | 21.88 [16.57, 27.06] / −0.07 |
+| B2-KTPFormer (lifted xyz) | 14.22 [11.42, 17.48] / 0.01 | 16.17 [12.94, 19.64] / 0.18 | 20.77 [16.19, 25.57] / −0.25 |
+| Proposed (xy, CVDC + fine-tune) | 13.33 [10.39, 17.28] / 0.06 | 16.06 [13.06, 19.24] / 0.20 | 17.66 [12.74, 22.13] / −0.10 |
+| predict-the-mean | 13.07 [10.32, 16.78] | 16.02 [13.19, 18.97] | 32.20 [29.16, 35.16] |
+| group-only (within-group mean) | 12.45 [9.37, 16.59] | 16.02 [13.53, 18.74] | 7.77 [5.74, 9.64] |
+| duration-only | 13.24 [10.32, 16.99] / −0.06 | 16.26 [13.54, 19.10] / −0.12 | 27.89 [24.91, 30.68] / 0.22 |
+| label-noise floor (E3) | 5.28 | 4.38 | – (expert-based) |
+
+- **No method beats the within-group mean (group-only baseline) in any group.** Within-group Spearman ρ is ≤ 0.20 everywhere and every CI includes 0 or nearly so. Proposed is the best model in E02 experts (16.06 vs 16.02 for the mean) and E01 non-experts, but still at or above the baselines. Rep-level, CF1–CF3, pooled, paired-difference and classification tables are in `summary.md`.
+- **Within-group VCI (centred 256-d, held-out subjects, final encoders; random-init reference in brackets):** B1 0.020 / 0.024 / 0.110 (−0.019 / 0.024 / 0.072); B2-MediaPipe 0.001 / 0.025 / −0.003; B2-KTPFormer 0.014 / 0.048 / −0.033; **Proposed 0.087 [0.027, 0.123] / 0.119 [0.054, 0.146] / 0.146 [−0.011, 0.261]**, and 0.298 / 0.257 / 0.296 after CVDC pretraining alone (E01 expert / E02 expert / E01 non-expert). CVDC makes the embedding view-consistent; fine-tuning removes about two thirds of it. Pooled VCI (secondary) 0.69–0.74 for every final model vs 0.401 for the random encoder (exercise separation).
+- **Stopping epochs:** every run stopped early. Fine-tuning kept epochs 2–22 (B1 2, 9, 12, 3, 13; B2-MP 2, 7, 15, 5, 7; B2-KTP 15, 13, 15, 7, 17; Proposed 2, 8, 22, 17, 14) of 60; CVDC kept 53, 62, 75, 80, 77 of 100. The inner-validation loss jumps between epochs (score RMSE e.g. 15 → 24 → 16), so early stopping often keeps a barely trained model.
+- **Wall time** (RTX 4060 Ti, bf16, sequential): B1 6.4 min, B2-MediaPipe 6.1 min, B2-KTPFormer 8.2 min, Proposed 54.1 min (CVDC 46.0) for all 5 folds; peak GPU memory 4.24 GB.
+- **Surprise (labels):** across the views of every expert performance, PF1, PF2 and CF1–CF3 are identical; only PF3/PF4 (repetitions) differ, so the 5.28 / 4.38 floor comes entirely from the rep-count items and the CF floor is 0 (E3).
+
 ## 7. Phase checklist
 All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
 
@@ -445,10 +467,10 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - [ ] DepthAnything channel: later, optional, on a small subset only (fifth review);
   - [x] fifth-review changes: standardised targets, three VCI variants, bf16, runtime estimate (§6.5).
 - [ ] **Phase 3, training** (run order E14):
-  - [ ] trainer: rep-level training as the default (T1, E12); targets standardised per training fold (T7); bf16; early stopping on an inner validation split of the training subjects, stopping epochs logged (T8); TensorBoard, checkpoints, config snapshot per run;
-  - [ ] smoke test (3 subjects, 2 epochs);
+  - [x] trainer (`cvdc/train/`): rep-level training as the default (T1, E12); targets standardised per training fold (T7); bf16; early stopping on an inner validation split of the training subjects, stopping epochs logged (T8, T8a); TensorBoard, checkpoints, config snapshot per run; full fine-tuning or linear probe (T10);
+  - [x] smoke test (3 subjects, 2 epochs; `python -m cvdc.train.run --smoke`);
   - [x] **LOSO runtime estimate** (§6.5; upper bound without early stopping);
-  - [ ] **(a) GroupKFold-5: B1, B2-MediaPipe, B2-KTPFormer, Proposed** (CVDC pretraining + fine-tuning): within-group results vs mean / group-only / duration-only baselines, within-group VCI; **stop and report**;
+  - [x] **(a) GroupKFold-5: B1, B2-MediaPipe, B2-KTPFormer, Proposed** (CVDC pretraining + fine-tuning): within-group results vs mean / group-only / duration-only baselines, within-group VCI; **stop and report**; done 2026-10-18, results in §6b;
   - [ ] (b) after approval: CVDC ablations on GroupKFold (C5);
   - [ ] (c) then the final LOSO table (per-fold-encoder shortcut, C7) for the 4 main methods.
 - [ ] **Phase 4, Module III:**
@@ -485,6 +507,11 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
 **Recorded, not open:** KTPFormer is less view-consistent than MediaPipe on 3 of 4 angles (only E01 shoulder elevation improves; §6.5); B2 is reported with both inputs.
 
 **Open for Phase 4:** the E02 horizontal adduction angle is view-dependent in 3D and often undefined in R views (§5.6, M7a); the left-arm CF difference is borderline (no flag under the agreed rule).
+
+**Open after Phase 3 step (a) (for the review):**
+- No model beats the within-group mean; early stopping keeps very early fine-tuning epochs because the inner-validation loss is noisy. Options (not applied, to avoid choosing on test results): lower lr or longer warm-up for fine-tuning, a smoothed or score-only validation metric, more patience, linear probe of the CVDC encoder (T10), score weighting (T6).
+- Fine-tuning erodes most of the CVDC view consistency (VCI 0.26–0.30 → 0.09–0.15): consider the joint objective L_sup + λ·L_cvdc (spec §7) or a lower encoder lr.
+- T6 (score weighting) is still open.
 
 **Other open items:**
 - **EAAQ appendix** for E02–E09: the user is looking for it. Until it arrives, only E01 has questionnaire-derived rules.

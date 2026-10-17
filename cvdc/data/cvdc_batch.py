@@ -129,10 +129,19 @@ class CVDCBatcher:
             rank[ii] = self.rng.permutation(len(ii))
         return np.lexsort((np.array([gperm[g] for g in groups]), rank))
 
-    def __iter__(self):
+    def reseed(self, seed):
+        """Restart the random streams (set order, component choice, synthetic views, augmentations): the same
+        seed gives the same batches on every pass (used for the validation loss, T8)."""
+        self.gen.manual_seed(seed)
+        self.rng = np.random.default_rng(seed)
+
+    def iterate(self, augment_views=True):
         o, B = self.order(), self.cc["sampler"]["batch_sets"]
         for i in range(0, len(o), B):
-            yield self.batch([self.sets[j] for j in o[i:i + B]])
+            yield self.batch([self.sets[j] for j in o[i:i + B]], augment_views)
+
+    def __iter__(self):
+        return self.iterate()
 
     def batch(self, sets, augment_views=True):
         real, set_of, grp = [], [], []

@@ -5,8 +5,8 @@ Cross-View Depth-Consistency Learning" on the MobiPhysio dataset (doi 10.7910/DV
 
 - **Scope now:** E01 (Abduction) and E02 (Adduction) only (`data.include_exercises`). Exercises are
   discovered at runtime, so adding one later is a config change.
-- **Status:** Step 0, Phase 1 (keypoints and preprocessing) and Phase 2 (models, CVDC loss, pair builder) are done;
-  training at scale (Phase 3) has not started. See `PROGRESS.md` for the state and
+- **Status:** Step 0, Phase 1 (keypoints and preprocessing), Phase 2 (models, CVDC loss, pair builder) and
+  Phase 3 step (a) (GroupKFold-5 for the 4 main methods) are done; the ablations (b) and the LOSO table (c) wait for review. See `PROGRESS.md` for the state and
   the phase checklist, and `DESIGN_DECISIONS.md` for every open choice.
 - **Privacy:** the videos show faces. Only keypoints are stored; renders are skeleton-only; `data/` and
   `outputs/` are gitignored. Audio is decoded in memory for synchronization and never written; GPS tags in
@@ -101,6 +101,31 @@ git clone https://github.com/JihuaPeng/KTPFormer third_party/KTPFormer   # commi
 Smoke outputs: `outputs/phase2/smoke_log.txt` (and `smoke_*.csv`, `smoke_summary.json`); skeleton-only figures
 `outputs/checks/phase2_synthetic_views.png` and `phase2_cvdc_smoke_curves.png`. Results: `PROGRESS.md` §6.
 
+## Phase 3: training and GroupKFold evaluation (step a)
+
+Config: `configs/model.yaml` (`train`, `methods`, `eval`). Runs (TensorBoard, checkpoints, config snapshots,
+predictions, embeddings) go to `runs/` (gitignored); tables to `outputs/results/phase3a/` (gitignored).
+
+```bash
+python -m cvdc.train.run --smoke                  # smoke test: fold 0, 3 training subjects, 2 epochs, all 4 methods (~1 min)
+python -m cvdc.train.run                          # GroupKFold-5: B1, B2-MediaPipe, B2-KTPFormer, Proposed (background job)
+python scripts/phase3/report_phase3a.py           # metrics, baselines, VCI, bootstrap CIs -> outputs/results/phase3a/
+tensorboard --logdir runs/phase3a
+```
+
+Single stages: `python -m cvdc.train.pretrain_cvdc --fold K` (CVDC pretraining of one fold) and
+`python -m cvdc.train.train_supervised --method b1|b2_mediapipe|b2_ktpformer|proposed --fold K [--linear-probe]`.
+`--linear-probe` freezes the encoder (default: full fine-tuning, `train.fine_tune`).
+
+| Piece | Code | Notes |
+|---|---|---|
+| trainer | `cvdc/train/trainer.py` | folds + inner validation split (T8), early stopping, warm-up + cosine schedule (T9), run directories (TensorBoard, config snapshot, checkpoints) |
+| CVDC pretraining | `cvdc/train/pretrain_cvdc.py` | inner training subjects' rep sets; validation = CVDC loss on the inner validation subjects' rep sets |
+| supervised | `cvdc/train/train_supervised.py` | rep level (T1), standardised targets (T7), full fine-tuning or linear probe (T10) |
+| runner | `cvdc/train/run.py` | all methods x folds, resumable (`done.json`) |
+| metrics | `cvdc/eval/metrics.py` | RMSE / MAE / Pearson / Spearman, macro F1 / kappa, VCI sums, subject-level bootstrap (E17) |
+| report | `scripts/phase3/report_phase3a.py` | within-group and pooled tables at video (headline, E15) and rep level, baselines (E16), VCI, stopping epochs, runtimes |
+
 ## Tests
 
 ```bash
@@ -116,9 +141,10 @@ cvdc/data/          filenames, labels, index, video (PyAV), extract, skeleton, p
 cvdc/models/        graph, stgcn, heads, model, lifter (KTPFormer wrapper)
 cvdc/losses/        cvdc (weighted multi-positive InfoNCE), supervised
 cvdc/assess/        angles, dtw (Module III follows in Phase 4)
-cvdc/eval/          consistency (VCI), splits (the rest follows in Phase 5)
+cvdc/eval/          consistency (VCI), splits, metrics (bootstrap CIs)
+cvdc/train/         trainer, pretrain_cvdc, train_supervised, run (GroupKFold runner)
 cvdc/viz/           skeleton drawing, Phase 1 checks
-scripts/            run_phase1.py, phase1/ checks and report, phase2/ (smoke, lifter_check, bench), step0/
+scripts/            run_phase1.py, phase1/ checks and report, phase2/ (smoke, lifter_check, bench), phase3/ (report), step0/
 third_party/        local clones used by wrappers (gitignored)
 tests/              pytest
 ```
