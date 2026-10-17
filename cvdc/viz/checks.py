@@ -89,10 +89,18 @@ def rep_grid(rows, reps, pre_paths, pa, title, out, ncols=4):
     plt.close(fig)
 
 
-def sync_check(group, idx, pa, out):
-    """The rep signal of the moving arm per view, on the aligned clock (t - offset_view)."""
+def sync_check(group, idx, reps, pa, out, fps):
+    """The rep signal of the moving arm per view, on the aligned clock (t - offset_view); shaded spans = the
+    group's shared reps (identical in every aligned view) or, for unaligned views, nothing."""
     vids = idx[idx.group_id == group.group_id]
     fig, ax = plt.subplots(figsize=(12, 3))
+    rg = reps[reps.group_id == group.group_id]
+    for r in vids.itertuples():
+        off = getattr(group, f"offset_{r.view}_s")
+        rv = rg[(rg.video_id == r.video_id) & rg.rep_source.isin(["best_view", "transfer"])]
+        if np.isfinite(off) and len(rv):
+            for x in rv.itertuples():
+                ax.axvspan(x.start / fps - off, x.end / fps - off, color="#a0aec0", alpha=0.12, lw=0)
     for r in vids.itertuples():
         pre = load_pre(resolve(r.pre_path))
         off = getattr(group, f"offset_{r.view}_s")
@@ -121,7 +129,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     idx = pd.read_csv(resolve(cfg["data"]["index_csv"]))
     V = pd.read_csv(resolve(cfg["outputs"]["phase1"]) / "reps_per_video.csv")
-    V = V.merge(idx[["video_id", "pre_path", "group_id"]], on="video_id")
+    V = V.merge(idx[["video_id", "pre_path"]], on="video_id")
     reps = pd.read_csv(resolve("data/reps.csv"))
     pre_paths = {r.video_id: resolve(r.pre_path) for r in idx.itertuples()}
     rng = np.random.default_rng(0)
@@ -168,8 +176,8 @@ def main():
         for ex, g in G.groupby("exercise"):
             for (cls, method), gg in g.groupby(["cls", "method"]):
                 for grp in gg.sample(min(2, len(gg)), random_state=0).itertuples():
-                    sync_check(grp, idx, exercise_cfg(cfg, ex)["primary_angle"],
-                               out / f"sync_{grp.group_id}_{cls}_{method}.png")
+                    sync_check(grp, idx, reps, exercise_cfg(cfg, ex)["primary_angle"],
+                               out / f"sync_{grp.group_id}_{cls}_{method}.png", cfg["preprocess"]["fps"])
                     n_png += 1
 
     ref = pd.read_csv(resolve(cfg["data"]["ref_index_csv"]))

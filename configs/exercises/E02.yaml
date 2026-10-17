@@ -17,3 +17,12 @@ reps:
   min_amplitude: 0.25
 eaaq:
   expected_reps: 10              # TODO: verify when the E02 EAAQ appendix is available
+assess:                          # Module III (Phase 4); supervisor answers 1, 2, 4 (2026-10-17)
+  angle: horizontal_adduction    # 3D: upper arm vs shoulder line in the transverse plane (not the rep signal)
+  angle_min_proj: 0.25           # NaN where the upper arm is within ~14.5 deg of vertical (angle unstable)
+  mirror_left_arm: true
+  flag_arm_side: false           # left-arm scores not significantly lower (scripts/phase1/left_arm_scores.py)
+  speed:
+    source: expert_data
+    expert_min_score: 95
+    eaaq_phase_s: null           # TODO: verify when the E02 EAAQ appendix is available

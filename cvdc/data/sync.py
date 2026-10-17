@@ -16,8 +16,12 @@ Lags: ``lag_ab > 0`` means an event appears ``lag_ab`` seconds later in view b t
 video's own timeline (0 = its first frame). Per-view offsets are relative to the reference view (F if
 present): aligned time = t_view - offset_view.
 
-CVDC pair source per view pair (C1, C2): 'sync' when the group is synced and both views are aligned
-(audio groups: always; metadata/motion groups: only views joined by motion-confirmed pairs), else 'rep'.
+CVDC pair source per view pair (C1, C2, supervisor answer 3), weights in ``sync.pair_weights``:
+  'sync'  (w_sync)  audio groups: every pair; creation-time/motion groups: views joined by motion-confirmed pairs
+  'audio' (w_audio) creation-time groups: views aligned only through device-corrected audio lags
+  'rep'   (w_rep)   not-synced / unknown groups, or views with no usable lag: reps paired by index later
+Per-view offsets come from a weighted least-squares fit of the pair lags (motion lags weight 1, audio lags
+``sync.audio_lag_weight``), so motion-confirmed lags dominate where they exist.
 
 usage: python -m cvdc.data.sync [--config C] [--workers N]
 Writes outputs/sync_report.csv (per group), outputs/sync_pairs.csv (per pair), and controls/offsets tables.
@@ -269,8 +273,9 @@ def device_offset(offsets, va, vb):
     return 0.0
 
 
-def solve_offsets(views, ref, lags):
-    """Least-squares per-view offsets from pair lags {(va, vb): lag}. Views not connected to ref -> NaN."""
+def solve_offsets(views, ref, lags, weights=None):
+    """Weighted least-squares per-view offsets from pair lags {(va, vb): lag} (weights {(va, vb): w},
+    default 1). Views not connected to ref -> NaN. Returns (offsets, RMS residual of the pair lags in ms)."""
     conn, changed = {ref}, True
     while changed:
         changed = False
@@ -283,7 +288,7 @@ def solve_offsets(views, ref, lags):
     off[ref] = 0.0
     if not unk:
         return off, np.nan
-    A, y = [], []
+    A, y, w = [], [], []
     for (a, b), lag in lags.items():
         if a in conn and b in conn:
             row = np.zeros(len(unk))
@@ -293,11 +298,26 @@ def solve_offsets(views, ref, lags):
                 row[unk.index(b)] += 1
             A.append(row)
             y.append(lag)
-    sol, *_ = np.linalg.lstsq(np.array(A), np.array(y), rcond=None)
+            w.append((weights or {}).get((a, b), 1.0))
+    A, y, sw = np.array(A), np.array(y), np.sqrt(np.array(w))
+    sol, *_ = np.linalg.lstsq(A * sw[:, None], y * sw, rcond=None)
     for v, o in zip(unk, sol):
         off[v] = float(o)
-    resid = np.array(y) - np.array(A) @ sol
+    resid = y - A @ sol
     return off, float(np.sqrt(np.mean(resid ** 2)) * 1000) if len(y) > len(unk) else np.nan
+
+
+def motion_components(views, edges):
+    """Connected components of views over motion-confirmed edges: {view: component id}."""
+    comp = {v: v for v in views}
+
+    def find(v):
+        while comp[v] != v:
+            v = comp[v]
+        return v
+    for a, b in edges:
+        comp[find(a)] = find(b)
+    return {v: find(v) for v in views}
 
 
 def classify(idx, P, sc):
@@ -326,30 +346,45 @@ def classify(idx, P, sc):
             cls, method, confd = "synced", "motion", "medium"
         else:
             cls, method, confd = "unknown", "-", "-"
-        # lags used for alignment: motion-confirmed lags; audio groups also use device-corrected audio lags
-        use = {}
-        for r in g.itertuples():
-            if is_true(r.motion_confirmed):
-                use[(r.view_a, r.view_b)] = (r.motion_lag_s, "motion")
-            elif method == "audio" and np.isfinite(r.audio_lag_dev_s):
-                use[(r.view_a, r.view_b)] = (r.audio_lag_dev_s, "audio+device_offset")
+        # lags for alignment: motion-confirmed lags (weight 1) and device-corrected audio lags (weight
+        # sync.audio_lag_weight); audio groups use both; creation-time groups too (supervisor answer 3), but
+        # only views joined by motion-confirmed pairs count as 'sync', the rest as 'audio'
+        mot = {(r.view_a, r.view_b): r.motion_lag_s for r in g.itertuples() if is_true(r.motion_confirmed)}
+        aud = {(r.view_a, r.view_b): r.audio_lag_dev_s for r in g.itertuples()
+               if np.isfinite(r.audio_lag_dev_s) and pd.notna(r.audio_edge) and not r.audio_edge}
+        lags = {**aud, **mot}
+        wts = {k: (1.0 if k in mot else sc["audio_lag_weight"]) for k in lags}
         if cls == "synced":
-            off, ls_ms = solve_offsets(views, ref, {k: v[0] for k, v in use.items()})
+            off, ls_ms = solve_offsets(views, ref, lags, wts)
         else:
             off, ls_ms = {v: np.nan for v in views}, np.nan
-        aligned = [v for v in views if np.isfinite(off[v])] if cls == "synced" else []
+        aligned = [v for v in views if np.isfinite(off[v])]
         if len(aligned) < 2:
             aligned = []
+        comp = motion_components(views, mot)
         for r in g.itertuples():
-            src = "sync" if (r.view_a in aligned and r.view_b in aligned) else "rep"
-            lag_src = use.get((r.view_a, r.view_b), (np.nan, "-"))[1] if src == "sync" else "-"
-            final = off[r.view_b] - off[r.view_a] if src == "sync" else np.nan
-            pair_rows.append(dict(r._asdict(), final_lag_s=final, lag_source=lag_src, pair_source=src, group_cls=cls))
+            both = r.view_a in aligned and r.view_b in aligned
+            if not both:
+                src, lag_src = "rep", "-"
+            elif method in ("audio", "motion") or comp[r.view_a] == comp[r.view_b]:
+                src = "sync"
+                lag_src = "motion" if (r.view_a, r.view_b) in mot else "audio+device_offset" if (
+                    r.view_a, r.view_b) in aud else "least_squares"
+            else:
+                src, lag_src = "audio", "audio+device_offset" if (r.view_a, r.view_b) in aud else "least_squares"
+            final = off[r.view_b] - off[r.view_a] if both else np.nan
+            pair_rows.append(dict(r._asdict(), final_lag_s=final, lag_source=lag_src, pair_source=src,
+                                  pair_weight=sc["pair_weights"][src], group_cls=cls))
+        via = {}
+        for v in views:
+            via[v] = ("-" if v not in aligned else "ref" if v == ref else "audio" if method == "audio"
+                      else "motion" if comp[v] == comp[ref] else "audio")
         rows.append(dict(group_id=gid, exercise=first.exercise, subject=first.subject, variation=first.variation,
                          group=first.group, views="".join(views), n_views=len(views), cls=cls, method=method,
                          confidence=confd, max_abs_dC_s=float(g.d_creation_s.abs().max()),
                          audio_triangle_err_ms=tri, motion_confirmed_pairs=int(g.motion_confirmed.fillna(False).sum()),
                          n_pairs=len(g), ref_view=ref, aligned_views="".join(aligned), ls_resid_ms=ls_ms,
+                         aligned_by=",".join(f"{v}:{via[v]}" for v in views),
                          **{f"offset_{v}_s": off.get(v, np.nan) for v in ("F", "L", "R")}))
     return pd.DataFrame(rows), pd.DataFrame(pair_rows).drop(columns=["Index"], errors="ignore")
 

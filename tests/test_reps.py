@@ -64,3 +64,17 @@ def test_short_glitch_does_not_split_a_rep():
     s[top[30]:top[30] + 3] = 40.0                            # 3-frame 3D pose glitch on the plateau
     assert len(segment_reps(s, FPS)) == 3
     assert len(segment_reps(s, FPS, median_s=0)) == 4        # without the median filter the rep splits
+
+
+def test_transfer_reps_maps_boundaries_and_drops_unrecorded():
+    """Source view offset 0.0 s, destination view offset +0.5 s (an event at aligned time t is at t + 0.5 s
+    in the destination). A rep starting before the destination's recording is dropped."""
+    from cvdc.data.reps import transfer_reps
+    src = [dict(start=0, peak=30, end=60, raise_s=1.0), dict(start=90, peak=120, end=150, raise_s=1.0)]
+    dst_signal = np.arange(200, dtype=float)
+    out = transfer_reps(src, 0.0, 0.5, dst_signal, FPS, 0.1)
+    assert [i for i, _ in out] == [0, 1]
+    assert (out[1][1]["start"], out[1][1]["peak"], out[1][1]["end"]) == (105, 135, 165)
+    assert out[1][1]["peak_val"] == 135 and out[1][1]["raise_s"] == 1.0
+    out = transfer_reps(src, 0.5, 0.0, dst_signal, FPS, 0.1)  # destination started 0.5 s later
+    assert [i for i, _ in out] == [1] and out[0][1]["start"] == 75

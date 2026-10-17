@@ -19,3 +19,11 @@ eaaq:                            # M5, from the E01 questionnaire
   phase_s: [1.5, 2.5]            # PF2: 1.5-2.5 s to raise or to lower the arm
   target_rom_deg: [170, 180]     # CF2: right arm 0 -> 170/180 deg, palms forward
   moving_arm: right              # CF2: left arm stays at the side
+assess:                          # Module III (Phase 4); supervisor answers 1, 2, 4 (2026-10-17)
+  angle: shoulder_elevation      # joint angle assessed (3D, world landmarks)
+  mirror_left_arm: true          # left-arm performances are mirrored and assessed normally
+  flag_arm_side: false           # left-arm scores not significantly lower (scripts/phase1/left_arm_scores.py)
+  speed:
+    source: expert_data          # expert_data | eaaq
+    expert_min_score: 95         # tolerances from reps of expert videos scoring >= this
+    eaaq_phase_s: [1.5, 2.5]     # documented alternative (PF2 text), used when source: eaaq

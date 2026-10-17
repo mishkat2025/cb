@@ -63,6 +63,9 @@ reps:                                   # defaults; each exercise YAML can overr
   pad_s: 0.1
   min_rep_s: 0.8
   max_rep_s: 15.0
+  view_preference: [F, R, L]            # tie-break for the best view of a synced group
+  transfer_tol_s: 0.1                   # a transferred rep may extend this far past a view's recording (clipped)
+  transfer_keep: common                 # common: keep reps every aligned view recorded | covered: per view
 
 sync:
   audio:
@@ -82,6 +85,12 @@ sync:
     match_tol_s: 0.5
     min_overlap: 0.6
   device_offsets_ms: {F-L: 126, F-R: 36} # S5: Step 0 priors (video lag - audio lag); re-estimated
+  audio_lag_weight: 0.04                # least-squares weight of an audio lag vs a motion lag (~(10 ms / 50 ms)^2)
+  pair_weights:                         # C1 + supervisor answer 3: CVDC weight per pair source (used in Phase 2)
+    sync: 1.0                           # audio-proven groups, or views joined by motion-confirmed lags
+    audio: 0.8                          # creation-time groups aligned only by device-corrected audio lags
+    rep: 0.5                            # not-synced / unknown groups: reps paired by index (+ DTW)
+    synthetic: 1.0                      # synthetic rotated views (Phase 2)
   cache_dir: data/cache/sync
   report_csv: outputs/sync_report.csv
   pairs_csv: outputs/sync_pairs.csv

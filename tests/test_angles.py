@@ -57,3 +57,20 @@ def test_wrist_path_pc1_positive_toward_midline():
         Q[:, J[f"{side}_wrist"]] = sh + np.stack([outward * (0.1 - 0.5 * phase), 0.6 - 0.1 * phase, -0.3 * phase], 1)
         s = wrist_path_pc1(Q, side)
         assert np.corrcoef(s, phase)[0, 1] > 0.99
+
+
+@pytest.mark.parametrize("side, arm, deg", [
+    ("right", [-1, 0, 0], 0), ("right", [0, 0, -1], 90), ("right", [1, 0, -1], 135), ("right", [0, 0, 1], -90),
+    ("left", [1, 0, 0], 0), ("left", [0, 0, -1], 90), ("left", [-1, 0, -1], 135), ("right", [-1, 1, -1], 45)])
+def test_horizontal_adduction_known_geometry(side, arm, deg):
+    """body(): y down, right shoulder at -x, the trunk faces -z (anterior). Elevation does not change the angle."""
+    from cvdc.assess.angles import horizontal_adduction
+    v = np.asarray(arm, float) / np.linalg.norm(arm)
+    assert horizontal_adduction(body(v, side), side) == pytest.approx(deg, abs=1e-6)
+
+
+def test_horizontal_adduction_masks_vertical_arm():
+    from cvdc.assess.angles import horizontal_adduction
+    v = np.array([0.05, 1.0, -0.05]) / np.linalg.norm([0.05, 1.0, -0.05])   # arm nearly hanging
+    assert np.isfinite(horizontal_adduction(body(v), "right"))
+    assert np.isnan(horizontal_adduction(body(v), "right", min_proj=0.25))

@@ -2,7 +2,7 @@
 
 Last updated 2026-10-17.
 
-**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5). Phase 2 (models) has not started. Four questions for the supervisor came out of Phase 1 (§7).
+**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). Phase 2 (models) has not started.
 
 **Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
 
@@ -217,7 +217,14 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 - the V3 template for E03 (applied later);
 - drop the duplicate `E01_P60_AF_VLR_GF`;
 - the E03 P02 handling (applied later);
-- groups synced only by creation time get `w_sync` only after motion confirms the alignment; otherwise they get `w_rep`.
+- groups synced only by creation time get `w_sync` only after motion confirms the alignment; otherwise they get `w_rep` (**superseded by the third review, answer 3:** unconfirmed views get audio-lag pairs with `w_audio`).
+
+**Third review (2026-10-17): answers to the Phase 1 questions** (applied in Phase 1, §5.6):
+1. **E02 rep signal** (wrist-path PC1) is approved for **rep segmentation only**. Module III must use joint angles: for E02 the **3D horizontal adduction angle** (upper arm vs shoulder line in the transverse plane, world landmarks).
+2. **Left-arm performances:** mirror and assess normally. First check whether expert scores (total, PF, CF) are lower for them; flag `arm_side` in the Module III output only if they are. Record the result.
+3. **Creation-time groups without motion confirmation:** use the audio-based lag for rep-level pairs, with its own weight **`w_audio = 0.8`** (configurable), and add it to the ablation as its own source.
+4. **Speed:** tolerances from high-scoring expert data; keep the EAAQ 1.5–2.5 s as a documented alternative config.
+5. **Rep consistency (before Phase 2):** in synced groups (audio / creation time / motion), rep boundaries must be identical across views: segment on the best view of the group (highest signal quality, usually Front), transfer the boundaries with the group's lag; per-view segmentation only for not-synced groups. Report the new cross-view agreement and how many reps per group change.
 
 ## 5. Phase 1 results (2026-10-17)
 How to run: `python scripts/run_phase1.py` (README). Tables are in `outputs/phase1/`; skeleton-only figures are in `outputs/checks/`; the sync report is `outputs/sync_report.csv` (per group) and `outputs/sync_pairs.csv` (per view pair). Decisions P1–P8, S4, S5, C2, D11 and M5a in `DESIGN_DECISIONS.md` carry the numbers.
@@ -239,26 +246,54 @@ How to run: `python scripts/run_phase1.py` (README). Tables are in `outputs/phas
 ### 5.2 Preprocessing
 - 30 fps grid from the real timestamps (`cvdc/data/preprocess.py`). Frames without a pose are interpolated. Low-visibility joints are interpolated only for runs ≤ 0.5 s, because longer runs are self-occlusion and interpolating them froze the moving arm (P5). Light Savitzky-Golay smoothing; mid-hip root; torso scaling in 2D and 3D.
 - Upper-body joint-frames interpolated: mean 4.2%, median 0.65%. Low-visibility joint-frames kept with MediaPipe's estimate: mean 9.8% (L views ~23%, R views ~11%).
-- Fixed-length packs (`cvdc/data/pack.py`, coco17 joints, P4): `reps_coco17_T64` (7,827 reps) and `videos_coco17_T300` (933 videos), with no NaN. T_rep = 64 matches the median rep length of 61 frames.
+- Fixed-length packs (`cvdc/data/pack.py`, coco17 joints, P4): `reps_coco17_T64` (7,095 reps) and `videos_coco17_T300` (933 videos), with no NaN. T_rep = 64 matches the median rep length of 64 frames (p5 37, p95 89).
 
-### 5.3 Repetitions (`cvdc/data/reps.py`, P6)
-- **Signals:** E01 uses 3D shoulder elevation (prominence 30°). E02 uses the wrist path's first principal component in the trunk frame, oriented toward the midline. E02 turned out to be a **cross-body adduction with the arm low** (elevation only ~10–45°; the PT demo shows the same), so no single angle segments it consistently across views. **The E02 signal is not a joint angle** (question 1 in §7).
-- **Counts** (median per video): E01 experts 10 (F/L/R), E01 non-experts 1 (clips of 1–2 reps), E02 experts 10/9/10 (F/L/R; the R view over-counts, mean 11.5). 22 videos have 0 reps (17 of them E01 non-expert front clips).
-- **Cross-view check:** each expert F/L/R group is one performance, so its views should give the same count. Within ±1 rep: E01 69%, E02 42% (exactly equal: 32% / 15%). In audio-synced groups, rep peaks coincide across views (±0.4 s after alignment) in E01 68/71/56% and E02 70/62/48% of reps (F–L/F–R/L–R). E02 rep counting is the weakest part of Phase 1.
-- **PF4:** for E01 experts, PF4 behaves like reps/10. When PF4 = 1, 88% of videos have ≥ 10 detected reps; otherwise the median |reps − 10·PF4| is 1. For E02 there is no relation (PF4 = 0 on many 10-rep videos; D11).
-- **Timing (experts, median):** E01 rep 2.3 s, 10–90% raise 0.67 s, hold 0.9 s, lower 0.63 s. That is faster than the EAAQ's 1.5–2.5 s per raise (M5a). E01 3D peak elevation median 156° (p95 171°).
-- **Moving arm:** ~14% of expert performances use the **left** arm. In 35 of 250 expert F/L/R groups all three views pick the left arm, including front views, so it is not a left/right label swap (P8; question 2).
-- **Spot checks:** `outputs/checks/reps_<EX>_{expert,non-expert,extremes}.png` and `skeleton_*.png` (8-frame skeleton montages with the rep signal; PT demos as `skeleton_ref_*`). The failures seen are high-jitter and some left-view takes where MediaPipe loses the arm, plus low-amplitude E02 takes.
+### 5.3 Repetitions (`cvdc/data/reps.py`, P6, P6b)
+- **Signals:** E01 uses 3D shoulder elevation (prominence 30°). E02 uses the wrist path's first principal component in the trunk frame, oriented toward the midline: E02 is a **cross-body adduction with the arm low** (elevation only ~10–45°; the PT demo shows the same), so no single angle segments it consistently across views. This non-angle signal is approved **for segmentation only** (answer 1).
+- **Synced groups share one rep set** (answer 5, P6b): reps are segmented on the group's best view (F in 116/127 E01 and 115/127 E02 groups) and transferred to the other views; reps share a `rep_uid`. Not-synced, unknown and single-view videos are segmented on their own.
+- **Counts:** set rep count (best view) median 10 for E01 and E02 experts; E01 non-experts 1 (clips of 1–2 reps). Training reps per view median 9, because an edge rep that some view did not record is dropped from all views. 7,095 training reps (7,827 with per-view segmentation). 18 videos have 0 reps, all E01 non-expert clips.
+- **Cross-view agreement in synced groups: 100%** (training reps and set counts) by construction; before: exactly equal 32% / 15%, within ±1 69% / 42% (E01 / E02). Transferred boundaries coincide on the aligned clock within 0.96 frames. Not-synced and unknown groups are unchanged. Details and per-group changes in §5.6.
+- **PF4:** for E01 experts the set rep count behaves like 10 × PF4: when PF4 = 1, 98% of videos have ≥ 10 reps; otherwise the median |reps − 10·PF4| is 1 (71% within ±1); Spearman 0.36. For E02 there is no relation (PF4 = 0 on many 10-rep videos; D11).
+- **Timing (all expert reps, median):** E01 rep 2.4 s, 10–90% raise 0.77 s, hold 0.87 s, lower 0.77 s; E02 1.8 / 0.60 / 0.60 / 0.57 s. Faster than the EAAQ's 1.5–2.5 s per raise, so speed tolerances come from expert data (answer 4, M5a). E01 3D peak elevation median 154° (p95 170°).
+- **Moving arm:** ~14% of expert performances use the **left** arm (all three views agree, including the front, so it is not a label swap). They are mirrored and assessed normally; no `arm_side` flag (answer 2, §5.6, P8).
+- **Spot checks:** `outputs/checks/reps_<EX>_{expert,non-expert,extremes}.png` and `skeleton_*.png` (8-frame skeleton montages with the rep signal; PT demos as `skeleton_ref_*`); `sync_*.png` shows the shared rep spans on the aligned clock. The remaining failures are high-jitter and some left-view takes where MediaPipe loses the arm, plus low-amplitude E02 takes.
 
 ### 5.4 Synchronization (`cvdc/data/sync.py`)
 - **Group classes reproduce Step 0 exactly:** E01 expert 49 audio / 78 creation time / 2 unknown; E01 non-expert 22 not synced; E02 45 / 82 / 2.
 - **Motion refinement:** 217 of 818 view pairs confirmed (synced groups: F–L 40%, F–R 31%, L–R 14%). On separate recordings (2,006 control pairs) the test falsely confirms 0.7% even with a ±5 s search. Confirmed three-view lags agree to a median of 3.2 ms (least-squares residual).
 - **Device offsets** (video lag − audio lag) re-estimated: F→L +93 ms, F→R +57 ms, L→R −44 ms, with an SD of ~50 ms.
-- **Aligned views (C2):** all 94 audio groups get three aligned views. Creation-time groups get aligned views only through motion-confirmed pairs: E01 20 groups with 3 views and 31 with 2 (27 none); E02 6 and 18 (58 none). **CVDC view pairs:** E01 238 sync / 199 rep-matched; E02 171 sync / 210 rep-matched (question 3).
+- **Aligned views (C2, answer 3):** all 94 audio groups get three aligned views. In creation-time groups, views joined by motion-confirmed pairs give `sync` pairs (E01: 51 of 78 groups have ≥ 2 such views, E02: 24 of 82); every other view is aligned with its device-corrected audio lag and gives `audio` pairs. Offsets come from a weighted least-squares fit (motion lags weight 1, audio lags 0.04; S7).
+- **CVDC view pairs** (`outputs/sync_pairs.csv`, `pair_source`, `pair_weight`): E01 239 `sync` (1.0) / 132 `audio` (0.8) / 66 `rep` (0.5); E02 171 / 204 / 6. `rep` pairs are now only the not-synced E01 non-expert groups and the 2 + 2 unknown groups.
 - Figures: `outputs/checks/sync_*.png` (the rep signal of each view on the aligned clock).
 
 ### 5.5 Tests
-`python -m pytest -q tests`: 47 tests, all passing. They cover the filename parser, quality bins, angle geometry (elevation, signed frontal angle, wrist-path PC1), rep segmentation on synthetic signals (counts with noise, back-to-back reps, incomplete last rep, glitch robustness, NaN gaps), preprocessing (irregular timestamps, gaps, short vs long low-visibility runs, root/scale), sync (GCC-PHAT lag, motion lag and rejection, offset least squares) and frame contiguity.
+`python -m pytest -q tests`: 58 tests, all passing. They cover the filename parser, quality bins, angle geometry (elevation, signed frontal angle, horizontal adduction, wrist-path PC1), rep segmentation on synthetic signals (counts with noise, back-to-back reps, incomplete last rep, glitch robustness, NaN gaps) and boundary transfer between views, preprocessing (irregular timestamps, gaps, short vs long low-visibility runs, root/scale), sync (GCC-PHAT lag, motion lag and rejection, offset least squares, weighted offsets) and frame contiguity.
+
+### 5.6 Third-review changes (answers 1–5)
+- **Answer 1, E02 assessment angle:** `horizontal_adduction` in `cvdc/assess/angles.py` (0° out to the side, 90° forward, > 90° across the body; NaN when the upper arm is within ~14.5° of vertical). On the data (`scripts/phase1/e02_angle_check.py`): front views go from ~18° at rest to ~135° at the rep peak. **The 3D angle is view-dependent:** at the same instants side views read 48° (L) and 41° (R) lower than the front (median), and in R views it is undefined at 80% of rep peaks (upper arm near vertical, median elevation 11°). Phase 4 has to handle this (M7a).
+- **Answer 2, left-arm scores** (`scripts/phase1/left_arm_scores.py`; unit = performance, views averaged; one-sided Mann-Whitney, Holm over 2 exercises × total/PF/CF, rule fixed before running):
+
+  | Exercise | Left / right performances | Total score L vs R | PF L vs R | CF L vs R (p uncorrected → Holm) |
+  |---|---|---|---|---|
+  | E01 | 15 (10 subjects) / 114 | 75.3 vs 80.9 (p 0.28) | 0.76 vs 0.78 | 0.74 vs 0.85 (0.028 → 0.14) |
+  | E02 | 22 (10 subjects) / 107 | 71.4 vs 74.9 (p 0.10) | 0.64 vs 0.66 | 0.81 vs 0.86 (0.014 → 0.08) |
+
+  No score is significantly lower after correction, so **no `arm_side` flag** (`assess.flag_arm_side: false`). Borderline: CF is lower in both exercises before correction; within-subject comparisons (10 / 9 subjects) are not significant.
+- **Answer 3, audio pairs:** see §5.4; `sync.pair_weights` = sync 1.0, audio 0.8, rep 0.5, synthetic 1.0; ablation sources (C5): sync, + audio, + rep, + synthetic, synthetic only.
+- **Answer 4, speed:** `assess.speed.source: expert_data` (reps of videos scoring ≥ 95), `eaaq_phase_s: [1.5, 2.5]` kept as the alternative for E01 (E02: none until the EAAQ appendix). Expert reference (93 videos ≥ 95): 10–90% raise median 0.80 s (p5–p95 0.57–1.13) for E01 and 0.63 s (0.40–0.97) for E02; lowering 0.77 / 0.60 s.
+- **Answer 5, rep consistency:** per synced group (views summed), comparing the final rep sets with the earlier per-view segmentation (`data/reps_perview.csv`, `outputs/phase1/table_reps_changes.csv`):
+
+  | | E01 synced (127 groups) | E02 synced (127 groups) |
+  |---|---|---|
+  | Groups whose per-view counts changed | 86 | 108 |
+  | Count change per group (median / p90 / max) | 1 / 5.4 / 15 | 2 / 9.4 / 13 |
+  | Groups that lost an edge rep not recorded by every view | 96 | 96 |
+  | Training reps before → after | 3,558 → 3,291 | 3,926 → 3,461 |
+  | Exactly equal counts across views, before → after | 32% → 100% | 15% → 100% |
+
+  Mean |count change| per transferred view: E01 L 0.8, R 1.3; E02 L 1.3, R 2.8 (the R view over-counted most). `reps.transfer_keep: covered` keeps edge reps in the views that recorded them, if identical rep sets are not required.
+
+
 
 ## 6. Phase checklist
 All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
@@ -285,6 +320,7 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
     - plots;
     - compare against PF4 and the EAAQ "≥10 reps".
   - [x] Skeleton-only check renders in `outputs/checks/`.
+  - [x] Third-review changes (§5.6): E02 horizontal adduction angle, left-arm score check, `audio` pair source (`w_audio` 0.8), best-view rep segmentation with boundary transfer.
 - [ ] **Phase 2, models:**
   - ST-GCN with shared weights;
   - projection head;
@@ -318,11 +354,9 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - `demo/app.py`.
 
 ## 7. Open items and questions
-**Questions for the supervisor (from Phase 1):**
-1. **E02 rep signal.** E02 is cross-body adduction with the arm low. No joint angle segments it consistently across views, so reps come from the wrist path's first principal component (oriented toward the midline). That is not the "primary joint angle" the spec names. Accept it, or prefer an angle with worse agreement (best: 2D wrist height, 36% vs 42% of groups within ±1 rep)?
-2. **Left-arm performances.** ~14% of expert performances use the left arm, but the E01 EAAQ says "right arm". Should Module III mirror them and assess them normally, or flag a left-arm set as an error?
-3. **Creation-time groups without motion confirmation** (27 of 78 in E01, 58 of 82 in E02) currently give only rep-matched pairs (C2). Keep it strict, or also accept their device-corrected audio lags (accurate to ~50 ms, about 1.5 frames) as synced pairs?
-4. **Speed rule.** Experts raise the arm in ~0.85–1.15 s, not the EAAQ's 1.5–2.5 s. Should Phase 4 take speed tolerances from expert data instead of the EAAQ text (M5a)?
+**Answered in the third review (2026-10-17):** the four Phase 1 questions (§4, applied in §5.6).
+
+**Open for Phase 4:** the E02 horizontal adduction angle is view-dependent in 3D and often undefined in R views (§5.6, M7a); the left-arm CF difference is borderline (no flag under the agreed rule).
 
 **Other open items:**
 - **EAAQ appendix** for E02–E09: the user is looking for it. Until it arrives, only E01 has questionnaire-derived rules.

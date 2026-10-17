@@ -24,9 +24,11 @@ def main():
     pre = pd.read_csv(out / "preprocess_summary.csv")
     V = pd.read_csv(out / "reps_per_video.csv")
     R = pd.read_csv(resolve("data/reps.csv"))
+    R = R.merge(V[["video_id", "n_frames_30"]].rename(columns={"n_frames_30": "n_frames"}), on="video_id")
     A = idx.merge(ex.drop(columns=["exercise", "group", "view", "variation"]), on="video_id", how="left") \
            .merge(pre.drop(columns=["det_rate"], errors="ignore"), on="video_id", how="left") \
-           .merge(V[["video_id", "side", "n_reps", "range_moving", "range_other", "unit"]], on="video_id", how="left")
+           .merge(V[["video_id", "side", "n_reps", "n_reps_set", "n_reps_own", "rep_source", "best_view",
+                     "range_moving", "range_other", "unit"]], on="video_id", how="left")
     A.to_csv(out / "phase1_per_video.csv", index=False)
 
     print("=== 1. keypoints:", int(A.n_frames.notna().sum()), "/", len(A), "videos;",
@@ -49,32 +51,68 @@ def main():
     t3 = A.groupby(["exercise", "group", "view"]).n_reps.describe()[["count", "mean", "min", "25%", "50%", "75%", "max"]]
     print(t3.round(2).to_string())
     t3.to_csv(out / "table_reps_by_view.csv")
+    print("set rep count (best view of a synced group, else own):")
+    print(A.groupby(["exercise", "group"]).n_reps_set.describe()[["count", "mean", "min", "50%", "max"]].round(2).to_string())
     print("moving arm (auto):", A.groupby(["exercise", "group"]).side.value_counts().unstack(fill_value=0).to_dict("index"))
     print("videos with 0 reps:", A[A.n_reps == 0].groupby(["exercise", "group", "view"]).size().to_dict())
 
-    print("\n=== 4. rep count vs PF4 (Repetition item, 0.1 steps) - experts")
+    print("\n=== 4. set rep count vs PF4 (Repetition item, 0.1 steps)")
     rows = []
-    for (e, g), d in A[A.n_reps.notna()].groupby(["exercise", "group"]):
-        rho = spearmanr(d.n_reps, d.PF4).statistic if d.PF4.nunique() > 1 else np.nan
+    for (e, g), d in A[A.n_reps_set.notna()].groupby(["exercise", "group"]):
+        rho = spearmanr(d.n_reps_set, d.PF4).statistic if d.PF4.nunique() > 1 else np.nan
         full = d[d.PF4 >= 0.999]
         part = d[d.PF4 < 0.999]
         rows.append(dict(exercise=e, group=g, videos=len(d), spearman_reps_PF4=rho,
-                         PF4_eq_1=len(full), of_which_reps_ge_10=(full.n_reps >= 10).mean() if len(full) else np.nan,
-                         PF4_lt_1=len(part), abs_diff_reps_vs_10xPF4_median=(part.n_reps - 10 * part.PF4).abs().median()
-                         if len(part) else np.nan, within1_of_10xPF4=((part.n_reps - 10 * part.PF4).abs() <= 1).mean()
+                         PF4_eq_1=len(full), of_which_reps_ge_10=(full.n_reps_set >= 10).mean() if len(full) else np.nan,
+                         PF4_lt_1=len(part), abs_diff_reps_vs_10xPF4_median=(part.n_reps_set - 10 * part.PF4).abs().median()
+                         if len(part) else np.nan, within1_of_10xPF4=((part.n_reps_set - 10 * part.PF4).abs() <= 1).mean()
                          if len(part) else np.nan))
     t4 = pd.DataFrame(rows).round(3)
     print(t4.to_string(index=False))
     t4.to_csv(out / "table_reps_vs_PF4.csv", index=False)
 
-    print("\n=== 5. cross-view agreement of rep counts (expert multi-view groups = same performance)")
-    e = A[(A.group == "expert") & (A.n_views_group >= 2)]
-    mv = e.groupby(["exercise", "group_id"]).n_reps.agg(["min", "max", "size"]).reset_index()
-    t5 = mv.groupby("exercise").apply(lambda d: pd.Series(dict(
-        groups=len(d), equal=(d["min"] == d["max"]).mean(), within1=((d["max"] - d["min"]) <= 1).mean(),
-        within2=((d["max"] - d["min"]) <= 2).mean())), include_groups=False).round(3)
-    print(t5.to_string())
-    t5.to_csv(out / "table_reps_cross_view.csv")
+    print("\n=== 5. cross-view rep agreement (multi-view groups; expert groups = one performance)")
+    G = pd.read_csv(resolve(cfg["sync"]["report_csv"]))[["group_id", "cls"]]
+    m = A[A.n_reps.notna()].merge(G, on="group_id", how="left").fillna({"cls": "single"})
+    m = m[m.groupby("group_id").video_id.transform("size") >= 2]
+    rows = []
+    for (e, cls), d in m.groupby(["exercise", "cls"]):
+        for col, label in (("n_reps_own", "per-view segmentation (before)"), ("n_reps", "training reps (after)"),
+                           ("n_reps_set", "set rep count (after)")):
+            g = d.groupby("group_id")[col].agg(["min", "max"])
+            rows.append(dict(exercise=e, group_cls=cls, counts=label, groups=len(g),
+                             equal=(g["min"] == g["max"]).mean(), within1=((g["max"] - g["min"]) <= 1).mean()))
+    t5 = pd.DataFrame(rows).round(3)
+    print(t5.to_string(index=False))
+    t5.to_csv(out / "table_reps_cross_view.csv", index=False)
+
+    print("\n=== 5b. what changed per group (views summed)")
+    d = m.assign(seg_change=(m.n_reps_set - m.n_reps_own).abs(), dropped=m.n_reps_set - m.n_reps)
+    ch = d.groupby(["exercise", "cls", "group_id"]).agg(
+        seg_change=("seg_change", "sum"), dropped=("dropped", "sum"), before=("n_reps_own", "sum"),
+        after=("n_reps", "sum")).reset_index()
+    t5b = ch.groupby(["exercise", "cls"]).agg(
+        groups=("group_id", "size"), reps_before=("before", "sum"), reps_after=("after", "sum"),
+        groups_count_changed=("seg_change", lambda x: int((x > 0).sum())), count_change_median=("seg_change", "median"),
+        count_change_p90=("seg_change", lambda x: x.quantile(.9)), count_change_max=("seg_change", "max"),
+        groups_with_dropped=("dropped", lambda x: int((x > 0).sum())), reps_dropped=("dropped", "sum")).round(1)
+    print("count_change = sum over views of |set count - per-view count| (segmentation differences);")
+    print("reps_dropped = reps not kept because some aligned view did not record them (summed over views)")
+    print(t5b.to_string())
+    t5b.to_csv(out / "table_reps_changes.csv")
+    tv = d[d.rep_source.isin(["best_view", "transfer"])].groupby(["exercise", "rep_source", "view"]).agg(
+        videos=("video_id", "size"), mean_count_change=("seg_change", "mean"), reps_dropped=("dropped", "sum"))
+    print(tv.round(2).to_string())
+    # identical boundaries by construction: a rep_uid has the same aligned start/end in every view (+-1 frame)
+    sr = pd.read_csv(resolve(cfg["sync"]["report_csv"])).set_index("group_id")
+    Rs = R[R.rep_source.isin(["best_view", "transfer"])].copy()
+    fps = cfg["preprocess"]["fps"]
+    offs = np.array([sr.loc[gid, f"offset_{v}_s"] for gid, v in zip(Rs.group_id, Rs.view)])
+    Rs["a_start"], Rs["a_end"] = Rs.start / fps - offs, Rs.end / fps - offs
+    spread = Rs.groupby("rep_uid")[["a_start", "a_end"]].agg(lambda x: x.max() - x.min()).max(axis=1) * fps
+    inner = Rs.groupby("rep_uid").apply(lambda x: ((x.start > 0) & (x.end < x.n_frames - 1)).all(), include_groups=False)
+    print(f"boundary check: {len(spread)} shared reps; max spread of aligned boundaries across views "
+          f"(reps not clipped at a recording edge): {spread[inner[spread.index]].max():.2f} frames")
 
     print("\n=== 6. rep timing (s): duration, raise (10->90%), hold, lower (90->10%)")
     R = R.merge(idx[["video_id", "group"]], on="video_id", how="left", suffixes=("", "_i"))
@@ -82,6 +120,11 @@ def main():
           .quantile([0.05, 0.5, 0.95]).unstack().round(2)
     print(t6.to_string())
     t6.to_csv(out / "table_rep_timing.csv")
+    hi = R[R.video_id.isin(idx.video_id[idx.score >= 95])]
+    t6b = hi.groupby("exercise")[["duration_s", "raise_s", "hold_s", "lower_s"]].quantile([0.05, 0.5, 0.95]).unstack().round(2)
+    print(f"expert-data speed reference (reps of videos scoring >= 95; {hi.video_id.nunique()} videos):")
+    print(t6b.to_string())
+    t6b.to_csv(out / "table_rep_timing_score95.csv")
     T = cfg["preprocess"]["T_rep"]
     print(f"rep length in frames at {cfg['preprocess']['fps']} fps: p5/p50/p95 =",
           np.percentile(R.duration_s * cfg["preprocess"]["fps"], [5, 50, 95]).round(0), f"(T_rep = {T})")

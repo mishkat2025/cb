@@ -1,8 +1,9 @@
 """Joint-angle math on keypoint arrays (MediaPipe 33-landmark indexing).
 
 All functions take arrays shaped (..., 33, C) with C = 2 (image) or 3 (world) and return degrees.
-Phase 1 uses ``shoulder_elevation`` as the primary angle of E01/E02 for rep segmentation; the full
-per-exercise angle set (M7) is added in Phase 4.
+Rep segmentation (Phase 1) uses ``shoulder_elevation`` for E01 and the non-angle ``wrist_path_pc1`` for E02;
+Module III (Phase 4) assesses joint angles only: E01 ``shoulder_elevation``, E02 ``horizontal_adduction``
+(M7; the full per-exercise angle set is added in Phase 4).
 """
 import numpy as np
 
@@ -61,6 +62,24 @@ def arm_frontal_angle(P, side="right", distal="wrist"):
     return np.degrees(np.arctan2(np.sum(d * out, axis=-1), -np.sum(d * up, axis=-1)))
 
 
+def horizontal_adduction(P, side="right", min_proj=0.0):
+    """3D horizontal adduction: the upper arm (shoulder->elbow) projected on the trunk's transverse plane,
+    angle from the outward shoulder line, positive toward the front. 0 = straight out to the side,
+    90 = straight forward, > 90 = across the body (toward the midline), < 0 = behind the shoulder line.
+    The angle is unstable when the arm hangs nearly vertical; frames whose projected length is below
+    ``min_proj`` x the upper-arm length (min_proj = sin of the elevation from vertical) are NaN."""
+    lat, up, fwd = trunk_frame(P)
+    u = P[..., J[f"{side}_elbow"], :] - P[..., J[f"{side}_shoulder"], :]
+    out = lat if side == "right" else -lat
+    a, f = np.sum(u * out, axis=-1), np.sum(u * fwd, axis=-1)
+    ang = np.degrees(np.arctan2(f, a))
+    if min_proj > 0:
+        with np.errstate(invalid="ignore", divide="ignore"):
+            frac = np.hypot(a, f) / np.linalg.norm(u, axis=-1)
+        ang = np.where(frac >= min_proj, ang, np.nan)
+    return ang
+
+
 def wrist_path_pc1(P, side="right"):
     """Not an angle: the wrist position relative to the shoulder in the trunk frame (torso units after
     preprocessing), projected on its first principal component over the video, oriented so that moving the
@@ -80,8 +99,9 @@ def wrist_path_pc1(P, side="right"):
 
 
 PRIMARY_ANGLES = {"shoulder_elevation": shoulder_elevation, "arm_frontal_angle": arm_frontal_angle,
-                  "wrist_path_pc1": wrist_path_pc1}
-UNITS = {"shoulder_elevation": "deg", "arm_frontal_angle": "deg", "wrist_path_pc1": "torso"}
+                  "horizontal_adduction": horizontal_adduction, "wrist_path_pc1": wrist_path_pc1}
+UNITS = {"shoulder_elevation": "deg", "arm_frontal_angle": "deg", "horizontal_adduction": "deg",
+         "wrist_path_pc1": "torso"}
 
 
 def primary_angle(P, name, side):

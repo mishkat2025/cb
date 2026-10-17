@@ -58,3 +58,11 @@ def test_solve_offsets_least_squares_and_connectivity():
     assert off == pytest.approx({"F": 0.0, "L": 0.10, "R": 0.30}) and rms == pytest.approx(0, abs=1e-6)
     off, _ = solve_offsets(["F", "L", "R"], "F", {("L", "R"): 0.2})  # L, R not joined to F
     assert off["F"] == 0 and np.isnan(off["L"]) and np.isnan(off["R"])
+
+
+def test_weighted_offsets_follow_motion_lags():
+    """A wrong-ish audio lag (weight 0.04) barely moves offsets fixed by two motion lags."""
+    lags = {("F", "L"): 0.10, ("F", "R"): 0.30, ("L", "R"): 0.25}       # L-R audio lag off by 50 ms
+    w = {("F", "L"): 1.0, ("F", "R"): 1.0, ("L", "R"): 0.04}
+    off, _ = solve_offsets(["F", "L", "R"], "F", lags, w)
+    assert off["L"] == pytest.approx(0.10, abs=0.002) and off["R"] == pytest.approx(0.30, abs=0.002)

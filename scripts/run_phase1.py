@@ -1,7 +1,7 @@
-"""Phase 1 in one command: index -> keypoints -> preprocessing -> reps -> sync -> fixed-T packs -> checks -> report.
+"""Phase 1 in one command: index -> keypoints -> preprocessing -> sync -> reps -> fixed-T packs -> checks -> report.
 
 usage: python scripts/run_phase1.py [--config configs/data.yaml] [--workers 12] [--from STEP]
-Each step is resumable (cached keypoints are skipped). Steps: index extract preprocess reps sync pack checks report
+Each step is resumable (cached keypoints and audio lags are skipped). Steps: index extract preprocess sync reps pack checks report
 """
 import argparse
 import subprocess
@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-STEPS = ["index", "extract", "preprocess", "reps", "sync", "pack", "checks", "report"]
+STEPS = ["index", "extract", "preprocess", "sync", "reps", "pack", "checks", "report"]
 
 
 def main():

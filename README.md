@@ -42,8 +42,8 @@ Or step by step (all read `configs/data.yaml`):
 | index | `python -m cvdc.data.index` | `data/index.csv` (one row per video: exercise, subject, view, variation, gender, group, score, EAAQ items, quality class, paths), `data/index_ref.csv` (PT demos) |
 | keypoints | `python -m cvdc.data.extract` | `data/cache/kp/<video>.npz`: 2D (x, y, z, visibility, presence) and 3D world landmarks, real frame timestamps; `outputs/phase1/extract_summary.csv`, `detection_by_variation.csv` |
 | preprocessing | `python -m cvdc.data.preprocess` | `data/cache/pre/<video>.npz`: uniform 30 fps grid, interpolated, smoothed, root-centred, torso-scaled (2D and 3D) |
-| reps | `python -m cvdc.data.reps` | `data/reps.csv` (one row per rep), `outputs/phase1/reps_per_video.csv` |
-| sync | `python -m cvdc.data.sync` | `outputs/sync_report.csv` (per group), `outputs/sync_pairs.csv` (per view pair, with the CVDC pair source) |
+| sync | `python -m cvdc.data.sync` | `outputs/sync_report.csv` (per group: class, per-view offsets), `outputs/sync_pairs.csv` (per view pair: lag, CVDC pair source `sync`/`audio`/`rep` and weight) |
+| reps | `python -m cvdc.data.reps` (after sync) | `data/reps.csv` (one row per rep; synced groups share `rep_uid` and boundaries across views), `data/reps_perview.csv` (each view on its own, for comparison), `outputs/phase1/reps_per_video.csv` |
 | packs | `python -m cvdc.data.pack` | `data/cache/packs/reps_coco17_T64.npz`, `videos_coco17_T300.npz` (+ index CSVs) |
 | checks | `python -m cvdc.viz.checks` | skeleton-only PNGs in `outputs/checks/` |
 | report | `python scripts/phase1/report.py` | summary tables in `outputs/phase1/` |
@@ -53,8 +53,10 @@ Measured runtimes (Ryzen 7 7700, 12-14 processes): keypoint extraction 37.6 min 
 the audio of ~830 videos); packs 18 s; checks 8 s. A re-run with all caches takes ~1.5 min.
 
 Phase 1 checks: `scripts/phase1/pose_settings_check.py` (P2/P3: resolution and square padding),
-`scripts/phase1/rep_signal_check.py` (P6: rep-count agreement across views per candidate signal) and
-`scripts/phase1/rep_alignment_check.py` (P6: do rep peaks coincide across synced views).
+`scripts/phase1/rep_signal_check.py` (P6: rep-count agreement across views per candidate signal),
+`scripts/phase1/rep_alignment_check.py` (P6: do rep peaks coincide across synced views),
+`scripts/phase1/e02_angle_check.py` (E02 horizontal adduction angle on the data) and
+`scripts/phase1/left_arm_scores.py` (expert scores of left- vs right-arm performances).
 Results and open questions: `PROGRESS.md` §5 and §7.
 
 ## Tests
