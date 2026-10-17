@@ -73,7 +73,8 @@ python scripts/phase2/lifter_check.py --all   # view consistency of MediaPipe vs
 python scripts/phase2/bench.py                # bf16/fp32 step times and the Phase 3 runtime estimate (idle GPU)
 ```
 
-**KTPFormer (B2's second 3D source; licence: none, research use only, never committed).** Clone the code
+**KTPFormer (B2's second 3D source; no licence: local non-commercial research use only, never committed or shared).**
+Cite: J. Peng, Y. Zhou and P. Y. Mok, "KTPFormer: Kinematics and Trajectory Prior Knowledge-Enhanced Transformer for 3D Human Pose Estimation", Proc. IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), 2024. Clone the code
 and fetch the Human3.6M CPN checkpoint, then convert it to a tensors-only state dict (see A10 in
 `DESIGN_DECISIONS.md` for the allow-listed pickle globals):
 

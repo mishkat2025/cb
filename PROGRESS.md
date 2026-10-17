@@ -2,7 +2,7 @@
 
 Last updated 2026-10-17.
 
-**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the supervisor's fifth-review changes (§4, §6.5: standardised targets, three VCI variants, the KTPFormer lifter for B2, bf16, the runtime estimate). Waiting for review before training at scale (Phase 3).
+**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the supervisor's fifth-review changes (§4, §6.5: standardised targets, three VCI variants, the KTPFormer lifter for B2, bf16, the runtime estimate). The user's sixth-review decisions (§4) set the Phase 3 run order: **step (a), GroupKFold-5 for the 4 main methods, is next**; it stops for review before the ablations (b) and the LOSO table (c).
 
 **Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
 
@@ -227,6 +227,12 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 3. Check whether the embeddings separate experts from non-experts more than they separate scores within a group: a linear probe for the group label (balanced accuracy, AUC) next to within-group score probes, for B1, B2 and Proposed, plus a view-matched subset (E11).
 4. Keep rep-level training as the default so clip length cannot be a cue (T1, E12); the remaining cues (rep duration, rep count per set, view mix) are listed in E12.
 
+**Sixth review (2026-10-18): decisions before Phase 3** (`DESIGN_DECISIONS.md` A10, E13, T8, E14):
+1. **KTPFormer:** keep using it locally for non-commercial research; never commit or share its code or weights; cite the paper. MotionBERT's weights are also Human3.6M-trained, so switching would not remove the non-commercial limit. The user informs the supervisor.
+2. **Headline VCI:** within each exercise and expert/non-expert group, mean-centred 256-d. The pooled value is secondary and reported with the random-encoder reference (0.41).
+3. **Epochs:** at most 100 CVDC / 60 fine-tuning, with early stopping on an inner validation split taken from the training subjects only (never the test fold); stopping epochs are logged.
+4. **Phase 3 run order:** (a) GroupKFold-5 for B1, B2-MediaPipe, B2-KTPFormer and Proposed: within-group results against the mean, group-only and duration-only baselines, plus the within-group VCI; **stop and report**. (b) Only after approval: the ablations on GroupKFold. (c) Then the final LOSO table (per-fold-encoder shortcut) for the 4 main methods.
+
 **Fifth review (2026-10-17): answers to the Phase 2 questions** (applied in §6.5):
 1. **Score loss:** standardise the score and the PF/CF targets with each training fold's mean and std only; invert for reporting; check the relative loss weights across heads.
 2. **VCI:** report raw 256-d, mean-centred 256-d and the 128-d projection; the **primary VCI is the mean-centred 256-d embedding** (what the heads and the embedding-to-reference distance use); define it once in `DESIGN_DECISIONS.md` (E13).
@@ -438,12 +444,13 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - [x] KTPFormer 2D→3D lifter for B2 (`cvdc/models/lifter.py`, input `xyz_ktpformer`; fifth review, §6.5);
   - [ ] DepthAnything channel: later, optional, on a small subset only (fifth review);
   - [x] fifth-review changes: standardised targets, three VCI variants, bf16, runtime estimate (§6.5).
-- [ ] **Phase 3, training:**
-  - rep-level training as the default (T1, E12); targets standardised per training fold (T7);
-  - smoke test (3 subjects, 2 epochs);
-  - **LOSO runtime estimate**;
-  - CVDC pretraining and fine-tuning;
-  - B1 and B2.
+- [ ] **Phase 3, training** (run order E14):
+  - [ ] trainer: rep-level training as the default (T1, E12); targets standardised per training fold (T7); bf16; early stopping on an inner validation split of the training subjects, stopping epochs logged (T8); TensorBoard, checkpoints, config snapshot per run;
+  - [ ] smoke test (3 subjects, 2 epochs);
+  - [x] **LOSO runtime estimate** (§6.5; upper bound without early stopping);
+  - [ ] **(a) GroupKFold-5: B1, B2-MediaPipe, B2-KTPFormer, Proposed** (CVDC pretraining + fine-tuning): within-group results vs mean / group-only / duration-only baselines, within-group VCI; **stop and report**;
+  - [ ] (b) after approval: CVDC ablations on GroupKFold (C5);
+  - [ ] (c) then the final LOSO table (per-fold-encoder shortcut, C7) for the 4 main methods.
 - [ ] **Phase 4, Module III:**
   - templates (PT demo at 30 fps, mirrored, 3D angles; tolerance bands from expert videos scoring ≥ 95);
   - DTW, angle and angular-velocity deviation;
@@ -473,11 +480,9 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
 
 **Answered in the fifth review (2026-10-17):** the four Phase 2 questions (§4, applied in §6.5).
 
-**Open after the fifth review (for the supervisor):**
-1. **KTPFormer has no licence** (A10). It is used locally for research only and never committed. If the results are to be published or the code shared, the authors' permission may be needed; MotionBERT (Apache-2.0) is the clean alternative.
-2. **Headline VCI:** the pooled VCI is inflated by exercise separation (a random encoder scores 0.41 pooled, ~0 within each exercise). Proposal: the within-stratum centred VCI is the headline number (E13).
-3. **KTPFormer is less view-consistent than MediaPipe** on 3 of 4 angles (only E01 shoulder elevation improves; §6.5). This is reported as found; it does not change the B2 plan.
-4. **Runtime:** the main LOSO table needs ≈ 20.5 h and each ablation setting ≈ 1.5 h (§6.5). Confirm the epoch budget (100 CVDC / 60 fine-tuning) or set early stopping before Phase 3.
+**Answered in the sixth review (2026-10-18):** KTPFormer licence (local non-commercial research use, cite the paper; the user informs the supervisor), headline VCI (within-group, centred), epoch budget with early stopping, Phase 3 run order (§4).
+
+**Recorded, not open:** KTPFormer is less view-consistent than MediaPipe on 3 of 4 angles (only E01 shoulder elevation improves; §6.5); B2 is reported with both inputs.
 
 **Open for Phase 4:** the E02 horizontal adduction angle is view-dependent in 3D and often undefined in R views (§5.6, M7a); the left-arm CF difference is borderline (no flag under the agreed rule).
 
