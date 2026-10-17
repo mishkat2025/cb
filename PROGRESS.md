@@ -2,7 +2,7 @@
 
 Last updated 2026-10-17.
 
-**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). Phase 2 (models) has not started.
+**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). Phase 2 (models) has not started.
 
 **Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
 
@@ -19,7 +19,7 @@ Read this together with `DESIGN_DECISIONS.md` (every open choice, with its statu
 - The pipeline still **discovers exercises at runtime**, with an include list in the config (`data.include_exercises: [E01, E02]`). Adding E03 or others later is a config change, not a code change.
 
 **Main results** (headline):
-1. Score prediction: total score, plus the PF and CF items reported separately.
+1. Score prediction: total score, plus the PF and CF items reported separately, **within groups first** (expert-only, non-expert-only), pooled second (E9).
 2. The B1 / B2 / Proposed (ST-GCN + CVDC) comparison and the with/without-CVDC ablation.
 3. The cross-view protocol: train on two views, test on the third.
 4. The embedding-to-reference distance (the "vector difference", §4 item 9).
@@ -30,7 +30,7 @@ Read this together with `DESIGN_DECISIONS.md` (every open choice, with its statu
 **Limitations, to state in every report:**
 - **Only 2 exercises, both shoulder movements in the same region.** Exercise classification is close to trivial. Findings may not transfer to other body regions, lying exercises (E07–E09) or the wrist (E06).
 - **E02 has no non-experts.** All 384 E02 videos are from the 24 experts, scoring 24–100 (mean 74.1). So E02 has no expert vs non-expert contrast, and its low-score examples come only from imperfect expert takes.
-- **The expert/non-expert contrast exists only in E01, and it is confounded.** Non-experts are single-rep clips of 1–7 s, filmed mostly from the front and not synchronized across views (§3.3, §3.5).
+- **The expert/non-expert contrast exists only in E01, and it is confounded.** The groups differ in score (~80 vs ~45) and also in clip length (non-experts: single-rep clips of 1–7 s), views (mostly front), recording year and location, phones and recording mode (non-expert views recorded one after another, not synchronized) (§3.3, §3.5). A model can look accurate by detecting the group, so within-group results are primary (E9–E12).
 - **3 views, not the proposal's 4.** Synchronization is reconstructed in software (audio, creation time, motion), not given by the dataset.
 - **No error-type labels.** Module III errors are rule-based and evaluated qualitatively, plus by how rule deviations correlate with the expert scores.
 - **Scores are skewed toward high values.** There is an inter-view label-noise floor of 5.3 points (E01) and 4.4 points (E02) RMSE.
@@ -219,6 +219,12 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 - the E03 P02 handling (applied later);
 - groups synced only by creation time get `w_sync` only after motion confirms the alignment; otherwise they get `w_rep` (**superseded by the third review, answer 3:** unconfirmed views get audio-lag pairs with `w_audio`).
 
+**Fourth review (2026-10-17): supervisor warning on expert vs non-expert scores.** Experts and non-experts differ in score (~80 vs ~45) and also in clip length, views, location, phones and recording mode, so a model can look accurate by detecting the group instead of judging movement. Added to the evaluation plan (`DESIGN_DECISIONS.md` E9–E12; recorded only, no code yet):
+1. Report every score metric within groups (expert-only, non-expert-only) as the primary result; pooled results secondary (E9).
+2. Add a **group-only baseline** (predicts each group's mean score) next to the mean and duration-only baselines (E10, T3).
+3. Check whether the embeddings separate experts from non-experts more than they separate scores within a group: a linear probe for the group label (balanced accuracy, AUC) next to within-group score probes, for B1, B2 and Proposed, plus a view-matched subset (E11).
+4. Keep rep-level training as the default so clip length cannot be a cue (T1, E12); the remaining cues (rep duration, rep count per set, view mix) are listed in E12.
+
 **Third review (2026-10-17): answers to the Phase 1 questions** (applied in Phase 1, §5.6):
 1. **E02 rep signal** (wrist-path PC1) is approved for **rep segmentation only**. Module III must use joint angles: for E02 the **3D horizontal adduction angle** (upper arm vs shoulder line in the transverse plane, world landmarks).
 2. **Left-arm performances:** mirror and assess normally. First check whether expert scores (total, PF, CF) are lower for them; flag `arm_side` in the Module III output only if they are. Record the result.
@@ -330,6 +336,7 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - synthetic views;
   - B2 3D input.
 - [ ] **Phase 3, training:**
+  - rep-level training as the default (T1, E12);
   - smoke test (3 subjects, 2 epochs);
   - **LOSO runtime estimate**;
   - CVDC pretraining and fine-tuning;
@@ -341,12 +348,15 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - score;
   - JSON with the embedding-to-reference distance.
 - [ ] **Phase 5, evaluation:**
+  - **within-group metrics first** (expert-only, non-expert-only), pooled second (E9);
+  - group-only baseline next to mean and duration-only (E10);
+  - group-separability probe on the embeddings vs within-group score probes, incl. a view-matched subset (E11);
   - GroupKFold and LOSO;
   - stats;
   - cross-view protocol;
   - ablations (a)–(d) plus τ, embedding size, augmentation;
   - label-noise floor;
-  - baselines;
+  - baselines (mean, duration-only, group-only);
   - embedding-distance analysis;
   - UMAP/t-SNE with reference embeddings.
 - [ ] **Phase 6, demo:**
