@@ -97,4 +97,5 @@ sync:
 
 outputs:
   phase1: outputs/phase1
+  phase2: outputs/phase2
   checks: outputs/checks

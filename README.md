@@ -5,7 +5,8 @@ Cross-View Depth-Consistency Learning" on the MobiPhysio dataset (doi 10.7910/DV
 
 - **Scope now:** E01 (Abduction) and E02 (Adduction) only (`data.include_exercises`). Exercises are
   discovered at runtime, so adding one later is a config change.
-- **Status:** Step 0 and Phase 1 (keypoints and preprocessing) are done. See `PROGRESS.md` for the state and
+- **Status:** Step 0, Phase 1 (keypoints and preprocessing) and Phase 2 (models, CVDC loss, pair builder) are done;
+  training at scale (Phase 3) has not started. See `PROGRESS.md` for the state and
   the phase checklist, and `DESIGN_DECISIONS.md` for every open choice.
 - **Privacy:** the videos show faces. Only keypoints are stored; renders are skeleton-only; `data/` and
   `outputs/` are gitignored. Audio is decoded in memory for synchronization and never written; GPS tags in
@@ -57,7 +58,31 @@ Phase 1 checks: `scripts/phase1/pose_settings_check.py` (P2/P3: resolution and s
 `scripts/phase1/rep_alignment_check.py` (P6: do rep peaks coincide across synced views),
 `scripts/phase1/e02_angle_check.py` (E02 horizontal adduction angle on the data) and
 `scripts/phase1/left_arm_scores.py` (expert scores of left- vs right-arm performances).
-Results and open questions: `PROGRESS.md` §5 and §7.
+Results and open questions: `PROGRESS.md` §5 and §8.
+
+## Phase 2: models, CVDC loss and pairs
+
+Config: `configs/model.yaml` (merged with `configs/data.yaml`; pair weights stay in `sync.pair_weights`).
+
+```bash
+python -m cvdc.data.pairs          # rep-level CVDC pairs from the Phase 1 caches (~12 s)
+python scripts/phase2/smoke.py     # smoke run on E01 + E02 (~3.5 min on an RTX 4060 Ti)
+```
+
+| Piece | Code | Notes |
+|---|---|---|
+| graph | `cvdc/models/graph.py` | COCO-17 ST-GCN layout, self-loops, uniform / distance / spatial partitions |
+| encoder | `cvdc/models/stgcn.py` | ST-GCN (Yan et al. 2018), 10 blocks, 3.07 M parameters, 256-d embedding, shared by all views; input `xy`, `xyv` or `xyz` |
+| heads | `cvdc/models/heads.py`, `model.py` | projection 2-layer MLP -> 128-d L2-normalised; linear heads: exercise (9), score, EAAQ items, quality (3), with an exercise embedding |
+| CVDC loss | `cvdc/losses/cvdc.py` | weighted multi-positive InfoNCE, tau 0.1, negatives `all_other_groups` / `different_exercise_only`, monitoring stats |
+| supervised loss | `cvdc/losses/supervised.py` | MSE on score / 100 and items, cross-entropy on quality and exercise |
+| pair builder | `cvdc/data/pairs.py` | `data/cvdc_pairs.csv`, `data/cvdc_members.csv`, DTW-aligned pack, `outputs/phase2/table_pair_counts.csv` |
+| synthetic views | `cvdc/data/synthetic.py` | world landmarks -> levelled yaw orbit -> pinhole projection |
+| batches | `cvdc/data/dataset.py`, `cvdc_batch.py`, `augment.py` | packs on the GPU; all views of a rep set together; per-pair weight matrix |
+| VCI | `cvdc/eval/consistency.py` | viewpoint consistency index |
+
+Smoke outputs: `outputs/phase2/smoke_log.txt` (and `smoke_*.csv`, `smoke_summary.json`); skeleton-only figures
+`outputs/checks/phase2_synthetic_views.png` and `phase2_cvdc_smoke_curves.png`. Results: `PROGRESS.md` §6.
 
 ## Tests
 
@@ -68,10 +93,14 @@ python -m pytest -q tests
 ## Layout
 
 ```
-configs/            data.yaml (data, labels, pose, preprocessing, reps, sync); exercises/EXX.yaml
-cvdc/data/          filenames, labels, index, video (PyAV), extract, skeleton, preprocess, reps, sync, pack
-cvdc/assess/        angles (joint-angle math; Module III follows in Phase 4)
+configs/            data.yaml (data, labels, pose, preprocessing, reps, sync); model.yaml (Phase 2); exercises/EXX.yaml
+cvdc/data/          filenames, labels, index, video (PyAV), extract, skeleton, preprocess, reps, sync, pack,
+                    pairs, synthetic, augment, dataset, cvdc_batch
+cvdc/models/        graph, stgcn, heads, model
+cvdc/losses/        cvdc (weighted multi-positive InfoNCE), supervised
+cvdc/assess/        angles, dtw (Module III follows in Phase 4)
+cvdc/eval/          consistency (VCI; the rest follows in Phase 5)
 cvdc/viz/           skeleton drawing, Phase 1 checks
-scripts/            run_phase1.py, phase1/ checks and report, step0/ (Step 0 exploration)
+scripts/            run_phase1.py, phase1/ checks and report, phase2/smoke.py, step0/ (Step 0 exploration)
 tests/              pytest
 ```

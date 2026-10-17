@@ -2,7 +2,7 @@
 
 Last updated 2026-10-17.
 
-**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). Phase 2 (models) has not started.
+**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6); waiting for review before training at scale (Phase 3).
 
 **Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
 
@@ -67,7 +67,7 @@ Dataset root = `D:\cb` (the folder that contains this repo). Never modify it.
 | `Physiotherapist Exercise Marking.csv` | scores, 3 judges × 7 EAAQ items | all 3,686 videos |
 | `MobiPhysio.md` | dataset README | names E08 "Both Leg Flexion" (the paper says Lumbar Flexion) |
 
-More exercises are still downloading. **Don't touch a folder until the user announces it**, then run the Step 0 check on it (§8).
+More exercises are still downloading. **Don't touch a folder until the user announces it**, then run the Step 0 check on it (§9).
 
 ## 3. Step 0 findings
 
@@ -301,7 +301,60 @@ How to run: `python scripts/run_phase1.py` (README). Tables are in `outputs/phas
 
 
 
-## 6. Phase checklist
+## 6. Phase 2 results (2026-10-17)
+How to run: `python -m cvdc.data.pairs`, then `python scripts/phase2/smoke.py` (README). Config: `configs/model.yaml`. Decisions A1–A9 and the updated C1, C3, C4, C6 in `DESIGN_DECISIONS.md`. Outputs: `outputs/phase2/` (pair counts, smoke log and tables), `outputs/checks/phase2_*.png` (skeleton only).
+
+**The smoke run is a plumbing check, not a result:** one subject-held-out split (40 training subjects, 10 held out: P07, P08, P12, P14, P18 experts; P40, P42, P48, P53, P58 non-experts), 10 CVDC epochs, 4 supervised epochs, no tuning.
+
+### 6.1 What was built
+- **ST-GCN encoder** (`cvdc/models/stgcn.py`, `graph.py`): Yan et al. 2018, 10 blocks (64×4, 128×3, 256×3), temporal kernel 9, residuals, learnable edge importance, global pooling → 256-d. COCO-17 graph with self-loops and the spatial partition (self / centripetal / centrifugal; A9). 3.07 M parameters. All views go through the same weights. Input `xy` (default), `xyv` or `xyz` (B2, world landmarks).
+- **Projection head**: Linear-ReLU-Linear → 128-d, L2-normalised. **Task heads** (linear, A3): exercise (9 classes), score, EAAQ items (CF1–CF3 at rep level; PF1, PF2, PF4 added at set level), quality (3), with an exercise embedding for all but the exercise head.
+- **CVDC loss** (`cvdc/losses/cvdc.py`): weighted multi-positive InfoNCE, τ = 0.1, `negatives: all_other_groups | different_exercise_only`, same-group other reps neutral (A4), normalisation A6. Monitoring: positive/negative similarity, projection and embedding std (collapse), alignment, uniformity.
+- **Pair builder** (`cvdc/data/pairs.py`, A5): rep sets from shared `rep_uid` (sync / audio sources) and index pairing with DTW alignment (rep source). **Synthetic views** (`cvdc/data/synthetic.py`, C4, A8). **Batches** (`cvdc/data/cvdc_batch.py`): all loaded views of a rep set together, 2 synthetic views per set, per-pair weights from `sync.pair_weights` (A7), augmentations with a shared temporal crop (A2). Sources are switchable for the ablations (C5).
+
+### 6.2 Pair counts (rep level; `outputs/phase2/table_pair_counts.csv`)
+
+| Exercise / group | Reps | Rep sets (3 / 2 / 1 views) | sync pairs (1.0) | audio pairs (0.8) | rep pairs (0.5) |
+|---|---|---|---|---|---|
+| E01 expert | 3,347 | 1,148 (1,052 / 95 / 1) | 2,114 | 1,084 | 53 |
+| E01 non-expert | 231 | 181 (21 / 8 / 152) | 0 | 0 | 71 |
+| E02 expert | 3,517 | 1,194 (1,130 / 63 / 1) | 1,563 | 1,837 | 53 |
+| **All** | **7,095** | **2,523 (2,203 / 166 / 154)** | **3,677** | **2,921** | **177** |
+
+- Synthetic pairs are made on the fly: 2 views per rep set per batch, so every rep set has positives, including the 154 single-view ones (152 are non-expert front-only clips).
+- **The E01 non-experts contribute almost no real cross-view pairs** (71 rep-matched pairs from 22 not-synced groups). For them, CVDC relies on synthetic views.
+- `rep` pairs: 71 from the 22 not-synced non-expert groups, 106 from the 4 unknown expert groups (E01 P09 VFL, P13 VLJ; E02 P13, P18 VLJ). The unknown groups have unequal rep counts per view (e.g. 9 / 10 / 8), so index pairing may pair neighbouring reps; at weight 0.5 and 2.6% of the edges, this is left as approved.
+
+### 6.3 Checks
+- **DTW alignment of rep pairs** (A5): on synced pairs given a known time warp, DTW on raw 3D angles recovers it to a median 2.1 frames for E01 (4.9 without DTW) but does not help E02 (3.2 vs 3.2), whose angles change little. 3D angles are view-biased: the DTW cost of the same rep seen from two views (median ~32°) is no lower than that of the next rep (~31–34°), so the cost is not used to filter pairs.
+- **Synthetic views** (`outputs/phase2/smoke_synthetic_check.csv`): the yaw-0 projection of the world landmarks lies a median 0.05 (F, R) / 0.06 (L) torso lengths per joint from the real 2D keypoints of the same rep (mean 0.06 / 0.08 / 0.07 for F / L / R), so the pinhole model matches the real geometry.
+  - **Found and fixed:** the world landmarks lean in depth by the camera's pitch (median 14.8° F, 7.9° L, 12.8° R), so rotating about the camera's y axis tipped the person over in side views. Views now orbit the person's vertical axis and keep the camera pitch (A8; test added).
+  - `outputs/checks/phase2_synthetic_views.png` shows one rep's real F/L/R views and its synthetic ±45° / ±90° views; the synthetic side views look like the real L / R views.
+- **CVDC pretraining** (all sources, training subjects: 2,021 rep sets, ~303 items per batch, 32 batches per epoch): loss 4.90 → 3.19 over 10 epochs; positive cosine 0.94 → 0.86, negative 0.81 → 0.20; projection std 0.033 → 0.076 (1/√128 = 0.088 when spread evenly), so no collapse. Curves: `outputs/checks/phase2_cvdc_smoke_curves.png`.
+- **Viewpoint consistency, held-out subjects** (`smoke_viewpoint_consistency.csv`; VCI = same rep, other view − other groups, cosine):
+
+  | | random init | after 10 CVDC epochs (held out) | (training subjects) |
+  |---|---|---|---|
+  | VCI, projection (128-d) | 0.00 | **0.53** (0.81 vs 0.29) | 0.65 |
+  | VCI, embedding z (256-d) | 0.00 | 0.15 (0.97 vs 0.82) | 0.15 |
+
+  At random init every embedding is nearly identical (cosine ≈ 1), so 0.00 is only a floor. The pretraining separates other groups from same-rep views on subjects it never saw. The 256-d embedding is post-ReLU (non-negative), so all its cosines are high and its VCI is compressed (open item for Phase 5, §8). Held-out same-rep cosine on z by pair source: sync 0.968, audio 0.964, rep 0.973.
+- **Supervised smoke** (rep level, 4 epochs, lr 1e-3, from the CVDC encoder and from scratch for xy / xyz (B2) / xyv): all run, losses fall, held-out exercise accuracy 0.88–0.94 at the last epoch. **No variant beats predict-the-mean on held-out score RMSE yet** (mean baseline 15.8; scratch xy 15.8–18.1, xyz 15.4–16.7, xyv 15.5–19.8; CVDC-initialised 17.4–23.1, the least stable). The training score loss stays near the score variance.
+  - **Plumbing check:** labels match `index.csv`. On 512 training reps the model fits the quality class to 100% and the score to 7–9 RMSE (mean baseline 15.0), so the heads can learn. The score term is MSE on score / 100, whose gradients are small next to the cross-entropy terms. Phase 3 should standardise the score target and tune lr / epochs, linear probe vs fine-tuning (§8).
+- **Ablation switches run:** `negatives: different_exercise_only`, `sources: [synthetic]` (2,021 sets, one real view each) and `sources: [sync]` (1,254 sets, no synthetic) each train for an epoch without errors.
+- **Speed** (RTX 4060 Ti, bf16): CVDC step 289 ms for ~303 items (9.6 s per epoch on 40 subjects), supervised step 237 ms for 256 reps (~5 s per epoch); peak GPU memory 4.0 GB. The step is limited by memory bandwidth (BatchNorm, elementwise and layout kernels; fp32 is 2× slower), not by batch building (20 ms). These give the per-epoch numbers for the Phase 3 LOSO runtime estimate.
+
+### 6.4 Tests
+`python -m pytest -q tests`: **107 tests, all passing** (58 from Phase 1, 49 new). The new tests cover:
+- graph adjacency and partitions;
+- encoder shapes for every input mode and T, shared weights across views, gradient flow, and that the exercise head is blind to the exercise embedding;
+- the CVDC loss: a hand-computed value; invariance to batch order; positives pulled together on a toy batch; weights scaling the terms; zero-weight pairs being neutral; negative modes; anchors without positives; collapse detection;
+- the pair builder (edges, sets, reference view) and the positive-weight rules;
+- DTW (brute-force cost, path validity, recovery of a known warp);
+- synthetic views (rotation, quarter turn, yaw-0 shape, levelling);
+- augmentations (shared vs independent crops, per-item spatial changes, joint dropout).
+
+## 7. Phase checklist
 All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
 
 - [x] **Step 0:** environment, inventory, labels, sync census, references (E01, E02, E03-partial)
@@ -327,14 +380,15 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
     - compare against PF4 and the EAAQ "≥10 reps".
   - [x] Skeleton-only check renders in `outputs/checks/`.
   - [x] Third-review changes (§5.6): E02 horizontal adduction angle, left-arm score check, `audio` pair source (`w_audio` 0.8), best-view rep segmentation with boundary transfer.
-- [ ] **Phase 2, models:**
-  - ST-GCN with shared weights;
-  - projection head;
-  - task heads (score, CF1–CF3, PF, exercise, quality);
-  - weighted multi-positive InfoNCE;
-  - pair builder for the sync / rep / synthetic sources;
-  - synthetic views;
-  - B2 3D input.
+- [x] **Phase 2, models** (2026-10-17; results in §6):
+  - [x] ST-GCN with shared weights (`cvdc/models/`);
+  - [x] projection head;
+  - [x] task heads (score, CF1–CF3, PF, exercise, quality);
+  - [x] weighted multi-positive InfoNCE (`cvdc/losses/cvdc.py`);
+  - [x] pair builder for the sync / audio / rep / synthetic sources (`cvdc/data/pairs.py`);
+  - [x] synthetic views (`cvdc/data/synthetic.py`);
+  - [x] B2 3D input (`model.input: xyz`, MediaPipe world landmarks);
+  - [ ] optional 2D→3D lifter (KTPFormer / MotionBERT / VideoPose3D) and DepthAnything channel: not built; they need weights, to be approved first (§8).
 - [ ] **Phase 3, training:**
   - rep-level training as the default (T1, E12);
   - smoke test (3 subjects, 2 epochs);
@@ -363,15 +417,21 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - `demo/live.py` on video files (real-time playback, field picker, leakage warning, .mp4 export, embedding-distance overlay);
   - `demo/app.py`.
 
-## 7. Open items and questions
+## 8. Open items and questions
 **Answered in the third review (2026-10-17):** the four Phase 1 questions (§4, applied in §5.6).
+
+**Open from Phase 2 (for the supervisor):**
+1. **Score loss scaling:** MSE on score / 100 gives the score head weak gradients next to the cross-entropy heads (§6.3). Proposal for Phase 3: standardise the score (and item) targets with the training fold's mean and std (T6 still decides the skew weighting).
+2. **VCI on the 256-d embedding** is compressed because the pooled ST-GCN features are non-negative (all cosines ≥ ~0.8). Proposal: report VCI on the projection and on the mean-centred embedding (centred with the training fold's mean), and keep the raw value as well.
+3. **E01 non-experts have almost no real cross-view pairs** (71 rep-matched pairs; 152 of 181 rep sets have one view), so CVDC reaches them mostly through synthetic views (§6.2).
+4. **3D lifter / depth:** B2 uses MediaPipe world landmarks (the spec default). A KTPFormer / MotionBERT / VideoPose3D wrapper and the DepthAnything channel are not built, because they need downloaded weights. Say if one is wanted, and I will ask before downloading.
 
 **Open for Phase 4:** the E02 horizontal adduction angle is view-dependent in 3D and often undefined in R views (§5.6, M7a); the left-arm CF difference is borderline (no flag under the agreed rule).
 
 **Other open items:**
 - **EAAQ appendix** for E02–E09: the user is looking for it. Until it arrives, only E01 has questionnaire-derived rules.
 - **E03 is out of scope for now**, and it is incomplete (199/550, including one failed download). If it comes back into scope, rerun the Step 0 check on the full folder and add it to `data.include_exercises`.
-- **Other exercises** stay out of scope until the supervisor says otherwise. When one is announced and brought into scope, run the Step 0 check (§8).
+- **Other exercises** stay out of scope until the supervisor says otherwise. When one is announced and brought into scope, run the Step 0 check (§9).
 
-## 8. Re-running the Step 0 check
+## 9. Re-running the Step 0 check
 See `scripts/step0/README.md` for the order and arguments. Minimum for a new exercise: `inventory.py` → `video_meta.py` → `scores.py` → `sync_av.py <EX>` → `sync_classify.py`, plus a pose sample (`select_groups_ex.py` → `extract_pose.py` → `sync_analysis3.py`) and a reference comparison.
