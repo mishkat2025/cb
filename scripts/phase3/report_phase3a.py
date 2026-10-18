@@ -17,7 +17,7 @@ and the stage summaries. Test predictions of the 5 folds are pooled (E1). Report
   CIs (E17)       95% percentile intervals from a subject-level bootstrap (2,000 draws, subjects resampled within
                   expert / non-expert)
   training        stopping epochs and wall time per method and fold
-Writes CSV tables and summary.md to eval.results_dir (default outputs/results/phase3a).
+Writes CSV tables and summary.md to <eval.results_dir>/<tag> (default outputs/results/phase3a).
 
 usage: python scripts/phase3/report_phase3a.py [--tag phase3a] [--out DIR] [--boot 2000] [--methods ...]
 """
@@ -154,7 +154,7 @@ def main():
     n_boot = a.boot or ec["bootstrap"]["n"]
     ci = ec["bootstrap"]["ci"]
     root = resolve(cfg["train"]["runs_dir"]) / a.tag
-    out = Path(a.out) if a.out else resolve(ec["results_dir"])
+    out = Path(a.out) if a.out else resolve(ec["results_dir"]) / a.tag
     out.mkdir(parents=True, exist_ok=True)
     smoke = a.tag.endswith("_smoke")
 

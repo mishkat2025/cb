@@ -5,7 +5,8 @@
                  validation split (T8): ~20% of the fold's training subjects per group, seeded per fold. Early
                  stopping and checkpoint selection use only the inner validation subjects; the model trains on
                  the remaining (inner training) subjects; the test fold is never used for either.
-  EarlyStopping  keeps the best state by the validation metric, stops after ``patience`` epochs without improvement
+  EarlyStopping  keeps the best state by the (optionally EMA-smoothed) validation metric, only from ``min_epochs``
+                 on, and stops after ``patience`` eligible epochs without improvement (T8, T8b)
   warmup_cosine  linear warm-up, then cosine decay over the max-epoch budget (T9)
   Run            a run directory: TensorBoard, config snapshot, run info (git commit, subjects), history.csv,
                  best.pt checkpoint, summary.json
@@ -110,17 +111,30 @@ def check_plan(p):
 
 class EarlyStopping:
     """Tracks a validation metric (lower is better): keeps a copy of the model state at the best epoch and says
-    stop after ``patience`` epochs in a row without an improvement larger than ``min_delta`` (T8)."""
+    stop after ``patience`` epochs in a row without an improvement larger than ``min_delta`` (T8).
 
-    def __init__(self, patience=10, min_delta=0.0):
+    T8b (step a2): with ``ema`` > 0 the decision uses the smoothed metric s_t = ema * s_(t-1) + (1 - ema) * v_t
+    (s_1 = v_1); the kept weights are those of the epoch where s_t was lowest. Epochs before ``min_epochs`` update
+    s_t but can be neither kept nor counted towards ``patience``. ema 0, min_epochs 1 = the step (a) rule."""
+
+    def __init__(self, patience=10, min_delta=0.0, min_epochs=1, ema=0.0):
         self.patience, self.min_delta = int(patience), float(min_delta)
+        self.min_epochs, self.ema = int(min_epochs), float(ema)
+        if not 0.0 <= self.ema < 1.0:
+            raise ValueError(f"ema {ema}: use 0 <= ema < 1")
         self.best_value, self.best_epoch, self.best_state = math.inf, None, None
-        self.last_epoch, self.bad = 0, 0
+        self.last_epoch, self.bad, self.smoothed = 0, 0, None
 
     def step(self, epoch, value, model):
         self.last_epoch = epoch
-        if np.isfinite(value) and value < self.best_value - self.min_delta:
-            self.best_value, self.best_epoch, self.bad = float(value), epoch, 0
+        if np.isfinite(value):
+            self.smoothed = value if self.smoothed is None or self.ema == 0 else (
+                self.ema * self.smoothed + (1 - self.ema) * value)
+        if epoch < self.min_epochs:
+            return False
+        s = self.smoothed if self.smoothed is not None else math.inf
+        if np.isfinite(value) and s < self.best_value - self.min_delta:
+            self.best_value, self.best_epoch, self.bad = float(s), epoch, 0
             self.best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
         else:
             self.bad += 1
@@ -134,7 +148,12 @@ class EarlyStopping:
 
     def summary(self, max_epochs):
         return {"best_epoch": self.best_epoch, "best_val": self.best_value, "stopped_epoch": self.last_epoch,
-                "max_epochs": int(max_epochs), "early_stopped": self.last_epoch < max_epochs}
+                "max_epochs": int(max_epochs), "early_stopped": self.last_epoch < max_epochs,
+                "min_epochs": self.min_epochs, "ema": self.ema, "patience": self.patience}
+
+    @classmethod
+    def from_config(cls, c):
+        return cls(c["patience"], c.get("min_delta", 0.0), c.get("min_epochs", 1), c.get("ema", 0.0))
 
 
 def warmup_cosine(opt, total_steps, warmup_frac):

@@ -6,7 +6,8 @@ Cross-View Depth-Consistency Learning" on the MobiPhysio dataset (doi 10.7910/DV
 - **Scope now:** E01 (Abduction) and E02 (Adduction) only (`data.include_exercises`). Exercises are
   discovered at runtime, so adding one later is a config change.
 - **Status:** Step 0, Phase 1 (keypoints and preprocessing), Phase 2 (models, CVDC loss, pair builder) and
-  Phase 3 step (a) (GroupKFold-5 for the 4 main methods) are done; the ablations (b) and the LOSO table (c) wait for review. See `PROGRESS.md` for the state and
+  Phase 3 steps (a) (GroupKFold-5 for the 4 main methods) and (a2) (score-setup diagnosis and fixes, Proposed
+  variants) are done; the ablations (b) and the LOSO table (c) wait for review. See `PROGRESS.md` for the state and
   the phase checklist, and `DESIGN_DECISIONS.md` for every open choice.
 - **Privacy:** the videos show faces. Only keypoints are stored; renders are skeleton-only; `data/` and
   `outputs/` are gitignored. Audio is decoded in memory for synchronization and never written; GPS tags in
@@ -113,6 +114,9 @@ python scripts/phase3/report_phase3a.py           # metrics, baselines, VCI, boo
 tensorboard --logdir runs/phase3a
 ```
 
+Step (a) ran at commit `05b196d`. Step (a2) changed the config defaults (video head, video batches, T6 weights,
+item masks, early-stopping rule, method list, tag `phase3a2`), so reproduce step (a) from that commit.
+
 Single stages: `python -m cvdc.train.pretrain_cvdc --fold K` (CVDC pretraining of one fold) and
 `python -m cvdc.train.train_supervised --method b1|b2_mediapipe|b2_ktpformer|proposed --fold K [--linear-probe]`.
 `--linear-probe` freezes the encoder (default: full fine-tuning, `train.fine_tune`).
@@ -125,6 +129,27 @@ Single stages: `python -m cvdc.train.pretrain_cvdc --fold K` (CVDC pretraining o
 | runner | `cvdc/train/run.py` | all methods x folds, resumable (`done.json`) |
 | metrics | `cvdc/eval/metrics.py` | RMSE / MAE / Pearson / Spearman, macro F1 / kappa, VCI sums, subject-level bootstrap (E17) |
 | report | `scripts/phase3/report_phase3a.py` | within-group and pooled tables at video (headline, E15) and rep level, baselines (E16), VCI, stopping epochs, runtimes |
+
+### Step (a2): score setup (label diagnostics, video head, T6 weighting, stabilised early stopping)
+
+Tables go to `outputs/results/phase3a2/` (gitignored); runs to `runs/phase3a2/`. The Proposed variants reuse the
+step (a) CVDC encoders (`train.cvdc_init_from: phase3a`), so `runs/phase3a/proposed/fold*/cvdc/` must exist (or set
+it to `null` to pretrain again).
+
+```bash
+python scripts/phase3/label_diagnostics.py        # no training: item variances, score decomposition, set features, set-level baselines (~30 s)
+python -m cvdc.train.run --smoke --force          # smoke test of the a2 setup (all 7 methods, ~2 min)
+python -m cvdc.train.run                          # GroupKFold-5: B1, Proposed (iii)/(i)/(ii) λ 0.1, 1.0, B2-MediaPipe, B2-KTPFormer (~2 h, background job)
+python scripts/phase3/report_phase3a2.py          # within-group tables (video and rep heads), baselines, deltas, VCI, epochs
+```
+
+| Piece | Code | Notes |
+|---|---|---|
+| baselines | `cvdc/eval/baselines.py` | set features (rep count, rep duration, ROM of the main angle), item-activity rule (T14), score decomposition, video-level baselines (E16, E20) |
+| video head | `cvdc/models/heads.py` (`VideoHead`) | mean + attention pooling of a video's rep embeddings + set rep count → score and items (T13) |
+| supervised | `cvdc/train/train_supervised.py` | video batches, per-video rep weights (T6), item masks (T14), EMA / min-epoch early stopping (T8b), optional + λ·L_cvdc |
+| runner | `cvdc/train/run.py` | methods `b1`, `proposed`, `proposed_lp`, `proposed_j01`, `proposed_j1`, `b2_mediapipe`, `b2_ktpformer`; reuses checked CVDC encoders |
+| report | `scripts/phase3/report_phase3a2.py`, `scripts/phase3/label_diagnostics.py` | `summary.md`, `label_diagnostics.md` and CSVs |
 
 ## Tests
 
@@ -141,10 +166,10 @@ cvdc/data/          filenames, labels, index, video (PyAV), extract, skeleton, p
 cvdc/models/        graph, stgcn, heads, model, lifter (KTPFormer wrapper)
 cvdc/losses/        cvdc (weighted multi-positive InfoNCE), supervised
 cvdc/assess/        angles, dtw (Module III follows in Phase 4)
-cvdc/eval/          consistency (VCI), splits, metrics (bootstrap CIs)
+cvdc/eval/          consistency (VCI), splits, metrics (bootstrap CIs), baselines (set features, video-level baselines)
 cvdc/train/         trainer, pretrain_cvdc, train_supervised, run (GroupKFold runner)
 cvdc/viz/           skeleton drawing, Phase 1 checks
-scripts/            run_phase1.py, phase1/ checks and report, phase2/ (smoke, lifter_check, bench), phase3/ (report), step0/
+scripts/            run_phase1.py, phase1/ checks and report, phase2/ (smoke, lifter_check, bench), phase3/ (reports, label diagnostics), step0/
 third_party/        local clones used by wrappers (gitignored)
 tests/              pytest
 ```

@@ -5,7 +5,7 @@ The encoder and the projection head train on the inner training subjects' rep se
 ``cvdc.sources``, default sync, audio, rep, synthetic). After every epoch the validation metric is the CVDC loss on
 the inner validation subjects' rep sets (T8): the same sources and synthetic views, no augmentation, and a fixed
 seed, so every epoch sees the same validation batches. The best epoch's weights are kept (early stopping,
-patience ``train.early_stopping.patience``, at most ``train.max_epochs_cvdc`` epochs).
+patience ``train.early_stopping_cvdc.patience``, at most ``train.max_epochs_cvdc`` epochs).
 
 usage: python -m cvdc.train.pretrain_cvdc [--config C] [--model-config M] --fold K [--smoke] [--tag phase3a]
 Writes runs/<tag>/proposed/fold<K>/cvdc/ (tb/, config.yaml, run_info.json, history.csv, best.pt, summary.json).
@@ -55,7 +55,8 @@ def cvdc_epoch(model, batcher, cfg, opt=None, sched=None):
 def pretrain_cvdc(cfg, data, plan, run_dir, seed, max_epochs=None, log=print):
     """CVDC pretraining on plan['inner_train'] with early stopping on plan['inner_val']. Returns (model with the
     best epoch's weights, summary dict)."""
-    tc, ec = cfg["train"], cfg["train"]["early_stopping"]
+    tc = cfg["train"]
+    ec = tc.get("early_stopping_cvdc", tc["early_stopping"])  # T8a: CVDC keeps the step (a) rule
     max_epochs = int(max_epochs or tc["max_epochs_cvdc"])
     seed_everything(seed)
     model = CVDCModel(cfg).to(data.device)
@@ -64,7 +65,7 @@ def pretrain_cvdc(cfg, data, plan, run_dir, seed, max_epochs=None, log=print):
     params = list(model.encoder.parameters()) + list(model.projection.parameters())
     opt = torch.optim.AdamW(params, lr=tc["lr"], weight_decay=tc["weight_decay"])
     sched = warmup_cosine(opt, max_epochs * len(tr_b), tc["warmup_frac"])
-    es = EarlyStopping(ec["patience"], ec["min_delta"])
+    es = EarlyStopping.from_config(ec)
     run = Run(run_dir, cfg, {"stage": "cvdc", "seed": seed, "max_epochs": max_epochs, **plan,
                              "batcher_train": tr_b.summary(), "batcher_val": va_b.summary()})
     log(f"  cvdc: {tr_b.summary()['sets']} training rep sets ({len(tr_b)} batches), "

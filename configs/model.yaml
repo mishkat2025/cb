@@ -26,6 +26,18 @@ heads:                          # A3: linear heads on the embedding (hidden: 0),
   # T2: rep level learns score + CF1-CF3 (+ quality, exercise); PF items only at set (video) level; D5 drops PF3
   targets_rep: [score, CF1, CF2, CF3, quality, exercise]
   targets_video: [score, PF1, PF2, PF4, CF1, CF2, CF3, quality, exercise]
+  video_head:                   # step (a2), T13: set-level head on all rep embeddings of a video (rep heads stay)
+    enabled: true
+    pooling: [mean, attention]  # concatenated: mean of the rep embeddings and attention pooling (Ilse et al. 2018, non-gated)
+    attn_hidden: 128
+    count_feature: true         # + the set rep count (Phase 1 n_reps_set), standardised on the inner training videos
+    count_csv: outputs/phase1/reps_per_video.csv
+    exercise_embedding: 16      # T5
+    targets: [score, PF1, PF2, PF4, CF1, CF2, CF3]   # D5: no PF3
+    weight: 1.0                 # L_sup = L_rep + weight * L_video
+  item_activity:                # T14: an item is learned / reported in a stratum (exercise x group) only if it varies there
+    min_subjects_off_mode: 5    # off its modal value in videos of >= this many subjects (= the number of folds) ...
+    min_sd: 0.05                # ... and SD >= this (0-1 scale, ~0.7 score points)
 
 supervised:                     # loss weights per target (Phase 3 tunes them; T6 score weighting is TBD there)
   weights: {score: 1.0, items: 1.0, quality: 0.5, exercise: 0.5}
@@ -80,11 +92,22 @@ train:                          # Phase 3 trainer (cvdc/train/); T1, T7-T12, A9
   warmup_frac: 0.05             # T9: linear warm-up over 5% of the max-epoch budget, then cosine decay to 0
   fine_tune: full               # T10: full | linear_probe (frozen encoder incl. its BatchNorm statistics; heads only)
   augment_supervised: true      # T11: the CVDC augmentations (A2) during supervised training, crops drawn per item
-  early_stopping:               # T8: inner validation split of the training subjects only
-    patience: 10
+  sampler: video                # T13: supervised batches of whole videos (all their reps), >= batch_size reps each | rep
+  rep_weighting: per_video      # T6 (a2): rep weight = 1 / n_reps of its video, so every video counts once | none
+  cvdc_lambda: 0.0              # joint objective L_sup + lambda * L_cvdc during fine-tuning (spec §7; Proposed variants)
+  cvdc_init_from: phase3a       # reuse the step (a) CVDC encoders (runs/<tag>/proposed/fold<k>/cvdc/best.pt); null = pretrain
+  early_stopping:               # T8 / T8b (a2): supervised stage; inner validation split of the training subjects only
+    patience: 15
+    min_epochs: 10              # T8b: no epoch before this can be kept, and no stop before it
+    ema: 0.7                    # T8b: stop / select on s_t = ema * s_(t-1) + (1 - ema) * val_t (s_1 = val_1); 0 = raw
     min_delta: 0.0
     inner_frac: 0.2             # share of the training subjects of each group (expert / non-expert) held out
     seed_offset: 1000           # inner split seed = eval.seed + seed_offset + fold
+  early_stopping_cvdc:          # T8a: CVDC pretraining (unchanged from step (a))
+    patience: 10
+    min_epochs: 1
+    ema: 0.0
+    min_delta: 0.0
   runs_dir: runs
   smoke:                        # spec §7 smoke test: fold 0, 3 training subjects, 2 epochs
     train_subjects: [2, 1]      # (experts, non-experts) the model trains on
@@ -96,7 +119,11 @@ methods:                        # E14 step (a): identical splits, preprocessing,
   b1: {input: xy, cvdc: false}                  # 2D keypoints, from scratch
   b2_mediapipe: {input: xyz, cvdc: false}       # MediaPipe world landmarks, from scratch
   b2_ktpformer: {input: xyz_ktpformer, cvdc: false}   # KTPFormer lifted 3D (A10), from scratch
-  proposed: {input: xy, cvdc: true}             # CVDC pretraining on the fold's training subjects, then fine-tuning
+  proposed: {input: xy, cvdc: true}             # CVDC pretraining on the fold's training subjects, then full fine-tuning
+  # step (a2) Proposed variants (same CVDC encoder per fold):
+  proposed_lp: {input: xy, cvdc: true, fine_tune: linear_probe}   # (i) frozen CVDC encoder + heads
+  proposed_j01: {input: xy, cvdc: true, cvdc_lambda: 0.1}         # (ii) L_sup + 0.1 L_cvdc during fine-tuning
+  proposed_j1: {input: xy, cvdc: true, cvdc_lambda: 1.0}          # (ii) L_sup + 1.0 L_cvdc during fine-tuning
 
 eval:                           # E1, E3, E9, E13, E15-E18
   split: group_kfold
@@ -104,7 +131,7 @@ eval:                           # E1, E3, E9, E13, E15-E18
   seed: 0
   bootstrap: {n: 2000, seed: 0, ci: 0.95}       # E17: subject-level bootstrap, percentile CIs
   noise_floor: {E01: 5.28, E02: 4.38}           # E3: inter-view label-noise floor (score RMSE, expert groups)
-  results_dir: outputs/results/phase3a
+  results_dir: outputs/results   # reports write to <results_dir>/<tag> (phase3a, phase3a2, ..._smoke)
 
 lifter:                         # A10: B2's second 3D source. KTPFormer (Peng et al., CVPR 2024), Human3.6M model on CPN 2D
   name: ktpformer

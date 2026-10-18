@@ -5,6 +5,10 @@ weak label. Video level: whole videos resampled to T_video.
 Input modes (``model.input``, A1): ``xy`` (2D keypoints), ``xyv`` (2D + visibility), ``xyz`` (3D MediaPipe world
 landmarks, B2) or ``xyz_ktpformer`` (3D lifted by KTPFormer from the 2D keypoints, B2; A10). The pack is small
 (7,095 reps x 64 frames x 17 joints), so it is held on the device.
+
+Videos (step a2, T13): at rep level every rep also knows its video (``video_of``), and every video its reps
+(``v_reps``), its training rep count (``v_nreps``), its set rep count (Phase 1 ``n_reps_set``, ``v_count``), its
+labels and its stratum (exercise x expert / non-expert), for the set-level head and the per-video loss weights (T6).
 """
 import numpy as np
 import pandas as pd
@@ -70,6 +74,29 @@ class PackData:
         self.score = torch.tensor(m.score.to_numpy(np.float32), device=device)
         self.items = {k: torch.tensor(m[k].to_numpy(np.float32), device=device) for k in ITEMS}
         self.group_code = torch.tensor(pd.factorize(m.group_id)[0], device=device)  # (exercise, subject, variation)
+        # strata (exercise x group) and videos (T13, T14)
+        self.strata = sorted({(e, g) for e, g in zip(m.exercise, m.group)})
+        spos = {k: i for i, k in enumerate(self.strata)}
+        self.stratum = torch.tensor([spos[k] for k in zip(m.exercise, m.group)], device=device)
+        vcode, self.video_ids = pd.factorize(m.video_id)
+        self.video_of = torch.tensor(vcode, device=device)
+        self.vmeta = vm = m.drop_duplicates("video_id").reset_index(drop=True)  # in code order (first appearance)
+        order = np.argsort(vcode, kind="stable")
+        bounds = np.r_[0, np.cumsum(np.bincount(vcode, minlength=len(vm)))]
+        self.v_reps = [torch.tensor(order[a:b], device=device) for a, b in zip(bounds[:-1], bounds[1:])]
+        self.v_nreps = torch.tensor([len(r) for r in self.v_reps], device=device)
+        self.v_score = torch.tensor(vm.score.to_numpy(np.float32), device=device)
+        self.v_items = {k: torch.tensor(vm[k].to_numpy(np.float32), device=device) for k in ITEMS}
+        self.v_exercise = torch.tensor(vm.exercise.map(codes.index).to_numpy(), device=device)
+        self.v_stratum = torch.tensor([spos[k] for k in zip(vm.exercise, vm.group)], device=device)
+        self.v_count = None
+        cpath = ((cfg.get("heads") or {}).get("video_head") or {}).get("count_csv")
+        if unit == "rep" and cpath and resolve(cpath).exists():
+            cnt = pd.read_csv(resolve(cpath)).set_index("video_id").n_reps_set
+            vals = cnt.reindex(vm.video_id)
+            if vals.isna().any():
+                raise RuntimeError(f"{cpath}: no n_reps_set for {list(vm.video_id[vals.isna().to_numpy()])[:5]}")
+            self.v_count = torch.tensor(vals.to_numpy(np.float32), device=device)
 
     def __len__(self):
         return len(self.meta)
@@ -84,3 +111,29 @@ class PackData:
 
     def subject_mask(self, subjects):
         return torch.tensor(self.meta.subject.isin(set(subjects)).to_numpy(), device=self.device)
+
+    def video_targets(self, vids, items):
+        """Video-level labels (score 0-100, items 0-1) for video codes ``vids``."""
+        return {"score": self.v_score[vids],
+                "items": torch.stack([self.v_items[k][vids] for k in items], -1) if items else None}
+
+    def videos_of(self, items):
+        """(video codes, local segment index of every item) for a set of rep items."""
+        return torch.unique(self.video_of[items], return_inverse=True)
+
+    def video_items(self, vids):
+        """(rep items of the videos ``vids`` in order, segment index 0..len(vids)-1 of every item)."""
+        parts = [self.v_reps[v] for v in vids.tolist()]
+        seg = torch.cat([torch.full((len(r),), j, device=self.device) for j, r in enumerate(parts)])
+        return torch.cat(parts), seg
+
+    def subject_videos(self, subjects):
+        return torch.tensor(np.flatnonzero(self.vmeta.subject.isin(set(subjects)).to_numpy()), device=self.device)
+
+    def item_masks(self, items, min_subjects=5, min_sd=0.05):
+        """T14: (n_strata, len(items)) bool, True where the item varies within the stratum (from the video labels;
+        cvdc.eval.baselines.item_activity)."""
+        from ..eval.baselines import item_activity
+
+        a = item_activity(self.vmeta, items, min_subjects, min_sd).set_index(["exercise", "group", "item"]).varies
+        return torch.tensor([[bool(a[(e, g, k)]) for k in items] for e, g in self.strata], device=self.device)

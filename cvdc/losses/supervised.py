@@ -4,8 +4,9 @@ cross-entropy on the quality class and the exercise.
 Regression targets are standardised with the **training fold's** mean and std only (``TargetScaler.fit`` on the
 training items), so the heads predict z-scores; ``TargetScaler.inverse`` maps predictions back to the score
 (0-100) and item (0-1) scales for reporting. A target with ~zero variance in the training fold is skipped (T4).
-Missing targets (NaN, or -1 for classes) are masked out. Optional per-sample weights are the hook for the
-skew-aware score weighting (T6, set in Phase 3).
+Missing targets (NaN, or -1 for classes) are masked out, and so is every item a batch's ``item_mask`` (N, k)
+switches off (T14: items that do not vary within the sample's stratum). Optional per-sample weights carry the
+per-video weighting (T6, step a2: rep weight = 1 / n_reps of its video).
 """
 import torch
 import torch.nn.functional as F
@@ -90,6 +91,8 @@ class SupervisedLoss:
             m = torch.isfinite(t)
             if self.scaler is not None and self.scaler.active is not None:
                 m = m & self.scaler.active[None]
+            if batch.get("item_mask") is not None:
+                m = m & batch["item_mask"]
             if m.any():
                 err = F.mse_loss(out["items"].float(), torch.nan_to_num(t), reduction="none") * m
                 parts["items"] = _wmean(err.sum(1) / m.sum(1).clamp(min=1), sw * (m.sum(1) > 0))

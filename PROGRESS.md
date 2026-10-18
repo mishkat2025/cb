@@ -1,8 +1,8 @@
 # Progress
 
-Last updated 2026-10-18.
+Last updated 2026-10-18 (step a2).
 
-**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the supervisor's fifth-review changes (§4, §6.5: standardised targets, three VCI variants, the KTPFormer lifter for B2, bf16, the runtime estimate). The user's sixth-review decisions (§4) set the Phase 3 run order: **step (a), GroupKFold-5 for the 4 main methods, is done (§6b)** and stops here for review before the ablations (b) and the LOSO table (c).
+**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the supervisor's fifth-review changes (§4, §6.5: standardised targets, three VCI variants, the KTPFormer lifter for B2, bf16, the runtime estimate). The user's sixth-review decisions (§4) set the Phase 3 run order: **step (a), GroupKFold-5 for the 4 main methods, is done (§6b)**. **Step (a2), the score-setup diagnosis and fixes (label diagnostics, set-level baselines, video head, T6 weighting, stabilised early stopping, Proposed variants), is done (§6c)** and stops here for review, before the ablations (b) and the LOSO table (c).
 
 **Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
 
@@ -428,6 +428,101 @@ How to run: `python -m cvdc.train.run` then `python scripts/phase3/report_phase3
 - **Stopping epochs:** every run stopped early. Fine-tuning kept epochs 2–22 (B1 2, 9, 12, 3, 13; B2-MP 2, 7, 15, 5, 7; B2-KTP 15, 13, 15, 7, 17; Proposed 2, 8, 22, 17, 14) of 60; CVDC kept 53, 62, 75, 80, 77 of 100. The inner-validation loss jumps between epochs (score RMSE e.g. 15 → 24 → 16), so early stopping often keeps a barely trained model.
 - **Wall time** (RTX 4060 Ti, bf16, sequential): B1 6.4 min, B2-MediaPipe 6.1 min, B2-KTPFormer 8.2 min, Proposed 54.1 min (CVDC 46.0) for all 5 folds; peak GPU memory 4.24 GB.
 - **Surprise (labels):** across the views of every expert performance, PF1, PF2 and CF1–CF3 are identical; only PF3/PF4 (repetitions) differ, so the 5.28 / 4.38 floor comes entirely from the rep-count items and the CF floor is 0 (E3).
+- **Paired differences** (video level, same bootstrap draws; `paired_deltas.csv`): against the group-only baseline every method has a **higher** RMSE in E01 experts (+0.84 to +1.77, all CIs above 0) and E01 non-experts (+9.9 to +15.4); in E02 experts the CIs include 0 (Proposed +0.04 [−1.82, 1.87]). Against B1, Proposed is lower in E01 non-experts (−5.47 [−7.80, −3.20]) and E01 pooled (−2.06 [−3.04, −1.10]), about the same in E02 (−1.63 [−3.38, 0.52]) and E01 experts (+0.04 [−0.44, 0.58]). B2-MediaPipe and B2-KTPFormer are not clearly different from B1 in any group (all CIs include 0).
+- **CF1–CF3** (video level, 0–1 scale): no method is below the group-only baseline on any CF item in any group, except B1 on E01-expert CF3 (0.171 vs 0.177), B1 on E02 CF3 (0.0969 vs 0.0969) and Proposed on E02 CF3 (0.083 vs 0.097, ρ 0.33). E02 CF3 varies in only 2 of the 24 subjects (step (a2), §6c), so this is not evidence of a learned item.
+- **Pooled results look better only because of the group:** E01 pooled Pearson r 0.56–0.68 for the models against 0.82 for the group-only baseline, and RMSE 14.7–16.8 against 11.3. Pooled correlations measure the expert/non-expert separation (E9, E10), not movement quality.
+- **Classification (secondary):** derived quality class from the quality head, within groups: macro F1 0.25–0.35, Cohen's κ −0.13 to 0.12. Exercise accuracy (video level, pooled) 0.93–0.98.
+- **Inner validation diagnostic** (`stopping_runtime.csv`): the kept epoch's rep-level validation RMSE is close to the RMSE of the inner-training mean on the same validation subjects in most folds (e.g. B1 15.1 vs 14.6, 18.1 vs 17.9) and lower in a few (B1 fold 2: 14.3 vs 17.9; Proposed fold 4: 13.3 vs 15.8). The validation subjects mix both groups, so a lower value there can come from the group difference alone. The training score loss falls to ~0.16 (z-units) while the validation score loss stays at 0.7–0.9, so the networks fit the training subjects without generalising within groups.
+
+**Conclusion of step (a) (see §6c for the follow-up):** CVDC does what it is meant to do for the embedding (within-group VCI 0.26–0.30 after pretraining vs ~0 for every encoder trained without it), and Proposed has the lowest RMSE of the four models in E02 experts and E01 non-experts. But **no model predicts the score within a group better than the within-group mean**, so step (a) shows no evidence yet that any network judges movement quality. Likely causes, to test before the ablations: (1) the score setup: every rep inherits its video's score, while the repetition items (PF3/PF4), which one rep cannot show, carry much of the within-group variance (measured in §6c); (2) unstable early stopping that keeps epoch 2–3 models; (3) fine-tuning that undoes most of CVDC's view consistency. Step (a2) (§6c) addresses these; the ablations (b) and LOSO (c) wait.
+
+## 6c. Phase 3 step (a2): score setup diagnosed and changed (2026-10-18)
+User request after step (a): diagnose the score setup and fix it (items 1–6 below); re-run GroupKFold-5 for B1 and the Proposed variants, then B2-MediaPipe and B2-KTPFormer; **no ablations, no LOSO**. Decisions T6 (now decided), T8b, T13–T15, E16 (update), E20 in `DESIGN_DECISIONS.md`. How to run: README "Step (a2)". Tables: `outputs/results/phase3a2/label_diagnostics.md` and `summary.md` (+ CSVs; gitignored). Same folds, inner splits, encoder, optimiser and schedule as step (a); all §0 limitations apply.
+
+### 6c.1 Label diagnostics (no training; `scripts/phase3/label_diagnostics.py`)
+Units: the 915 evaluated videos. The total score is exactly (100/7) × the sum of the 7 items, so each item's covariance with the score splits the within-group score variance exactly (shares add up to 100%).
+
+| Stratum (videos / subjects) | score SD | PF1 | PF2 | PF3 | PF4 | CF1 | CF2 | CF3 | PF3 + PF4 |
+|---|---|---|---|---|---|---|---|---|---|
+| E01 expert (377 / 24) | 12.34 | 6.5% | 10.2% | 35.8% | 14.1% | 13.0% | 12.1% | 8.3% | **49.9%** |
+| E02 expert (381 / 24) | 15.78 | 18.1% | 5.3% | 27.9% | 33.5% | 2.0% | 12.1% | 1.2% | **61.4%** |
+| E01 non-expert (157 / 26) | 7.65 | 0% | 12.2% | 0% | 0.6% | **55.6%** | **26.7%** | 4.9% | 0.6% |
+
+- **Experts:** half (E01) to 61% (E02) of the within-group score variance is the repetition items PF3/PF4, which a single rep cannot show. The CF items carry 33% (E01) and 15% (E02); in E02, CF1 and CF3 carry 2% and 1%. **Non-experts:** the score varies through CF1 and CF2 (82%); their PF items are nearly constant (single-rep clips: PF1 = 1 and PF3 = 0 everywhere, PF4 = 0 in all but 3 videos).
+- **Items with ~0 within-group variance** (T14: off the modal value in videos of fewer than 5 subjects): E01 experts PF1 (6 videos of 2 subjects); E02 PF2 (15 videos / 4 subjects), CF3 (32 / 2); E01 non-experts PF1 (constant), PF2 (4 / 1), PF4 (3 / 2), CF3 (13 / 3). They are no longer learned or reported in that group. E02 CF3, where Proposed beat the group mean in step (a) (§6b), is among them.
+- **Set-level features do not predict the score within groups** (within-group least squares, same folds, video level; RMSE vs the group-only baseline; out-of-fold R²):
+
+  | Stratum | group-only | rep count only | set features (count + mean rep duration + ROM) |
+  |---|---|---|---|
+  | E01 expert | 12.45 [9.38, 16.57] | 12.25 [9.06, 16.49], R² 0.02 | 12.23 [9.05, 16.53], R² 0.02, ρ 0.17 |
+  | E02 expert | 16.01 [13.53, 18.73] | 16.85 [14.11, 19.75], R² −0.14 | 16.93 [13.88, 20.08], R² −0.15 |
+  | E01 non-expert | 7.78 [5.86, 9.59] | 7.76 [5.97, 9.47], R² −0.03 | 7.48 [5.92, 9.04], R² 0.04, ρ 0.26 |
+
+  The Phase 1 rep count hardly varies within the expert groups (E01 SD 0.55 reps, 8–12; E02 SD 1.37) and does not predict PF4 out of fold (E01 RMSE 0.168 vs 0.170 for the group mean; E02 worse than the mean, as D11 found). So the repetition items that dominate the expert score variance are not explained by the detected rep count either; together with the inter-view floor (E3: the views of one performance get different PF3/PF4) this points to rater judgement of the repetitions that the keypoints do not capture. **The one set-level signal:** ROM of the shoulder elevation predicts non-expert CF1 (ρ 0.46, R² 0.15; with all three features R² 0.24, RMSE 0.308 vs 0.362).
+- **E02 ROM** uses the 3D horizontal adduction (M7a) as a circular range; it is view-dependent (median 116° F, 53° L, 36° R) and undefined in 35% of rep frames, so it is a weak feature for E02.
+
+### 6c.2 What changed in training (items 2–6)
+- **Video head (T13):** mean + attention pooling of all rep embeddings of a video, plus the standardised set rep count and an exercise embedding → video score and PF1, PF2, PF4, CF1–CF3. The rep head stays; L_sup = L_rep + L_video; batches hold whole videos.
+- **T6 decided:** rep weight = 1 / n_reps of its video, so every video counts once.
+- **T8b:** EMA-smoothed (β 0.7) inner-validation objective, no epoch before 10 kept, patience 15, max 60. **Kept epochs now 12–59 (median 27)** instead of 2–22; 28 of the 35 runs stopped early.
+- **T14:** items that do not vary within a group (6c.1) are masked out of the loss for that group and not reported there.
+- **Proposed variants (T15)**, all from the same step (a) CVDC encoder per fold (reused after a subject check): (i) frozen encoder + heads, (ii) full fine-tuning with + λ·L_cvdc (λ 0.1, 1.0), (iii) full fine-tuning.
+- **Baselines** are fitted on videos now (E16 update), and rep-count-only and set-features were added (E20).
+- Runtime: 133 min for the 7 methods × 5 folds (B1 17, Proposed (iii) 14, (i) 9, (ii) 31 and 33, B2-MediaPipe 15, B2-KTPFormer 15 min); peak GPU memory 6.9 GB (joint variants).
+
+### 6c.3 Results (GroupKFold-5, video level, within groups; `outputs/results/phase3a2/summary.md`)
+**Total score: RMSE [95% CI] / Spearman ρ.** Video head = the set-level head; rep head = the mean of the video's rep predictions.
+
+| Method | head | E01 expert (377) | E02 expert (381) | E01 non-expert (157) |
+|---|---|---|---|---|
+| B1 | video | 13.58 [10.98, 17.07] / 0.10 | 17.29 [13.76, 20.70] / 0.13 | 12.08 [9.12, 15.00] / −0.03 |
+| Proposed (iii) full fine-tune | video | 14.38 [11.85, 17.61] / 0.06 | 17.97 [13.93, 22.12] / 0.15 | 12.55 [10.58, 14.40] / −0.11 |
+| Proposed (i) frozen encoder | video | 14.02 [10.95, 18.12] / 0.01 | 16.04 [12.85, 19.61] / 0.12 | 11.99 [9.41, 14.36] / −0.14 |
+| Proposed (ii) λ = 0.1 | video | 14.44 [11.80, 18.00] / 0.07 | 17.10 [13.56, 21.04] / 0.20 | 13.99 [10.65, 17.27] / −0.13 |
+| Proposed (ii) λ = 1.0 | video | 13.64 [10.71, 17.21] / 0.16 | 15.86 [12.59, 19.57] / 0.28 | 13.68 [10.56, 16.72] / −0.21 |
+| Proposed (ii) λ = 1.0 | rep | 13.71 [10.82, 17.21] / 0.12 | 15.04 [11.91, 18.51] / 0.32 | 14.71 [10.90, 18.61] / −0.26 |
+| B2-MediaPipe | video | 13.30 [10.12, 17.50] / 0.18 | 17.51 [14.65, 20.44] / 0.04 | 13.61 [10.42, 16.78] / −0.00 |
+| B2-KTPFormer | video | 14.84 [11.67, 18.15] / 0.08 | 17.33 [14.12, 20.45] / 0.06 | 14.27 [10.43, 17.74] / −0.18 |
+| group-only (within-group mean) | – | **12.45** [9.38, 16.57] | **16.01** [13.53, 18.73] | **7.78** [5.86, 9.59] |
+| rep-count-only | – | 12.25 [9.06, 16.49] / 0.07 | 16.85 [14.11, 19.75] / −0.22 | 7.76 [5.97, 9.47] / −0.01 |
+| set-features | – | 12.23 [9.05, 16.53] / 0.17 | 16.93 [13.88, 20.08] / −0.02 | 7.48 [5.92, 9.04] / 0.26 |
+| predict-the-mean / duration-only | – | 15.03 / 16.24 | 16.06 / 16.29 | 27.94 / 13.28 |
+
+All rep-head rows and the remaining combinations are in `summary.md`.
+
+- **Still no model beats the within-group mean in any group, with either head.** Paired RMSE differences to the group-only baseline:
+  - E01 experts +0.53 to +2.39 for every model and head; the CIs are above 0 except for Proposed λ = 1.0 (video head +1.20 [−0.20, 2.86], rep head +1.26 [−0.04, 2.83]) and B2-MediaPipe's rep head (+0.53 [−0.22, 1.51]);
+  - E02 experts −0.97 [−3.46, 1.36] at best (Proposed λ = 1.0, rep head), and every CI includes 0;
+  - E01 non-experts +4.2 to +9.0, all CIs above 0.
+
+  In the E01 groups no model beats the set-features or rep-count-only baselines either. In E02 those two baselines are themselves worse than the group mean (16.93 / 16.85), so some models have a lower RMSE than them (e.g. λ = 1.0 rep head vs set-features −1.89 [−4.13, 0.05]), but still not lower than the group mean.
+- **Within-group Spearman ρ** ranges from −0.29 to 0.32. Three of the 42 intervals (7 methods × 2 heads × 3 groups) exclude 0: B2-MediaPipe video head in E01 experts (0.18 [0.02, 0.31]), Proposed λ = 1.0 rep head in E02 (0.32 [0.02, 0.59]), and B2-KTPFormer rep head in E01 non-experts (**−0.29** [−0.50, −0.03]). About 2 of 42 are expected by chance at 95%, so none is evidence on its own.
+- **Against step (a):** E01 non-expert RMSE dropped a lot (B1 23.1 → 12.1, Proposed 17.7 → 12.6, B2-MediaPipe 21.9 → 13.6), because every video now counts once and non-expert predictions are no longer pulled toward the expert level. This is a level (calibration) gain, not ranking (ρ ≤ 0), and still far above the group mean (7.8). Expert RMSEs moved by less than 2 points, mostly upward (video head; E01: B1 13.29 → 13.58, Proposed 13.33 → 14.38, B2-MediaPipe 13.84 → 13.30; E02: B1 17.70 → 17.29, Proposed 16.06 → 17.97).
+- **Video head vs rep head:** the video head is lower in E01 non-experts for every method (e.g. B1 12.08 vs 14.51) and about the same or slightly higher in the expert groups. **The set rep count did not help**, consistent with 6c.1.
+- **Proposed vs B1 (same head):** the only CI below 0 is Proposed λ = 1.0's rep head in E02 (−1.74 [−3.61, −0.07]); the frozen-encoder video head in E02 is −1.25 [−2.70, 0.08]. Elsewhere the differences include 0 or favour B1 (E01 non-experts, λ = 0.1 video head +1.91 [0.17, 3.49]). B2-MediaPipe and B2-KTPFormer are not better than B1 in any group.
+- **Items (video head, varying items only):** no model is clearly below the group-only baseline on any item. The few lower values are within 0.01: E01-expert CF3 0.174 (frozen, B2-MediaPipe) vs 0.177; non-expert CF1 0.354 (frozen, λ = 0.1) vs 0.362. On non-expert CF1, the set-features baseline (0.308, ρ 0.53) beats every network. On E01-expert PF4, the networks score 0.195–0.272 against the group mean's 0.170.
+- **VCI after fine-tuning (centred 256-d, E01 expert / E02 expert / E01 non-expert):**
+  - frozen encoder 0.298 / 0.257 / 0.296 (= after CVDC, by construction);
+  - **λ = 1.0: 0.244 / 0.256 / 0.166**;
+  - λ = 0.1: 0.162 / 0.183 / 0.165;
+  - full fine-tuning 0.142 / 0.126 / 0.086 (step (a): 0.087 / 0.119 / 0.146);
+  - B1 0.073 / 0.027 / 0.102; B2-MediaPipe 0.049 / 0.004 / 0.106; B2-KTPFormer 0.099 / 0.001 / 0.073.
+
+  The joint loss with λ = 1.0 keeps most of CVDC's view consistency, and its score is not worse than full fine-tuning (best or tied-best among the Proposed variants in both expert groups).
+- **Inner-validation diagnostic** (`stopping_runtime.csv`): at the kept epoch, the video-head RMSE on the inner validation subjects (11.7–19.1) is below the inner-training pooled mean (17.1–20.4) in most runs, but below the inner-training **group** mean (12.2–16.3) in only 10 of 35 runs. The validation signal itself mostly rewards between-group calibration.
+
+**Conclusion of step (a2):**
+- The score setup is now sound: video-level targets, every video weighted once, only items that vary, stable stopping with real training lengths.
+- **The fixes did not produce any within-group score prediction.** The label diagnostics point to the labels, not to the training:
+  - the expert score varies mostly through the repetition items, which neither the detected rep count nor any set-level feature predicts out of fold, and which differ between views of the same performance (E3);
+  - the CF items that do vary are predicted no better than their group mean, by the networks or by the simple features. The one exception is non-expert CF1, where the shoulder-elevation ROM carries signal (set-features R² 0.24) that the networks do not pick up.
+- CVDC remains the only reliable difference between methods, in view consistency; **λ = 1.0 joint training keeps it at no cost in score.**
+
+Proposals for the review (not applied):
+1. Make λ = 1.0 joint training the Proposed default for the ablations (b) and LOSO (c).
+2. Report within-group score prediction as a negative result, and lead with the measurable outcomes: VCI, the cross-view protocol, and Module III rule deviations against CF items.
+3. Test whether explicit angle / ROM inputs (Module III features) let a head reach the set-features level on non-expert CF1.
+4. Check with the supervisor whether PF3/PF4 can be re-derived from the detected rep count, or should be dropped from within-group targets.
 
 ## 7. Phase checklist
 All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
@@ -471,6 +566,7 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - [x] smoke test (3 subjects, 2 epochs; `python -m cvdc.train.run --smoke`);
   - [x] **LOSO runtime estimate** (§6.5; upper bound without early stopping);
   - [x] **(a) GroupKFold-5: B1, B2-MediaPipe, B2-KTPFormer, Proposed** (CVDC pretraining + fine-tuning): within-group results vs mean / group-only / duration-only baselines, within-group VCI; **stop and report**; done 2026-10-18, results in §6b;
+  - [x] **(a2) score setup** (user request after step (a)): label diagnostics and set-level baselines (rep-count-only, set-features); video head (mean + attention pooling + set rep count, T13); T6 per-video weighting; early stopping min 10 / patience 15 / EMA (T8b); items only where they vary (T14); Proposed variants (i) frozen, (ii) λ 0.1 / 1.0, (iii) full fine-tune (T15); re-run of B1, Proposed variants, B2-MediaPipe, B2-KTPFormer on GroupKFold-5; **stop and report**; done 2026-10-18, results in §6c;
   - [ ] (b) after approval: CVDC ablations on GroupKFold (C5);
   - [ ] (c) then the final LOSO table (per-fold-encoder shortcut, C7) for the 4 main methods.
 - [ ] **Phase 4, Module III:**
@@ -508,10 +604,14 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
 
 **Open for Phase 4:** the E02 horizontal adduction angle is view-dependent in 3D and often undefined in R views (§5.6, M7a); the left-arm CF difference is borderline (no flag under the agreed rule).
 
-**Open after Phase 3 step (a) (for the review):**
-- No model beats the within-group mean; early stopping keeps very early fine-tuning epochs because the inner-validation loss is noisy. Options (not applied, to avoid choosing on test results): lower lr or longer warm-up for fine-tuning, a smoothed or score-only validation metric, more patience, linear probe of the CVDC encoder (T10), score weighting (T6).
-- Fine-tuning erodes most of the CVDC view consistency (VCI 0.26–0.30 → 0.09–0.15): consider the joint objective L_sup + λ·L_cvdc (spec §7) or a lower encoder lr.
-- T6 (score weighting) is still open.
+**Addressed in step (a2) (§6c):** the step (a) open items (noisy early stopping → T8b; linear probe and the joint objective → Proposed variants; T6 → per-video weighting, decided).
+
+**Open after Phase 3 step (a2) (for the review):**
+- **No model beats the within-group mean in any group**, even with the video head, per-video weighting, stable stopping and the item masks (§6c.3). The label diagnostics (§6c.1) suggest the limit is in the labels: the expert score varies mostly through the repetition items PF3/PF4, which no set-level feature predicts out of fold and which differ between views of the same performance. Decide how to report score prediction (negative result vs other targets) before spending the ablation and LOSO compute.
+- **Proposed default for (b) and (c):** λ = 1.0 joint training keeps most of the CVDC view consistency (VCI 0.24 / 0.26 / 0.17 vs 0.14 / 0.13 / 0.09 for full fine-tuning), with no loss in score; proposed as the default (not applied).
+- Non-expert CF1 is predicted by the shoulder-elevation ROM (set-features R² 0.24) but by no network: test explicit angle / ROM inputs (Module III features) for the heads?
+- T14 thresholds (≥ 5 subjects off the mode, SD ≥ 0.05) and the EMA factor 0.7 are my choices (T8b, T14).
+- CVDC encoders were reused from step (a) (T15); their stopping rule is the step (a) one.
 
 **Other open items:**
 - **EAAQ appendix** for E02–E09: the user is looking for it. Until it arrives, only E01 has questionnaire-derived rules.
