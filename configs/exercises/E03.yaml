@@ -1,12 +1,28 @@
-# E03 lateral_rotation -- out of scope for now (D0).
-# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+# E03 Lateral rotation (full scope, D0; user answer 1, 2026-10-20). EAAQ: pending (appendix, PROGRESS §3.7.8).
+# The dataset executes right-arm external rotation in the 90/90 position (shoulder abduction ~89 deg, elbow ~90 deg).
 code: E03
 name: lateral_rotation
 body_region: shoulder
-status: "TODO: verify when data is available"
-references:
+status: in_scope_full            # configs/data_full.yaml; the pilot config (data.yaml) includes E01/E02 only
+references:                      # M3: V3 (90/90) is the closest demo (Chamfer 13.5 deg vs 19.1 v1, 55.3 V2)
   primary: "Later Rotation V3.mp4"
-  backup: []
-primary_angle: null              # TODO: verify when data is available
-reps: {}
-eaaq: {}
+  backup: ["Lateral Rotation.mp4"]
+  notes: both arms (left mirrored), working phase only (shoulder abduction >= 70 deg)   # M3, applied in Phase 4
+primary_angle:                   # P6 / M16: rep signal, segmentation only (not a joint angle)
+  name: wrist_path_pc1           # PC1 of the wrist path in the trunk frame (3D); cross-view agreement 90% (Step 0)
+  source: world
+  side: auto                     # the arm whose signal has the larger p5-p95 range
+  orient_by: {name: forearm_elevation, source: world, sign: -1}   # P6c: PC rises as the forearm goes up
+reps:                            # P6c: per-video adaptive thresholds, the Step 0 method (PROGRESS §3.7.5)
+  adaptive: true
+  prominence_frac: 0.4           # x the video's p5-p95 signal range
+  min_amplitude_frac: 0.3
+  polarity: peak                 # P6c: rep = the forearm rising (signal oriented by orient_by)
+  max_rep_s: 20.0
+eaaq:
+  expected_reps: 10              # TODO: verify when the EAAQ appendix is available
+assess:
+  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
+  angle: forearm_elevation       # forearm rotation read as forearm elevation in the trunk frame (~130 -> ~27 deg)
+  posture_channels: [shoulder_elevation, elbow_extension, shoulder_asymmetry, trunk_lateral_lean]   # abduction ~90, elbow ~90
+  mirror_left_arm: true

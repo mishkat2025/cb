@@ -4,7 +4,10 @@ Evidence, in the approved order:
  1. audio     GCC-PHAT lag per view pair (8 kHz mono, band-passed, +-3 s). A F+L+R group whose three lags
               are additive (|lag_FL + lag_LR - lag_FR| <= 20 ms, none at the window edge) is synced (high).
  2. metadata  container creation_time. Recording windows that cannot overlap -> not-synced (high);
-              every pair |dC| <= 3 s -> synced (medium).
+              every pair |dC| <= 3 s -> synced (medium). With ``sync.meta.windows_override_audio`` (S8a, full scope)
+              non-overlapping windows also beat additive audio lags; with ``sync.meta.start_time_rule`` (S8b) every
+              pair's start times (creation_time - duration) within 3 s -> synced (medium, method 'metadata_start';
+              its views get 'sync' pairs only where motion confirms the lag, like the creation-time groups).
  3. motion    rep-timing test on keypoint signals (wrist height, 3D shoulder elevation, wrist PC1): best
               cross-correlation lag, then the SD of matched mid-level-crossing times after removing offset
               and linear drift must be < 42 ms with >= 4 matched crossings. The search is +-0.3 s around the
@@ -35,8 +38,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ..assess.angles import shoulder_elevation
-from ..config import data_root, load_config, resolve
+from ..assess.angles import all_joint_pc1, hip_flexion, shoulder_elevation
+from ..config import load_config, resolve, video_root
 from .skeleton import J
 
 # --------------------------------------------------------------------------------------------- audio
@@ -108,7 +111,7 @@ def audio_stage(idx, cfg, workers):
     multi = idx[idx.n_views_group >= 2]
     need = []
     have = set(zip(old.video_a, old.video_b))
-    root = data_root(cfg)
+    root = video_root(cfg)
     for (ex, subj), g in multi.groupby(["exercise", "subject"]):
         rows = g.to_dict("records")
         if any((a["video_id"], b["video_id"]) not in have for a, b in pair_list(rows)):
@@ -126,25 +129,45 @@ def audio_stage(idx, cfg, workers):
 # -------------------------------------------------------------------------------------------- motion
 
 
-def motion_signals(pre_path):
-    """Candidate 1D motion signals on the uniform grid: wrist height above mid-shoulder (2D, up positive),
-    3D shoulder elevation per side, and PC1 of both wrists relative to mid-shoulder."""
+PILOT_SIGNALS = ("wy", "el", "pc1")
+
+
+def motion_signals(pre_path, families=PILOT_SIGNALS):
+    """Candidate 1D motion signals on the uniform grid. Pilot families (``sync.motion.signals`` default): ``wy`` wrist
+    height above mid-shoulder (2D, up positive), ``el`` 3D shoulder elevation per side, ``pc1`` PC1 of both wrists
+    relative to mid-shoulder (2D). Full scope adds ``hip`` 3D hip flexion per side, ``ky`` knee height above mid-hip
+    (2D) and ``pc1_all`` PC1 of all coco17 joints (2D), for the lower-limb and trunk exercises."""
     with np.load(pre_path) as z:
         xy, w3 = z["xy"].astype(np.float64), z["world"].astype(np.float64)
     msh = (xy[:, J["left_shoulder"]] + xy[:, J["right_shoulder"]]) / 2
+    mhip = (xy[:, J["left_hip"]] + xy[:, J["right_hip"]]) / 2
     sig = {}
     for side in ("left", "right"):
-        sig[f"wy_{side[0]}"] = -(xy[:, J[f"{side}_wrist"], 1] - msh[:, 1])
-        sig[f"el_{side[0]}"] = shoulder_elevation(w3, side)
-    rel = np.concatenate([xy[:, J["left_wrist"]] - msh, xy[:, J["right_wrist"]] - msh], 1)
-    if np.isfinite(rel).all() and len(rel) > 2:
-        z0 = rel - rel.mean(0)
-        sig["pc1"] = z0 @ np.linalg.svd(z0, full_matrices=False)[2][0]
+        if "wy" in families:
+            sig[f"wy_{side[0]}"] = -(xy[:, J[f"{side}_wrist"], 1] - msh[:, 1])
+        if "el" in families:
+            sig[f"el_{side[0]}"] = shoulder_elevation(w3, side)
+        if "hip" in families:
+            sig[f"hip_{side[0]}"] = hip_flexion(w3, side)
+        if "ky" in families:
+            sig[f"ky_{side[0]}"] = -(xy[:, J[f"{side}_knee"], 1] - mhip[:, 1])
+    if "pc1" in families:
+        rel = np.concatenate([xy[:, J["left_wrist"]] - msh, xy[:, J["right_wrist"]] - msh], 1)
+        if np.isfinite(rel).all() and len(rel) > 2:
+            z0 = rel - rel.mean(0)
+            sig["pc1"] = z0 @ np.linalg.svd(z0, full_matrices=False)[2][0]
+    if "pc1_all" in families:
+        sig["pc1_all"] = all_joint_pc1(xy)
     return {k: v for k, v in sig.items() if np.isfinite(v).all() and v.std() > 1e-6}
 
 
-CAND_PAIRS = [("wy_r", "wy_r"), ("wy_l", "wy_l"), ("wy_r", "wy_l"), ("wy_l", "wy_r"), ("el_r", "el_r"),
-              ("el_l", "el_l"), ("el_r", "el_l"), ("el_l", "el_r"), ("pc1", "pc1")]
+def _sided_pairs(f):
+    return [(f"{f}_r", f"{f}_r"), (f"{f}_l", f"{f}_l"), (f"{f}_r", f"{f}_l"), (f"{f}_l", f"{f}_r")]
+
+
+CAND_PAIRS = _sided_pairs("wy") + _sided_pairs("el") + [("pc1", "pc1")] + _sided_pairs("hip") + _sided_pairs("ky") + [
+    ("pc1_all", "pc1_all")]
+SIGN_FREE = ("pc1",)  # principal components have an arbitrary sign: |r| is used, and the sign is kept for timing
 
 
 def xcorr_lags(a, b, lags, min_overlap):
@@ -211,14 +234,14 @@ def motion_pair(sa, sb, center_s, window_s, fps, mc):
         rs = xcorr_lags(sa[na], sb[nb], lags, mc["min_overlap"])
         if np.isnan(rs).all():
             continue
-        score = np.abs(rs) if na == "pc1" else rs
+        score = np.abs(rs) if na.startswith(SIGN_FREE) else rs
         i = int(np.nanargmax(score))
         if best is None or score[i] > best[0]:
             best = (score[i], i, rs, na, nb)
     if best is None:
         return dict(motion_r=np.nan)
     sc, i, rs, na, nb = best
-    sign = int(np.sign(rs[i])) if na == "pc1" else 1
+    sign = int(np.sign(rs[i])) if na.startswith(SIGN_FREE) else 1
     frac = 0.0
     if 0 < i < len(rs) - 1 and np.isfinite(rs[i - 1:i + 2]).all():
         y0, y1, y2 = sign * rs[i - 1], sign * rs[i], sign * rs[i + 1]
@@ -237,12 +260,13 @@ def motion_pair(sa, sb, center_s, window_s, fps, mc):
 def motion_job(args):
     """args: list of (key, pre_a, pre_b, center_s, window_s); returns [(key, result)]."""
     items, fps, mc = args
+    families = tuple(mc.get("signals") or PILOT_SIGNALS)
     cache = {}
     out = []
     for key, pa, pb, center, window in items:
         for p in (pa, pb):
             if p not in cache:
-                cache[p] = motion_signals(p) if Path(p).exists() else {}  # excluded video: no signals
+                cache[p] = motion_signals(p, families) if Path(p).exists() else {}  # excluded video: no signals
         out.append((key, motion_pair(cache[pa], cache[pb], center, window, fps, mc)))
     return out
 
@@ -335,13 +359,20 @@ def classify(idx, P, sc):
         edge = g.audio_edge.fillna(True).astype(bool).any()
         meta_apart = (g.d_creation_s.abs() > (g.dur_a + g.dur_b)).any()
         meta_close = (g.d_creation_s.abs() <= sc["meta"]["max_dc_s"]).all()
+        # S8b: creation_time mostly stamps the END of a recording, so also compare start times (creation - duration)
+        meta_start = (sc["meta"].get("start_time_rule", False)
+                      and ((g.d_creation_s - (g.dur_b - g.dur_a)).abs() <= sc["meta"]["max_dc_s"]).all())
         conf_all = g.motion_confirmed.fillna(False).astype(bool).all()
-        if tri <= sc["audio"]["additivity_ms"] and not edge:
+        # S8a: recording windows that cannot overlap beat additive audio lags (one sound cue in separate takes)
+        audio_ok = not (sc["meta"].get("windows_override_audio", False) and meta_apart)
+        if tri <= sc["audio"]["additivity_ms"] and not edge and audio_ok:
             cls, method, confd = "synced", "audio", "high"
         elif meta_apart:
             cls, method, confd = "not-synced", "metadata", "high"
         elif meta_close:
             cls, method, confd = "synced", "metadata", "medium"
+        elif meta_start:
+            cls, method, confd = "synced", "metadata_start", "medium"
         elif conf_all:
             cls, method, confd = "synced", "motion", "medium"
         else:

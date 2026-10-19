@@ -1,12 +1,28 @@
-# E08 lumbar_flexion -- out of scope for now (D0).
-# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+# E08 Lumbar flexion = "Both Leg Flexion" (README, demo): supine, both hips and knees flex together (full scope, D0;
+# user answer 1). EAAQ: pending. All male.
 code: E08
 name: lumbar_flexion
 body_region: trunk
-status: "TODO: verify when data is available"
+status: in_scope_full
 references:
-  primary: "Both Leg Flection.mp4"
+  primary: "Both Leg Flection.mp4"   # side view, supine
   backup: []
-primary_angle: null              # TODO: verify when data is available
-reps: {}
-eaaq: {}
+primary_angle:                   # P6 / M16: a joint angle (3D)
+  name: hip_flexion              # cross-view agreement 92% (Step 0)
+  source: world
+  side: auto
+reps:                            # P6c: per-video adaptive thresholds, the Step 0 method (PROGRESS §3.7.5)
+  adaptive: true
+  prominence_frac: 0.4           # x the video's p5-p95 signal range
+  min_amplitude_frac: 0.3
+  polarity: peak                 # P6c: rep = the hips flexing (legs flat = rest)
+  max_rep_s: 20.0
+  quality_joints: [knee]
+eaaq:
+  expected_reps: 10              # TODO: verify when the EAAQ appendix is available
+assess:
+  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
+  angle: hip_flexion           # both legs
+  posture_channels: [knee_flexion]   # both legs
+  symmetry: [hip_flexion, knee_flexion]   # left/right
+  both_sides: true

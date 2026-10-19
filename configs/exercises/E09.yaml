@@ -1,12 +1,27 @@
-# E09 back_extension -- out of scope for now (D0).
-# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+# E09 Back extension (full scope, D0; user answer 1). EAAQ: pending. Prone; all male.
 code: E09
 name: back_extension
 body_region: trunk
-status: "TODO: verify when data is available"
+status: in_scope_full
 references:
-  primary: "Back Extension.mp4"
+  primary: "Back Extension.mp4"  # side view, prone
   backup: []
-primary_angle: null              # TODO: verify when data is available
-reps: {}
-eaaq: {}
+primary_angle:                   # P6 / M16: a joint angle (3D; unsigned, so trunk extension reads > 0)
+  name: hip_flexion              # cross-view agreement 78% (Step 0; tied with the 2D trunk inclination)
+  source: world
+  side: auto
+reps:                            # P6c: per-video adaptive thresholds, the Step 0 method (PROGRESS §3.7.5)
+  adaptive: true
+  prominence_frac: 0.4           # x the video's p5-p95 signal range
+  min_amplitude_frac: 0.3
+  polarity: peak                 # P6c: rep = the trunk rising (lying flat = rest)
+  max_rep_s: 20.0
+  quality_joints: [knee]
+eaaq:
+  expected_reps: 10              # TODO: verify when the EAAQ appendix is available
+assess:
+  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
+  angle: trunk_thigh_angle     # trunk vs thigh line (0 -> ~45 deg)
+  posture_channels: [knee_flexion]   # legs straight on the floor
+  symmetry: [hip_flexion]
+  both_sides: true

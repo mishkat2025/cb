@@ -1,12 +1,27 @@
-# E04 medial_rotation -- out of scope for now (D0).
-# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+# E04 Medial rotation (full scope, D0; user answer 1). EAAQ: pending. Experts only (no non-experts recorded).
+# The dataset executes internal rotation with the arm abducted ~70 deg (forearm from ~70 deg to ~145 deg).
 code: E04
 name: medial_rotation
 body_region: shoulder
-status: "TODO: verify when data is available"
+status: in_scope_full
 references:
-  primary: "Medial Rotation.mp4"
+  primary: "Medial Rotation.mp4"   # oblique view, arm lower than the dataset (elevation 40 vs 69 deg): per-view bias (M8)
   backup: []
-primary_angle: null              # TODO: verify when data is available
-reps: {}
-eaaq: {}
+primary_angle:                   # P6 / M16: segmentation only
+  name: all_joint_pc1            # PC1 of all coco17 joints (2D); cross-view agreement 64% (Step 0; tied with the wrist PC1)
+  source: image
+  side_from: {name: wrist_path_pc1, source: world}   # the moving arm: larger wrist-path range
+  orient_by: {name: forearm_elevation, source: world, sign: 1}   # P6c: PC rises as the forearm goes down
+reps:                            # P6c: per-video adaptive thresholds, the Step 0 method (PROGRESS §3.7.5)
+  adaptive: true
+  prominence_frac: 0.4           # x the video's p5-p95 signal range
+  min_amplitude_frac: 0.3
+  polarity: peak                 # P6c: rep = the forearm rotating down (signal oriented by orient_by)
+  max_rep_s: 20.0
+eaaq:
+  expected_reps: 10              # TODO: verify when the EAAQ appendix is available
+assess:
+  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
+  angle: forearm_elevation       # forearm rotation as forearm elevation in the trunk frame (~70 -> ~145 deg)
+  posture_channels: [shoulder_elevation, elbow_extension, trunk_lateral_lean]
+  mirror_left_arm: true

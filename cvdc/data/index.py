@@ -9,7 +9,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from ..config import data_root, load_config, resolve
+from ..config import data_root, load_config, resolve, video_root
 from .filenames import discover_videos
 from .labels import ITEMS, load_scores, quality_class
 
@@ -22,10 +22,12 @@ def ref_stem(file_name: str) -> str:
 def build_index(cfg) -> tuple[pd.DataFrame, dict]:
     d = cfg["data"]
     root = data_root(cfg)
-    rows, failures, skipped = discover_videos(root, d)
+    rows, failures, skipped = discover_videos(video_root(cfg), d)
+    if not rows:
+        raise SystemExit(f"no videos found under {video_root(cfg)} (data.video_root, D1)")
     df = pd.DataFrame(rows)
-    report = dict(root=str(root), n_files=len(rows) + len(failures), n_parsed=len(rows), failures=failures,
-                  skipped_exercises=skipped)
+    report = dict(root=str(root), video_root=str(video_root(cfg)), n_files=len(rows) + len(failures),
+                  n_parsed=len(rows), failures=failures, skipped_exercises=skipped)
     excl = {e.upper() for e in d.get("exclude_files") or []}
     report["excluded"] = sorted(set(df.video_id) & excl)
     df = df[~df.video_id.isin(excl)].copy()
@@ -47,9 +49,12 @@ def build_index(cfg) -> tuple[pd.DataFrame, dict]:
     kp_dir = cfg["pose"]["kp_dir"]
     df["kp_path"] = kp_dir + "/" + df.video_id + ".npz"
     df["pre_path"] = cfg["preprocess"]["out_dir"] + "/" + df.video_id + ".npz"
+    hand_dir = cfg["pose"].get("hand_dir")
+    df["hand_path"] = np.where(df.exercise.isin(cfg["pose"].get("hands_for") or []) & bool(hand_dir),
+                               f"{hand_dir}/" + df.video_id + ".npz", "")
     cols = ["video_id", "exercise", "subject", "subject_num", "group", "view", "variation", "gender",
             "group_id", "n_views_group", "score", "quality"] + ITEMS + [
-        "avg", "judge_sd", "n_judges", "folder", "file", "rel_path", "kp_path", "pre_path", "size_mb"]
+        "avg", "judge_sd", "n_judges", "folder", "file", "rel_path", "kp_path", "pre_path", "hand_path", "size_mb"]
     df = df[cols].sort_values(["exercise", "subject_num", "variation", "view"]).reset_index(drop=True)
     return df, report
 
@@ -66,12 +71,14 @@ def build_ref_index(cfg, exercises) -> pd.DataFrame:
             rows.append(dict(exercise=code, role="primary" if i == 0 else "backup", file=f, ref_id=stem,
                              rel_path=f"{cfg['data']['reference_dir']}/{f}", exists=(root / f).exists(),
                              kp_path=f"{cfg['pose']['ref_kp_dir']}/{stem}.npz",
+                             hand_path=f"{cfg['pose'].get('ref_hand_dir')}/{stem}.npz"
+                             if code in (cfg["pose"].get("hands_for") or []) and cfg["pose"].get("ref_hand_dir") else "",
                              pre_path=f"{cfg['preprocess']['ref_out_dir']}/{stem}.npz"))
     return pd.DataFrame(rows)
 
 
 def print_report(df, report):
-    print(f"dataset root: {report['root']}")
+    print(f"dataset root: {report['root']}  video root: {report['video_root']}")
     print(f"files: {report['n_files']}  parsed: {report['n_parsed']} "
           f"({100 * report['n_parsed'] / max(report['n_files'], 1):.1f}%)  failed: {len(report['failures'])}")
     for f in report["failures"]:

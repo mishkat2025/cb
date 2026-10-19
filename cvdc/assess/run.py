@@ -24,7 +24,7 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 
-from ..config import exercise_cfg, load_config, resolve
+from ..config import data_path, exercise_cfg, load_config, resolve
 from ..data.labels import movement_quality
 from ..eval.splits import check_no_leakage
 from ..train.trainer import fold_plan
@@ -38,7 +38,7 @@ OUT = "outputs/phase4"
 def reference_for(cfg, ex, ac):
     """(template, PT file name) from the exercise's primary PT demo."""
     ref_idx = pd.read_csv(resolve(cfg["data"]["ref_index_csv"]))
-    rr = pd.read_csv(resolve("data/reps_ref.csv"))
+    rr = pd.read_csv(data_path(cfg, "reps_ref_csv"))
     row = ref_idx[(ref_idx.exercise == ex) & (ref_idx.role == "primary")].iloc[0]
     world = np.load(resolve(row.pre_path))["world"].astype(float)
     reps = rr[(rr.ref_id == row.ref_id) & (rr.exercise == ex)]
@@ -85,7 +85,7 @@ def main():
     tc = cfg["templates"]
     idx = pd.read_csv(resolve(cfg["data"]["index_csv"]))
     idx["MQ"] = movement_quality(idx, cfg["labels"]["movement_quality_items"])
-    reps = pd.read_csv(resolve("data/reps.csv"))
+    reps = pd.read_csv(data_path(cfg, "reps_csv"))
     rpv = pd.read_csv(resolve(cfg["outputs"]["phase1"]) / "reps_per_video.csv").set_index("video_id")
     plans = fold_plan(cfg, reps)
     check_no_leakage([(p["train"], p["test"]) for p in plans], reps.subject.unique())

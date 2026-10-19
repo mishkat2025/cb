@@ -17,8 +17,8 @@ Pipeline per video (preprocessed 30 fps grid, coco17 joints, root-centred and to
   4. back to the 30 fps grid and to coco17 order (eyes and ears <- H36M head), root-centred on the mid-hip and
      divided by the median 3D torso length, like the MediaPipe world landmarks (P5).
 
-usage: python -m cvdc.models.lifter [--config C] [--only ID ...]
-Writes data/cache/lift_ktpformer/<video_id>.npz (``world`` (T,17,3) coco17 normalised, ``h36m`` (T,17,3) raw
+usage: python -m cvdc.models.lifter [--config C] [--only ID ...] [--skip-existing]
+Writes <lifter.out_dir>/<video_id>.npz (pilot: data/cache/lift_ktpformer/) (``world`` (T,17,3) coco17 normalised, ``h36m`` (T,17,3) raw
 output) for every preprocessed video and PT demo.
 """
 import argparse
@@ -152,6 +152,8 @@ def main():
     ap.add_argument("--only", nargs="*")
     ap.add_argument("--input-torso", type=float, help="override lifter.input_torso (scale check)")
     ap.add_argument("--out-dir", help="override lifter.out_dir")
+    ap.add_argument("--skip-existing", action="store_true",
+                    help="keep outputs that already exist with the same input_torso (e.g. copied pilot lifts)")
     a = ap.parse_args()
     cfg = load_config(a.config, a.model_config)
     lc = dict(cfg["lifter"])
@@ -167,6 +169,16 @@ def main():
     vids = vids[vids.pre_path.map(lambda p: isinstance(p, str) and resolve(p).exists())]
     if a.only:
         vids = vids[vids.video_id.isin(a.only)]
+    if a.skip_existing:
+        def done(v):
+            f = out / f"{v}.npz"
+            if not f.exists():
+                return False
+            with np.load(f) as z:
+                return float(z["input_torso"]) == float(lc["input_torso"])
+        keep = vids.video_id.map(done)
+        print(f"skipping {int(keep.sum())} existing outputs")
+        vids = vids[~keep]
     lifter = KTPFormerLifter(lc, "cuda" if torch.cuda.is_available() else "cpu")
     t0, n_fr = time.time(), 0
     for i, r in enumerate(vids.itertuples()):

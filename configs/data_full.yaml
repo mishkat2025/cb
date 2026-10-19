@@ -1,0 +1,81 @@
+# Full-scope config (all nine exercises; user, 2026-10-20). Extends the pilot config (data.yaml) and moves every
+# input and output to new folders, so the E01/E02 pilot's index, caches, runs and tables are never overwritten (D15).
+# Decision IDs (D*, P*, S*, M*) refer to DESIGN_DECISIONS.md.
+# usage: python scripts/run_phase1.py --config configs/data_full.yaml
+extends: data.yaml
+
+data:
+  video_root: ../mobiphysio             # D1 (user answer 3, 2026-10-20): the exercise folders E0x(...); CSV and demos stay in root
+  include_exercises: []                 # D0 (user answer 1): every discovered exercise, E01-E09
+  index_csv: data/full/index.csv
+  ref_index_csv: data/full/index_ref.csv
+  reps_csv: data/full/reps.csv
+  reps_perview_csv: data/full/reps_perview.csv
+  reps_ref_csv: data/full/reps_ref.csv
+  set_features_csv: data/full/cache/set_features.csv
+  # D8 / D14 (user answer 5): excluded from templates and from the exercise labels only where the movement shows a
+  # wrong exercise; PF1 = 0 alone is no reason. Kept in score regression.
+  template_exclude_subjects: {E03: [P02]}
+  exercise_label_exclude: {E03: [P02]}  # + the result of the E05 PF1 motion check (scripts/phase1_full/pf1_motion_check.py)
+
+pose:
+  kp_dir: data/full/cache/kp
+  ref_kp_dir: data/full/cache/kp_ref
+  hands_for: [E06]                      # P1 (user answer 2): MediaPipe Hands for E06
+  hand_model: data/models/hand_landmarker.task
+  hands:                                # P1c: Hands on square crops around each Pose wrist (full-frame detection missed
+    crop_px: 224                        # the second hand in most frames; checked on E06 before the run)
+    crop_scale: 2.2                     # crop side = 2.2 x the 2D forearm length
+    ahead: 0.4                          # crop centre = wrist + 0.4 x (wrist - elbow): the hand lies beyond the wrist
+    num_hands: 2                        # per crop; the hand whose wrist landmark is nearest the Pose wrist is kept
+    min_hand_detection_confidence: 0.5
+    min_hand_presence_confidence: 0.5
+    min_tracking_confidence: 0.5
+  hand_dir: data/full/cache/hands
+  ref_hand_dir: data/full/cache/hands_ref
+
+preprocess:
+  out_dir: data/full/cache/pre
+  ref_out_dir: data/full/cache/pre_ref
+  pack_dir: data/full/cache/packs
+
+sync:
+  meta:
+    windows_override_audio: true        # S8a (user answer 4): recording windows that cannot overlap beat additive audio lags
+    start_time_rule: true               # S8b (user answer 4): start times (creation - duration) within max_dc_s -> synced (medium)
+  motion:                               # rep-timing test candidates: the pilot's upper-limb signals + lower-limb / trunk / all-joint
+    signals: [wy, el, pc1, hip, ky, pc1_all]
+  device_offsets_ms: {F-L: 93, F-R: 57} # S5: the pilot's Phase 1 estimates as priors; re-estimated on all data
+  cache_dir: data/full/cache/sync
+  report_csv: outputs/full/sync_report.csv
+  pairs_csv: outputs/full/sync_pairs.csv
+
+templates:
+  library_dir: outputs/full/phase4/library
+
+assess:
+  json_dir: outputs/full/phase4/json
+
+outputs:
+  phase1: outputs/full/phase1
+  phase2: outputs/full/phase2
+  checks: outputs/full/checks
+
+# model-config keys whose folders must not be the pilot's (later phases; nothing is trained in Phase 1)
+heads:
+  video_head:
+    count_csv: outputs/full/phase1/reps_per_video.csv
+cvdc:
+  pairs:
+    pairs_csv: data/full/cvdc_pairs.csv
+    members_csv: data/full/cvdc_members.csv
+    summary_csv: outputs/full/phase2/table_pair_counts.csv
+train:
+  runs_dir: runs/full
+  cvdc_init_from: null                  # never reuse the pilot's CVDC encoders
+ablation:
+  reuse: {}
+eval:
+  results_dir: outputs/full/results
+lifter:
+  out_dir: data/full/cache/lift_ktpformer

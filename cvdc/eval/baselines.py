@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from ..assess.angles import horizontal_adduction, shoulder_elevation
-from ..config import resolve
+from ..config import data_path, resolve
 
 ALL_ITEMS = ["PF1", "PF2", "PF3", "PF4", "CF1", "CF2", "CF3"]
 SET_FEATURES = ["n_reps_set", "rep_duration_s", "rom_deg"]
@@ -57,11 +57,11 @@ def angle_range(a, name):
 
 def set_features(cfg, refresh=False):
     """Per-video set features (see module docstring), cached in data/cache/set_features.csv."""
-    path = resolve("data/cache/set_features.csv")
+    path = data_path(cfg, "set_features_csv")
     if path.exists() and not refresh:
         return pd.read_csv(path)
     idx = pd.read_csv(resolve(cfg["data"]["index_csv"])).set_index("video_id")
-    reps = pd.read_csv(resolve("data/reps.csv"))
+    reps = pd.read_csv(data_path(cfg, "reps_csv"))
     rpv = pd.read_csv(resolve(cfg["outputs"]["phase1"]) / "reps_per_video.csv").set_index("video_id")
     rows = []
     for vid, r in reps.groupby("video_id", sort=False):

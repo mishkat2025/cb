@@ -1,8 +1,9 @@
 """Phase 1 summary tables (printed and saved to outputs/phase1/): detection and visibility per view and
 variation, hip visibility (root choice), interpolation, rep counts vs PF4 and across views, rep timing,
 sync classes and CVDC pair counts.
-usage: python scripts/phase1/report.py
+usage: python scripts/phase1/report.py [--config configs/data.yaml]
 """
+import argparse
 import sys
 from pathlib import Path
 
@@ -11,11 +12,13 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from cvdc.config import load_config, resolve  # noqa: E402
+from cvdc.config import data_path, load_config, resolve  # noqa: E402
 
 
 def main():
-    cfg = load_config()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--config")
+    cfg = load_config(ap.parse_args().config)
     out = resolve(cfg["outputs"]["phase1"])
     pd.set_option("display.width", 220)
     pd.set_option("display.max_columns", 30)
@@ -23,7 +26,7 @@ def main():
     ex = pd.read_csv(out / "extract_summary.csv")
     pre = pd.read_csv(out / "preprocess_summary.csv")
     V = pd.read_csv(out / "reps_per_video.csv")
-    R = pd.read_csv(resolve("data/reps.csv"))
+    R = pd.read_csv(data_path(cfg, "reps_csv"))
     R = R.merge(V[["video_id", "n_frames_30"]].rename(columns={"n_frames_30": "n_frames"}), on="video_id")
     A = idx.merge(ex.drop(columns=["exercise", "group", "view", "variation"]), on="video_id", how="left") \
            .merge(pre.drop(columns=["det_rate"], errors="ignore"), on="video_id", how="left") \

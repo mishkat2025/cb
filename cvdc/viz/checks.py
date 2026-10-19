@@ -15,7 +15,7 @@ import pandas as pd  # noqa: E402
 from matplotlib.gridspec import GridSpec  # noqa: E402
 
 from ..assess.angles import UNITS  # noqa: E402
-from ..config import exercise_cfg, load_config, resolve  # noqa: E402
+from ..config import data_path, exercise_cfg, load_config, resolve  # noqa: E402
 from ..data.reps import video_angles  # noqa: E402
 from .skeleton import COL_L, COL_R, draw_skeleton  # noqa: E402
 
@@ -93,6 +93,7 @@ def sync_check(group, idx, reps, pa, out, fps):
     """The rep signal of the moving arm per view, on the aligned clock (t - offset_view); shaded spans = the
     group's shared reps (identical in every aligned view) or, for unaligned views, nothing."""
     vids = idx[idx.group_id == group.group_id]
+    vids = vids[vids.pre_path.map(lambda p: resolve(p).exists())]   # low-detection videos have no file (P7)
     fig, ax = plt.subplots(figsize=(12, 3))
     rg = reps[reps.group_id == group.group_id]
     for r in vids.itertuples():
@@ -130,7 +131,7 @@ def main():
     idx = pd.read_csv(resolve(cfg["data"]["index_csv"]))
     V = pd.read_csv(resolve(cfg["outputs"]["phase1"]) / "reps_per_video.csv")
     V = V.merge(idx[["video_id", "pre_path"]], on="video_id")
-    reps = pd.read_csv(resolve("data/reps.csv"))
+    reps = pd.read_csv(data_path(cfg, "reps_csv"))
     pre_paths = {r.video_id: resolve(r.pre_path) for r in idx.itertuples()}
     rng = np.random.default_rng(0)
     n_png = 0
@@ -181,7 +182,7 @@ def main():
                     n_png += 1
 
     ref = pd.read_csv(resolve(cfg["data"]["ref_index_csv"]))
-    rp = resolve("data/reps_ref.csv")
+    rp = data_path(cfg, "reps_ref_csv")
     rref = pd.read_csv(rp) if rp.exists() and rp.stat().st_size > 2 else pd.DataFrame()
     for r in ref.itertuples():
         p = resolve(r.pre_path)

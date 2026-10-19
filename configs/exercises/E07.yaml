@@ -1,12 +1,27 @@
-# E07 hip_joint_flexion -- out of scope for now (D0).
-# TODO: verify when data is available (primary angle, rep settings, EAAQ rules).
+# E07 Hip joint flexion (full scope, D0; user answer 1). EAAQ: pending. 14 experts, all male, no non-experts. Supine.
 code: E07
 name: hip_joint_flexion
 body_region: hip
-status: "TODO: verify when data is available"
+status: in_scope_full
 references:
-  primary: "Hip Joint Flection.mp4"
+  primary: "Hip Joint Flection.mp4"   # side view, supine, right leg
   backup: []
-primary_angle: null              # TODO: verify when data is available
-reps: {}
-eaaq: {}
+primary_angle:                   # P6 / M16: segmentation only
+  name: all_joint_pc1            # PC1 of all coco17 joints (2D); cross-view agreement 70% (Step 0)
+  source: image
+  side_from: {name: hip_flexion, source: world}   # the moving leg: larger hip-flexion range
+  orient_by: {name: hip_flexion, source: world, sign: 1}   # P6c: PC rises with the moving leg's hip flexion
+reps:                            # P6c: per-video adaptive thresholds, the Step 0 method (PROGRESS §3.7.5)
+  adaptive: true
+  prominence_frac: 0.4           # x the video's p5-p95 signal range
+  min_amplitude_frac: 0.3
+  polarity: peak                 # P6c: rep = the moving hip flexing (signal oriented by orient_by)
+  max_rep_s: 20.0
+  quality_joints: [knee, ankle]  # best view of a synced group: trunk + the moving leg visible
+eaaq:
+  expected_reps: 10              # TODO: verify when the EAAQ appendix is available
+assess:
+  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
+  angle: hip_flexion           # moving leg, trunk vs thigh (0 -> ~125 deg)
+  posture_channels: [knee_flexion, contralateral_hip_flexion, contralateral_knee_flexion]   # pelvis stability
+  mirror_left_side: true

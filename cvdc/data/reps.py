@@ -1,6 +1,10 @@
 """Repetition segmentation from each exercise's primary joint angle (P6).
 
-A rep is rest -> peak -> rest of the primary angle (``polarity: peak``; ``valley`` flips the signal).
+A rep is rest -> peak -> rest of the primary angle (``polarity: peak``; ``valley`` flips the signal). With
+``reps.adaptive: true`` (full scope, E03-E09; the Step 0 method of PROGRESS §3.7.5) the prominence and the minimum
+amplitude are fractions of each video's own p5-p95 signal range and the polarity follows the rest level of the first
+second (``adaptive_params``). Rep signals that are not joint angles (wrist-path PC1, all-joint PC1, 2D wrist height)
+are used for segmentation only (M16).
 The angle is median-filtered (``median_s``); peaks need a minimum prominence and spacing; each rep starts where the angle last leaves its rest level
 before the peak and ends where it first returns after the peak (rest level = within ``rest_frac`` of the
 amplitude above the neighbouring minimum), padded by ``pad_s`` without crossing that minimum. Reps with an
@@ -21,8 +25,8 @@ groups, unaligned views and single-view videos are segmented on their own.
 Times are frame indices on the uniform preprocessing grid (cfg preprocess.fps). Run after cvdc.data.sync.
 
 usage: python -m cvdc.data.reps [--config C] [--workers N]
-Writes data/reps.csv (one row per rep), data/reps_perview.csv (every view segmented on its own, for
-comparison), data/reps_ref.csv (PT demos) and outputs/phase1/reps_per_video.csv.
+Writes data.reps_csv (one row per rep; pilot: data/reps.csv), data.reps_perview_csv (every view segmented on its own,
+for comparison), data.reps_ref_csv (PT demos) and <outputs.phase1>/reps_per_video.csv.
 """
 import argparse
 from concurrent.futures import ProcessPoolExecutor
@@ -33,7 +37,7 @@ from scipy.ndimage import median_filter
 from scipy.signal import find_peaks
 
 from ..assess.angles import UNITS, primary_angle
-from ..config import exercise_cfg, load_config, resolve
+from ..config import data_path, exercise_cfg, load_config, resolve
 from .skeleton import J
 
 
@@ -88,6 +92,38 @@ def segment_reps(angle, fps, prominence=40, min_distance_s=1.0, min_amplitude=40
     return reps
 
 
+def adaptive_params(signal, fps, rc):
+    """Per-video thresholds (``reps.adaptive``, full-scope Step 0 method, PROGRESS §3.7.5): prominence and minimum
+    amplitude as fractions of the signal's p5-p95 range (after a 0.3 s running median), and the polarity from the
+    rest level: 'peak' when the median of the first second lies nearer the p5 than the p95, else 'valley'. Returns
+    the segment_reps keyword arguments (prominence, min_amplitude, polarity) or None for a flat / empty signal."""
+    s = fill_nan(signal)
+    if s is None or len(s) < 3:
+        return None
+    k = int(round(rc.get("median_s", 0.3) * fps)) // 2 * 2 + 1
+    m = median_filter(s, size=k, mode="nearest") if k > 1 else s
+    lo, hi = np.percentile(m, [5, 95])
+    rng = hi - lo
+    if rng <= 1e-9:
+        return None
+    pol = rc.get("polarity", "auto")
+    if pol == "auto":
+        start = np.median(m[:max(1, int(round(rc.get("rest_window_s", 1.0) * fps)))])
+        pol = "peak" if abs(start - lo) <= abs(start - hi) else "valley"
+    return dict(prominence=rc["prominence_frac"] * rng, min_amplitude=rc["min_amplitude_frac"] * rng, polarity=pol)
+
+
+def segment_signal(signal, fps, rc):
+    """segment_reps with the exercise's settings; with ``adaptive: true`` the thresholds and polarity come from the
+    video's own signal (adaptive_params). Returns (reps, polarity)."""
+    if rc.get("adaptive"):
+        ap = adaptive_params(signal, fps, rc)
+        if ap is None:
+            return [], "peak"
+        return segment_reps(signal, fps, **{**rc, **ap}), ap["polarity"]
+    return segment_reps(signal, fps, **rc), rc.get("polarity", "peak")
+
+
 def moving_side(angles: dict, side_cfg="auto"):
     """'auto' picks the side whose primary angle has the larger p5-p95 range."""
     rng = {s: float(np.nanpercentile(a, 95) - np.nanpercentile(a, 5)) if np.isfinite(a).any() else 0.0
@@ -96,9 +132,29 @@ def moving_side(angles: dict, side_cfg="auto"):
     return side, rng
 
 
+def _points(pre, source):
+    return pre["world"] if source == "world" else pre["xy"]
+
+
+def orient(sig, ref, sign=1):
+    """Flip a signal of arbitrary sign (a principal component) so that it correlates with ``sign`` x ``ref``."""
+    ok = np.isfinite(sig) & np.isfinite(ref)
+    if ok.sum() < 3 or sig[ok].std() < 1e-9 or ref[ok].std() < 1e-9:
+        return sig
+    return -sig if sign * np.corrcoef(sig[ok], ref[ok])[0, 1] < 0 else sig
+
+
 def video_angles(pre, pa_cfg):
-    P = pre["world"] if pa_cfg.get("source", "world") == "world" else pre["xy"]
-    return {s: primary_angle(P, pa_cfg["name"], s) for s in ("right", "left")}
+    """The rep signal per side. With ``orient_by`` (P6c) a signal of arbitrary sign is flipped per side so that it
+    rises with ``sign`` x the named joint angle of that side (e.g. E07: all-joint PC1 rising with hip flexion), so the
+    rep is always the same phase of the movement."""
+    P = _points(pre, pa_cfg.get("source", "world"))
+    out = {s: primary_angle(P, pa_cfg["name"], s) for s in ("right", "left")}
+    ob = pa_cfg.get("orient_by")
+    if ob:
+        Q = _points(pre, ob.get("source", "world"))
+        out = {s: orient(v, primary_angle(Q, ob["name"], s), ob.get("sign", 1)) for s, v in out.items()}
+    return out
 
 
 SIGNAL_JOINTS = ("left_shoulder", "right_shoulder", "left_hip", "right_hip")
@@ -109,28 +165,40 @@ def load_pre(path):
         return {k: z[k] for k in ("world", "xy", "vis", "t")}
 
 
-def view_quality(pre, side, vis_thr=0.5):
-    """Share of frames where the trunk joints and the moving arm's elbow and wrist are all visible."""
-    j = [J[n] for n in SIGNAL_JOINTS + (f"{side}_elbow", f"{side}_wrist")]
+def view_quality(pre, side, vis_thr=0.5, limb=("elbow", "wrist")):
+    """Share of frames where the trunk joints and the moving limb's joints (``reps.quality_joints``; the arm's elbow
+    and wrist by default) are all visible."""
+    j = [J[n] for n in SIGNAL_JOINTS + tuple(f"{side}_{x}" for x in limb)]
     return float((pre["vis"][:, j] >= vis_thr).all(axis=1).mean())
 
 
 def video_info(pre, ex_cfg, side=None):
+    """Rep signal per side and the moving side. A signal without sides (e.g. all_joint_pc1) takes the moving side from
+    ``primary_angle.side_from`` (another signal's larger p5-p95 range), so 'side' still names the moving limb."""
     pa = ex_cfg["primary_angle"]
     ang = video_angles(pre, pa)
-    auto_side, rng = moving_side(ang, pa.get("side", "auto"))
+    side_from = pa.get("side_from")
+    if side_from:
+        rng_sig = {s: primary_angle(_points(pre, side_from.get("source", "world")), side_from["name"], s)
+                   for s in ("right", "left")}
+        auto_side, rng = moving_side(rng_sig, pa.get("side", "auto"))
+    else:
+        auto_side, rng = moving_side(ang, pa.get("side", "auto"))
     side = side or auto_side
     other = "left" if side == "right" else "right"
+    limb = tuple(ex_cfg["reps"].get("quality_joints") or ("elbow", "wrist"))
     return ang, dict(side=side, side_own=auto_side, range_moving=rng[side], range_other=rng[other],
-                     unit=UNITS[pa["name"]], primary_angle=pa["name"], n_frames_30=len(pre["t"]),
+                     range_signal=side_from["name"] if side_from else pa["name"],   # the ranges' signal (and unit)
+                     unit=UNITS[side_from["name"] if side_from else pa["name"]], primary_angle=pa["name"],
+                     n_frames_30=len(pre["t"]),
                      angle_source="3d_mediapipe_world" if pa.get("source", "world") == "world" else "2d_image",
-                     quality=view_quality(pre, side))
+                     quality=view_quality(pre, side, limb=limb))
 
 
-def transfer_reps(reps, off_src, off_dst, s_dst, fps, tol_s):
+def transfer_reps(reps, off_src, off_dst, s_dst, fps, tol_s, polarity="peak"):
     """Map reps of the source view onto another view of the same synced group (aligned time = t - offset).
     Reps not covered by the other view's recording (beyond ``tol_s``) are dropped; values are re-read in the
-    destination view's own signal, timings are kept."""
+    destination view's own signal (amplitude in the source view's polarity), timings are kept."""
     n, tol, out = len(s_dst), int(round(tol_s * fps)), []
     for i, r in enumerate(reps):
         k = {f: int(round((r[f] / fps - off_src + off_dst) * fps)) for f in ("start", "peak", "end")}
@@ -139,8 +207,9 @@ def transfer_reps(reps, off_src, off_dst, s_dst, fps, tol_s):
         k["start"], k["end"] = max(k["start"], 0), min(k["end"], n - 1)
         k["peak"] = min(max(k["peak"], k["start"]), k["end"])
         pv, a, b = s_dst[k["peak"]], s_dst[k["start"]], s_dst[k["end"]]
+        sg = -1.0 if polarity == "valley" else 1.0
         out.append((i, dict(r, **k, peak_val=pv, rest_start_val=a, rest_end_val=b,
-                            amplitude=float(min(pv - a, pv - b)))))
+                            amplitude=float(min(sg * (pv - a), sg * (pv - b))))))
     return out  # [(index of the source rep, rep)]
 
 
@@ -151,11 +220,12 @@ def group_job(args):
     gid, rows, offsets, ex_cfg, fps, rc = args
     try:
         pres = {r["view"]: load_pre(r["pre_path"]) for r in rows}
-        info, sig, own = {}, {}, {}
+        info, sig, own, pol = {}, {}, {}, {}
         for v, pre in pres.items():
             ang, info[v] = video_info(pre, ex_cfg)
             sig[v] = ang
-            own[v] = segment_reps(ang[info[v]["side"]], fps, **ex_cfg["reps"])
+            own[v], pol[v] = segment_signal(ang[info[v]["side"]], fps, ex_cfg["reps"])
+            info[v]["polarity"] = pol[v]
         aligned = [v for v in pres if np.isfinite(offsets.get(v, np.nan))]
         best = None
         if len(aligned) >= 2:
@@ -166,7 +236,8 @@ def group_job(args):
             side_g = info[best]["side"]
             for v in aligned:
                 trans[v] = dict(enumerate(own[best])) if v == best else dict(
-                    transfer_reps(own[best], offsets[best], offsets[v], sig[v][side_g], fps, rc["transfer_tol_s"]))
+                    transfer_reps(own[best], offsets[best], offsets[v], sig[v][side_g], fps, rc["transfer_tol_s"],
+                                  pol[best]))
             if rc["transfer_keep"] == "common":  # identical rep sets: drop reps some aligned view did not record
                 keep = set.intersection(*(set(t) for t in trans.values()))
                 trans = {v: {i: x for i, x in t.items() if i in keep} for v, t in trans.items()}
@@ -177,7 +248,7 @@ def group_job(args):
                 side = side_g
                 src = "best_view" if v == best else "transfer"
                 if side != info[v]["side"]:
-                    info[v] = video_info(pres[v], ex_cfg, side)[1]
+                    info[v] = dict(video_info(pres[v], ex_cfg, side)[1], polarity=pol[v])
                 reps = [trans[v][i] for i in sorted(trans[v])]
                 rep_uid = [f"{gid}_r{i:02d}" for i in sorted(trans[v])]  # shared across the group's views
                 n_set = len(own[best])
@@ -203,7 +274,7 @@ def ref_job(args):
     ref_id, ex, pre_path, ex_cfg, fps = args
     pre = load_pre(pre_path)
     ang, info = video_info(pre, ex_cfg)
-    reps = segment_reps(ang[info["side"]], fps, **ex_cfg["reps"])
+    reps, info["polarity"] = segment_signal(ang[info["side"]], fps, ex_cfg["reps"])
     return [dict(ref_id=ref_id, exercise=ex, rep=i, side=info["side"], **r) for i, r in enumerate(reps)], info
 
 
@@ -239,8 +310,8 @@ def main():
     V = pd.DataFrame(info).merge(meta, on="video_id")
     R = pd.DataFrame(reps).merge(meta.drop(columns=["score", "PF3", "PF4"]), on="video_id")
     O = pd.DataFrame(own).merge(meta.drop(columns=["score", "PF3", "PF4"]), on="video_id")
-    R.to_csv(resolve("data/reps.csv"), index=False)
-    O.to_csv(resolve("data/reps_perview.csv"), index=False)
+    R.to_csv(data_path(cfg, "reps_csv"), index=False)
+    O.to_csv(data_path(cfg, "reps_perview_csv"), index=False)
     out = resolve(cfg["outputs"]["phase1"])
     V.to_csv(out / "reps_per_video.csv", index=False)
 
@@ -252,7 +323,7 @@ def main():
             ref_rows += rows
             print(f"reference {r.ref_id} ({r.exercise} config): side {inf['side']}, {len(rows)} reps, "
                   f"range {inf['range_moving']:.2f} {inf['unit']} (other arm {inf['range_other']:.2f})")
-    pd.DataFrame(ref_rows).to_csv(resolve("data/reps_ref.csv"), index=False)
+    pd.DataFrame(ref_rows).to_csv(data_path(cfg, "reps_ref_csv"), index=False)
 
     print(f"\n{len(R)} reps in {len(V)} videos (per-view segmentation: {len(O)}); videos with 0 reps: "
           f"{(V.n_reps == 0).sum()}")

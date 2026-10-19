@@ -14,7 +14,7 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from ..config import load_config, resolve
+from ..config import data_path, load_config, resolve
 from .preprocess import resample_fixed
 from .skeleton import JOINT_SETS
 
@@ -68,7 +68,7 @@ def main():
     pc = cfg["preprocess"]
     joints = JOINT_SETS[pc["joint_set"]]
     idx = pd.read_csv(resolve(cfg["data"]["index_csv"]))
-    reps = pd.read_csv(resolve("data/reps.csv"))
+    reps = pd.read_csv(data_path(cfg, "reps_csv"))
     pre = idx.set_index("video_id").pre_path.map(resolve)
     out = resolve(pc["pack_dir"])
     out.mkdir(parents=True, exist_ok=True)

@@ -29,7 +29,7 @@ import pandas as pd
 
 from ..assess.angles import joint_angle, shoulder_elevation
 from ..assess.dtw import dtw, sample_at, warp_positions
-from ..config import load_config, resolve
+from ..config import data_path, load_config, resolve
 from .preprocess import resample_fixed
 from .reps import fill_nan
 from .skeleton import JOINT_SETS
@@ -107,7 +107,7 @@ def build(cfg, verbose=True):
     joints = JOINT_SETS[pc["joint_set"]]
     T = pc["T_rep"]
     name = f"reps_{pc['joint_set']}_T{T}"
-    reps = pd.read_csv(resolve("data/reps.csv"))
+    reps = pd.read_csv(data_path(cfg, "reps_csv"))
     pack_csv = pd.read_csv(resolve(pc["pack_dir"]) / f"{name}.csv")
     if not ((pack_csv.video_id.values == reps.video_id.values).all() and (pack_csv.rep.values == reps.rep.values).all()):
         raise RuntimeError("data/reps.csv and the rep pack are out of sync: rerun python -m cvdc.data.pack")

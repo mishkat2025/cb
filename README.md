@@ -3,8 +3,11 @@
 Implementation of the proposal "AI-Guided Physiotherapy Assessment for Low-Resource Telehealth through
 Cross-View Depth-Consistency Learning" on the MobiPhysio dataset (doi 10.7910/DVN/XSI0QN).
 
-- **Scope now:** E01 (Abduction) and E02 (Adduction) only (`data.include_exercises`). Exercises are
-  discovered at runtime, so adding one later is a config change.
+- **Scope:** all nine exercises since 2026-10-20 (`configs/data_full.yaml`, every input and output under
+  `data/full/`, `outputs/full/`, `runs/full/`). The E01/E02 **pilot** (`configs/data.yaml`, the default config) and
+  all its results stay as they are. Exercises are discovered at runtime, so adding one is a config change.
+- **Full scope status:** Phase 1 (keypoints incl. MediaPipe Hands for E06, sync, reps, packs, KTPFormer lifting) is
+  done for all nine exercises (`PROGRESS.md` §5b); nothing is trained on the full scope yet.
 - **Status:** Step 0, Phase 1 (keypoints and preprocessing), Phase 2 (models, CVDC loss, pair builder),
   Phase 3 steps (a) (GroupKFold-5 for the 4 main methods) and (a2) (score-setup diagnosis and fixes, Proposed
   variants) and Phase 4 (Module III: PT-demo reference templates, DTW deviations, rule-based errors, the reference
@@ -22,18 +25,33 @@ uv venv ../.venv --python 3.11
 uv pip install --python ../.venv/Scripts/python.exe -r requirements.txt
 ```
 
-MediaPipe model (Tasks API; `mediapipe==1.1.1` has no `solutions` module), placed in `data/models/`:
+MediaPipe models (Tasks API; `mediapipe==1.1.1` has no `solutions` module), placed in `data/models/`:
 `pose_landmarker_full.task` from
-`https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task`.
+`https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task`,
+and for E06 `hand_landmarker.task` (Apache 2.0) from
+`https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task`.
 
 Dataset root = the folder that contains this repo (override with the env variable `MOBIPHYSIO_ROOT`). It must
 hold the exercise folders (`E01(Abduction)`, ...), `Reference-Model Videos by PTs/` and
 `Physiotherapist Exercise Marking.csv`. The raw dataset is never modified.
 
-**Note (2026-10-20):** the full download put the nine exercise folders in `D:\cb\mobiphysio\`, while the CSV and the
-reference folder stay in `D:\cb`. The pipeline below still expects the old layout (it ran on the E01/E02 pilot); a
-separate video root is proposed (`DESIGN_DECISIONS.md` D1). The full-dataset Step 0 check takes both roots as
-arguments: `scripts/step0_full/README.md`, results in `PROGRESS.md` §3.7.
+**Video root (2026-10-20):** the full download put the nine exercise folders in `D:\cb\mobiphysio\`, while the CSV
+and the reference folder stay in `D:\cb`. `data.video_root` (D1; env `MOBIPHYSIO_VIDEO_ROOT`) points at the exercise
+folders; `configs/data_full.yaml` sets it to `../mobiphysio`. The pilot config keeps the old layout (it ran on the
+partial download). The full-dataset Step 0 check: `scripts/step0_full/README.md`, results in `PROGRESS.md` §3.7.
+
+## Full scope (all nine exercises): Phase 1
+
+Every command takes `--config configs/data_full.yaml`; nothing of the pilot is written (D15). Order, reuse of the
+pilot's keypoints and the extra checks: `scripts/phase1_full/README.md`; results in `PROGRESS.md` §5b.
+
+```bash
+python scripts/run_phase1.py --config configs/data_full.yaml --to pack      # index ... packs (resumable)
+python scripts/run_phase1.py --config configs/data_full.yaml --from lift    # KTPFormer lifting (GPU), lifted packs, checks, report
+python scripts/phase1_full/hands_check.py                                    # E06: MediaPipe Hands wrist angle
+python scripts/phase1_full/pf1_motion_check.py --exercise E05                # E05 PF1 = 0 non-experts: wrong exercise?
+python scripts/phase1_full/compare_pilot.py                                  # E01/E02 vs the pilot, E03-E09 vs Step 0
+```
 
 ## Phase 1: keypoints and preprocessing
 

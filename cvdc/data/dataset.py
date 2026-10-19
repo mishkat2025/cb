@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from ..config import exercise_codes, resolve
+from ..config import data_path, exercise_codes, resolve
 
 ITEMS = ["PF1", "PF2", "PF4", "CF1", "CF2", "CF3"]  # D5: PF3 is not a target
 
@@ -47,7 +47,7 @@ class PackData:
         pdir = resolve(pc["pack_dir"])
         meta = pd.read_csv(pdir / f"{name}.csv")
         if unit == "rep":
-            reps = pd.read_csv(resolve("data/reps.csv"))
+            reps = pd.read_csv(data_path(cfg, "reps_csv"))
             if not (reps.video_id.values == meta.video_id.values).all():
                 raise RuntimeError("data/reps.csv and the rep pack are out of sync")
             meta = reps

@@ -132,10 +132,91 @@ def wrist_path_pc1(P, side="right"):
     return -s if np.corrcoef(s[ok], r[ok, 0])[0, 1] > 0 else s  # outward motion -> negative
 
 
+def hip_flexion(P, side="right"):
+    """Hip flexion (3D or 2D): 180 - the angle at the hip between the trunk (hip -> shoulder) and the thigh
+    (hip -> knee). 0 = trunk and thigh in line; unsigned, so trunk extension in prone (E09) also reads > 0."""
+    return 180.0 - joint_angle(P, f"{side}_shoulder", f"{side}_hip", f"{side}_knee")
+
+
+def knee_flexion(P, side="right"):
+    """Knee flexion: 180 - the angle hip-knee-ankle. 0 = straight knee."""
+    return 180.0 - joint_angle(P, f"{side}_hip", f"{side}_knee", f"{side}_ankle")
+
+
+def trunk_thigh_angle(P, side=None):
+    """E09 trunk extension (3D): 180 - the angle at mid-hip between mid-shoulder and mid-knee. 0 = trunk and thighs
+    in line (lying flat), larger = trunk raised. Both sides together, so ``side`` is ignored."""
+    tr = mid(P, "left_shoulder", "right_shoulder") - mid(P, "left_hip", "right_hip")
+    th = mid(P, "left_knee", "right_knee") - mid(P, "left_hip", "right_hip")
+    return 180.0 - angle_between(tr, th)
+
+
+def forearm_elevation(P, side="right"):
+    """E03 / E04 forearm rotation read in the trunk frame (3D): the angle between the forearm (elbow -> wrist) and the
+    trunk's up axis. 0 = forearm pointing up along the trunk, 90 = horizontal, 180 = pointing down."""
+    _, up, _ = trunk_frame(P)
+    fa = P[..., J[f"{side}_wrist"], :] - P[..., J[f"{side}_elbow"], :]
+    return angle_between(fa, up)
+
+
+def wrist_height_2d(P, side="right"):
+    """Not an angle (2D image keypoints, torso units after preprocessing): height of the wrist above mid-shoulder,
+    up positive. Rep signal of E05 and E06 (segmentation only)."""
+    msh = mid(P, "left_shoulder", "right_shoulder")
+    return -(P[..., J[f"{side}_wrist"], 1] - msh[..., 1])
+
+
+COCO17 = ["nose", "left_eye", "right_eye", "left_ear", "right_ear", "left_shoulder", "right_shoulder", "left_elbow",
+          "right_elbow", "left_wrist", "right_wrist", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle",
+          "right_ankle"]
+
+
+def all_joint_pc1(P, side=None):
+    """Not an angle (2D): the first principal component over the video of all coco17 joint positions (torso units,
+    root-centred). Its sign is arbitrary; rep segmentation orients it by the rest level. Rep signal of E04 and E07
+    (segmentation only); ``side`` is ignored (the moving side comes from ``primary_angle.side_from``)."""
+    X = P[:, [J[n] for n in COCO17], :2].reshape(len(P), -1)
+    s = np.full(len(P), np.nan)
+    if len(X) <= 3 or not np.isfinite(X).all():
+        return s
+    z = X - X.mean(0)
+    return z @ np.linalg.svd(z, full_matrices=False)[2][0]
+
+
+# MediaPipe Hands landmark indices (21 per hand)
+H_WRIST, H_INDEX_MCP, H_MIDDLE_MCP, H_PINKY_MCP = 0, 5, 9, 17
+
+
+def wrist_extension(pose, hand, side="right"):
+    """E06 wrist extension (forearm vs hand, from MediaPipe Hands; spec §8, M16), signed, degrees.
+
+    pose: (..., 33, C) Pose keypoints, hand: (..., 21, C) the same side's hand landmarks (C = 2 image or 3). Only
+    directions are compared, so the hand may be in its own frame (MediaPipe hand world landmarks are hand-centred,
+    Pose world landmarks hip-centred; both use the camera's axes). Forearm = Pose elbow -> Pose wrist, hand axis =
+    hand wrist -> middle-finger MCP. In 3D the angle is signed with the back-of-hand normal d: positive = the hand
+    bent toward the back of the hand (extension), negative = toward the palm (flexion), 0 = in line with the forearm.
+    The hand axis lies in the palm plane, so the sign comes from the forearm: in extension the forearm points
+    toward the palm side of the hand (fa . d < 0). With the camera's axes (x right, y down, z away from the camera:
+    right-handed), n = (index MCP - wrist) x (pinky MCP - wrist) points out of the palm of a right hand and out of the
+    back of a left hand, so d = -n for the right side and n for the left. In 2D only the unsigned angle is defined."""
+    fa = pose[..., J[f"{side}_wrist"], :] - pose[..., J[f"{side}_elbow"], :]
+    ha = hand[..., H_MIDDLE_MCP, :] - hand[..., H_WRIST, :]
+    ang = angle_between(fa, ha)
+    if hand.shape[-1] != 3:
+        return ang
+    n = np.cross(hand[..., H_INDEX_MCP, :] - hand[..., H_WRIST, :], hand[..., H_PINKY_MCP, :] - hand[..., H_WRIST, :])
+    dorsal = -n if side == "right" else n
+    return np.where(np.sum(fa * dorsal, axis=-1) <= 0, ang, -ang)
+
+
 PRIMARY_ANGLES = {"shoulder_elevation": shoulder_elevation, "arm_frontal_angle": arm_frontal_angle,
-                  "horizontal_adduction": horizontal_adduction, "wrist_path_pc1": wrist_path_pc1}
+                  "horizontal_adduction": horizontal_adduction, "wrist_path_pc1": wrist_path_pc1,
+                  "hip_flexion": hip_flexion, "knee_flexion": knee_flexion, "trunk_thigh_angle": trunk_thigh_angle,
+                  "forearm_elevation": forearm_elevation, "wrist_height_2d": wrist_height_2d,
+                  "all_joint_pc1": all_joint_pc1}
 UNITS = {"shoulder_elevation": "deg", "arm_frontal_angle": "deg", "horizontal_adduction": "deg",
-         "wrist_path_pc1": "torso"}
+         "wrist_path_pc1": "torso", "hip_flexion": "deg", "knee_flexion": "deg", "trunk_thigh_angle": "deg",
+         "forearm_elevation": "deg", "wrist_height_2d": "torso", "all_joint_pc1": "torso", "wrist_extension": "deg"}
 # Module III channels (Phase 4, M7): every function takes (P, side) with side = the moving arm, so a left-arm
 # performance is assessed as its mirror image (P8).
 ASSESS_ANGLES = {"shoulder_elevation": shoulder_elevation, "horizontal_adduction": horizontal_adduction,
