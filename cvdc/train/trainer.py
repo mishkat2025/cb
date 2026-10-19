@@ -100,13 +100,25 @@ def fold_plan(cfg, meta, smoke=False):
 
 
 def check_plan(p):
-    """Raise if the inner split touches the test fold or overlaps the inner training subjects."""
+    """Raise if the inner split touches the test fold or overlaps the inner training subjects, or if the optional
+    training-view restriction (``views``, cross-view protocol E24) is empty."""
     tr, itr, iva, te = (set(p[k]) for k in ("train", "inner_train", "inner_val", "test"))
     if tr & te or (itr | iva) & te:
         raise AssertionError(f"fold {p['fold']}: training and test subjects overlap")
     if itr & iva or itr | iva != tr or not iva:
         raise AssertionError(f"fold {p['fold']}: bad inner split")
+    if p.get("views") is not None and not p["views"]:
+        raise AssertionError(f"fold {p['fold']}: empty training-view list")
     return True
+
+
+def with_views(plan, views):
+    """The plan restricted to training views ``views`` (cross-view protocol, E24): every training input (supervised
+    items, inner validation, CVDC rep sets, the embedding centre) comes from these views only; the test subjects
+    keep all their views, so a held-out view can be evaluated. views None = all views."""
+    p = {**plan, "views": None if views is None else sorted(views)}
+    check_plan(p)
+    return p
 
 
 class EarlyStopping:
@@ -210,8 +222,9 @@ class Run:
         self.tb.close()
 
 
-def items_of(data, subjects):
-    return torch.nonzero(data.subject_mask(subjects)).squeeze(1)
+def items_of(data, subjects, views=None):
+    """Items of ``subjects``, optionally only those filmed from ``views`` (None = every view)."""
+    return torch.nonzero(data.subject_mask(subjects, views)).squeeze(1)
 
 
 @torch.no_grad()
@@ -231,9 +244,9 @@ def forward_all(model, data, items, cfg, project=False, heads=True):
 
 
 def embedding_snapshot(model, data, plan, cfg):
-    """Embeddings for the VCI (E13): z and the projection of the test items, and the mean z of the whole training
-    fold (the centre of vci_centred)."""
-    te, tr = items_of(data, plan["test"]), items_of(data, plan["train"])
+    """Embeddings for the VCI (E13): z and the projection of the test items (every view), and the mean z of the
+    whole training fold in its training views (the centre of vci_centred; all views unless ``plan['views']``)."""
+    te, tr = items_of(data, plan["test"]), items_of(data, plan["train"], plan.get("views"))
     o = forward_all(model, data, te, cfg, project=True, heads=False)
     z_tr = forward_all(model, data, tr, cfg, project=False, heads=False)["z"]
     return {"item": te.cpu().numpy(), "z": o["z"].cpu().numpy().astype(np.float32),

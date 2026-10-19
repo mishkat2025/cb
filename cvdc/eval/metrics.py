@@ -111,10 +111,12 @@ def classification(t, p, W, k, labels=None):
     return {"accuracy": po, "macro_f1": f1[:, labels].mean(1), "kappa": kappa}
 
 
-def vci_sums(z, key, view, group, subj, n_subj, center=None):
+def vci_sums(z, key, view, group, subj, n_subj, center=None, pair_ok=None):
     """Per-subject sums for the VCI (E13; cvdc/eval/consistency.py defines it on one set of embeddings).
     z: (n, D) embeddings; key: same-performance id (rep set); view, group ((exercise, subject, variation) code):
-    (n,) ids; subj: (n,) subject index in [0, n_subj); center: vector subtracted first (vci_centred) or None.
+    (n,) ids; subj: (n,) subject index in [0, n_subj); center: vector subtracted first (vci_centred) or None;
+    pair_ok: (n, n) bool, only these pairs count (both same and other pairs; e.g. one member in a held-out view and
+    the other in a seen view, E24), None = all.
     Same pairs: same key, different view (always within one subject). Other pairs: different groups. Ordered pairs,
     as in viewpoint_consistency. Returns dict(same_sum (S,), same_cnt (S,), other_sum (S, S), other_cnt (S, S))."""
     z = np.asarray(z, np.float64)
@@ -127,6 +129,8 @@ def vci_sums(z, key, view, group, subj, n_subj, center=None):
     if (subj[:, None] != subj[None, :])[same].any():
         raise ValueError("a same-performance pair spans two subjects")
     other = group[:, None] != group[None, :]
+    if pair_ok is not None:
+        same, other = same & pair_ok, other & pair_ok
     S = np.zeros((len(z), n_subj))
     S[np.arange(len(z)), subj] = 1
     return {"same_sum": S.T @ (sim * same).sum(1), "same_cnt": S.T @ same.sum(1).astype(float),

@@ -60,8 +60,9 @@ def pretrain_cvdc(cfg, data, plan, run_dir, seed, max_epochs=None, log=print):
     max_epochs = int(max_epochs or tc["max_epochs_cvdc"])
     seed_everything(seed)
     model = CVDCModel(cfg).to(data.device)
-    tr_b = CVDCBatcher(data, cfg, allowed=data.subject_mask(plan["inner_train"]), seed=seed)
-    va_b = CVDCBatcher(data, cfg, allowed=data.subject_mask(plan["inner_val"]), seed=seed + 1)
+    views = plan.get("views")  # cross-view protocol (E24): rep sets of the training views only
+    tr_b = CVDCBatcher(data, cfg, allowed=data.subject_mask(plan["inner_train"], views), seed=seed)
+    va_b = CVDCBatcher(data, cfg, allowed=data.subject_mask(plan["inner_val"], views), seed=seed + 1)
     params = list(model.encoder.parameters()) + list(model.projection.parameters())
     opt = torch.optim.AdamW(params, lr=tc["lr"], weight_decay=tc["weight_decay"])
     sched = warmup_cosine(opt, max_epochs * len(tr_b), tc["warmup_frac"])

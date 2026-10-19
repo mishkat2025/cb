@@ -138,7 +138,8 @@ def train_supervised(cfg, data, plan, run_dir, seed, init=None, linear_probe=Non
     if lam:
         params += list(model.projection.parameters())
     items_list = model.heads.items
-    tr, va = items_of(data, plan["inner_train"]), items_of(data, plan["inner_val"])
+    views = plan.get("views")  # cross-view protocol (E24): training and validation items of these views only
+    tr, va = items_of(data, plan["inner_train"], views), items_of(data, plan["inner_val"], views)
     scaler = TargetScaler().fit(data.targets(tr, items_list))
     vscaler = None
     ia = cfg["heads"].get("item_activity") or {}
@@ -163,7 +164,7 @@ def train_supervised(cfg, data, plan, run_dir, seed, init=None, linear_probe=Non
                                     "min_epochs": min(tc["early_stopping"].get("min_epochs", 1), max_epochs)})
     cb, cb_iter = None, None
     if lam:
-        cb = CVDCBatcher(data, cfg, allowed=data.subject_mask(plan["inner_train"]), seed=seed)
+        cb = CVDCBatcher(data, cfg, allowed=data.subject_mask(plan["inner_train"], views), seed=seed)
         cb_iter, lc = cb.iterate(augment_views=True), cfg["cvdc"]["loss"]
     masks = {"rep": {f"{e} {gr}": [k for k, a in zip(items_list, row) if a] for (e, gr), row in
                      zip(data.strata, rep_mask.tolist())}}

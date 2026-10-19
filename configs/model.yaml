@@ -125,6 +125,17 @@ methods:                        # E14 step (a): identical splits, preprocessing,
   proposed_j01: {input: xy, cvdc: true, cvdc_lambda: 0.1}         # (ii) L_sup + 0.1 L_cvdc during fine-tuning
   proposed_j1: {input: xy, cvdc: true, cvdc_lambda: 1.0}          # (ii) L_sup + 1.0 L_cvdc during fine-tuning
 
+ablation:                       # Phase 5 (C5, E25): CVDC pair-source mixes, pretraining only, scored by the held-out VCI
+  sources:                      # name: cvdc.sources of that setting (weights from sync.pair_weights)
+    sync: [sync]                                  # (a) sync only
+    sync_audio: [sync, audio]                     # (b) + audio
+    sync_audio_rep: [sync, audio, rep]            # (c) + rep-matched
+    all: [sync, audio, rep, synthetic]            # (d) + synthetic = the default cvdc.sources
+    all_no_rep: [sync, audio, synthetic]          # (d') all without rep-matched pairs (C5)
+    synthetic: [synthetic]                        # (e) synthetic only
+  reuse: {all: phase3a}         # settings whose pretraining already exists: runs/<tag>/proposed/fold<k>/ (same config)
+  runs_tag: phase5_sources      # runs/<runs_tag>/<setting>/fold<k>/
+
 eval:                           # E1, E3, E9, E13, E15-E18
   proposed_default: proposed_j1      # T15 (user, 2026-10-19): "Proposed" = joint loss, lambda 1.0, in every later table
   proposed_alternative: proposed_lp  # the frozen CVDC encoder + heads, reported next to it

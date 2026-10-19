@@ -59,6 +59,10 @@ def reuse_cvdc(cfg, data, plan, log=print):
         if sorted(info[k]) != sorted(plan[k]):
             log(f"  cvdc: {d} used other {k} subjects; pretraining instead")
             return None
+    if info.get("views") != plan.get("views"):  # E24: an all-view encoder has seen the held-out view
+        log(f"  cvdc: {d} used training views {info.get('views') or 'all'}, not {plan.get('views') or 'all'}; "
+            "pretraining instead")
+        return None
     ck = torch.load(d / "best.pt", map_location=data.device, weights_only=True)
     if ck["input"] != cfg["model"]["input"]:
         raise RuntimeError(f"{d}: CVDC input {ck['input']} vs {cfg['model']['input']}")

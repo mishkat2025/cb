@@ -181,6 +181,39 @@ python scripts/phase4/report_phase4.py          # agreement, components, errors,
 | recording | `cvdc/eval/recording.py`, `scripts/phase4/recording_noise.py` | reps fully / half contained in each view of a synced performance |
 | report | `scripts/phase4/report_phase4.py` | `summary.md`, CSVs, `figs/template_<EX>.png`, `figs/agreement_scatter.png`; ICC with bootstrap in `cvdc/eval/metrics.py` |
 
+## Phase 5: evaluation (cross-view protocol, pair-source ablation, LOSO estimate)
+
+Same GroupKFold-5 folds, inner splits, seeds, budget and schedule as Phase 3 step (a2). Runs go to
+`runs/phase5_crossview/` and `runs/phase5_sources/`, tables to `outputs/results/phase5_*` (all gitignored). **Run GPU
+jobs one at a time**: two processes sharing the RTX 4060 Ti were slower than running them in sequence (A9).
+
+```bash
+# A. cross-view protocol: train on two views, test on the held-out third (F / L / R), 4 main methods x 5 folds
+python -m cvdc.eval.cross_view --smoke --force                 # plumbing check (~1 min)
+python -m cvdc.eval.cross_view --methods proposed_j1           # CVDC on the two training views + joint fine-tuning (~2.9 h)
+python -m cvdc.eval.cross_view --methods b1 b2_mediapipe b2_ktpformer   # (~1.5 h)
+python scripts/phase5/crossview_distance.py                    # embedding distance to the PT reference per model (~6 min)
+python scripts/phase5/report_crossview.py                      # exercise, MQ, VCI, distance view stability -> outputs/results/phase5_crossview/
+
+# B. CVDC pair-source ablation, pretraining only, held-out within-group VCI ((d) = the step (a) encoders, reused)
+python scripts/phase5/pair_sources.py --smoke --force           # plumbing check
+python scripts/phase5/pair_sources.py                           # sync / +audio / +rep / all - rep / synthetic only x 5 folds
+python scripts/phase5/report_pair_sources.py                    # VCI, paired differences, pair counts -> outputs/results/phase5_sources/
+
+# LOSO runtime estimate (nothing is trained)
+python scripts/phase5/loso_estimate.py                          # -> outputs/results/phase5_loso_estimate/
+```
+
+| Piece | Code | Notes |
+|---|---|---|
+| view restriction | `cvdc/train/trainer.py` (`with_views`), `PackData.subject_mask(subjects, views)` | every training input from the training views only (E24) |
+| cross-view runner | `cvdc/eval/cross_view.py` | 3 rotations × methods × folds, resumable; CVDC always pretrained on the two training views |
+| VCI pooling | `cvdc/eval/consistency.py` (`pooled_vci`) | within-stratum VCI over folds with bootstrap replicates and an optional pair filter |
+| reports | `scripts/phase5/report_crossview.py`, `report_pair_sources.py` | `summary.md` + CSVs; `--smoke` reads the smoke runs |
+
+Measured runtimes (one job at a time): cross-view 3.9 h (Proposed 2.4 h, each baseline ~0.5 h), pair sources 1.8 h
+(the 'all' setting reuses the step (a) encoders), distance + reports ~8 min. Results: `PROGRESS.md` §6e–6g.
+
 ## Tests
 
 ```bash
@@ -196,12 +229,13 @@ cvdc/data/          filenames, labels, index, video (PyAV), extract, skeleton, p
 cvdc/models/        graph, stgcn, heads, model, lifter (KTPFormer wrapper)
 cvdc/losses/        cvdc (weighted multi-positive InfoNCE), supervised
 cvdc/assess/        angles, dtw, template (reference + library), module3 (score, errors, JSON), run (Phase 4 runner)
-cvdc/eval/          consistency (VCI), splits, metrics (bootstrap CIs, ICC), baselines (set features, video-level
-                    baselines), recording (reps contained per view)
+cvdc/eval/          consistency (VCI, pooled within-stratum VCI), splits, metrics (bootstrap CIs, ICC), baselines (set
+                    features, video-level baselines), recording (reps contained per view), cross_view (Phase 5 runner)
 cvdc/train/         trainer, pretrain_cvdc, train_supervised, run (GroupKFold runner)
 cvdc/viz/           skeleton drawing, Phase 1 checks
 scripts/            run_phase1.py, phase1/ checks and report, phase2/ (smoke, lifter_check, bench), phase3/ (reports, label
-                    diagnostics), phase4/ (embedding distance, recording noise, report), step0/
+                    diagnostics), phase4/ (embedding distance, recording noise, report), phase5/ (pair-source runner,
+                    cross-view distance, reports, LOSO estimate), step0/
 third_party/        local clones used by wrappers (gitignored)
 tests/              pytest
 ```

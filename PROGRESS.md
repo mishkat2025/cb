@@ -1,8 +1,8 @@
 # Progress
 
-Last updated 2026-10-19 (Phase 4 + eighth review).
+Last updated 2026-10-19 (Phase 5 A and B, LOSO estimate).
 
-**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the supervisor's fifth-review changes (§4, §6.5: standardised targets, three VCI variants, the KTPFormer lifter for B2, bf16, the runtime estimate). The user's sixth-review decisions (§4) set the Phase 3 run order: **step (a), GroupKFold-5 for the 4 main methods, is done (§6b)**. **Step (a2), the score-setup diagnosis and fixes (label diagnostics, set-level baselines, video head, T6 weighting, stabilised early stopping, Proposed variants), is done (§6c).** The seventh review's decisions are recorded (§4: within-group score prediction is a negative result; Proposed = joint loss λ 1.0; no angle inputs to the heads; the movement-quality score as a secondary target). **Phase 4 (Module III with the PT demo as the reference, the embedding-to-reference distance and its view stability, the recording-noise test) is done for E01 and E02 (§6d)**. The eighth review's answers are applied (§4, §6d.6–6d.7: posture checks centred on the high-scoring experts as a marked post-hoc change, with before / after; speed stays expert-centred, the demo-centred speed is exploratory only; the demo defaults to the front view). Work stops here; the ablations (b) and the LOSO table (c) have not started.
+**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the fifth-review changes (§6.5). Phase 3 **step (a)** (§6b) and **step (a2)** (§6c) are done; the seventh review's decisions are recorded (§4). **Phase 4 (Module III, embedding-to-reference distance, recording-noise test) is done** (§6d), with the eighth review's changes (§6d.6–6d.7). **Phase 5 has started:** **A, the cross-view protocol** (train on two views, test on the held-out third, 4 main methods, GroupKFold-5) is done (§6e); **B, the CVDC pair-source ablation on the VCI** is done (§6f); the **LOSO runtime is estimated** (§6g: ~16 h for the 4 methods). **Work stops here, as asked: LOSO has not started**, and the other ablations (τ, embedding size, 2 vs 3 views, augmentation) have not run.
 
 **Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
 
@@ -232,6 +232,8 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 2. **Do not switch the main speed reference:** expert-centred speed stays primary; the demo-centred speed is reported only as a clearly labelled post-hoc exploratory analysis (M15).
 3. **CF item meanings:** the user asks the supervisor (dataset author); left as is for now (M7).
 4. **Live demo:** default view = front, with a `--view` option (X4, `demo.default_view`).
+
+**Phase 5 request (2026-10-19):** start Phase 5 for E01 and E02, in order, and stop and report after B: (A) the cross-view protocol on GroupKFold-5 (train on two views, test on the held-out third, rotating F / L / R) for B1, B2-MediaPipe, B2-KTPFormer and Proposed (λ 1.0), reporting on the held-out view the exercise classification, the movement-quality score within groups, the VCI and the view stability of the embedding distance to the PT reference (§6e, E24); (B) the pair-source ablation on the VCI only (CVDC pretraining + held-out within-group VCI, no fine-tuning; sync only / + audio / + rep / + synthetic / synthetic only; pair counts per source) (§6f, E25); then estimate the LOSO runtime of the 4 main methods with early stopping and the per-fold-encoder shortcut, **without starting LOSO** (§6g, E26).
 
 **Seventh review (2026-10-19): decisions on step (a2)** (`DESIGN_DECISIONS.md` E21, T15, T16, D13):
 1. **Within-group score prediction is reported as a negative result**, together with the label diagnostics (§6c.1). The step (a) and (a2) results stay in the repo and the reports; nothing is deleted (E21).
@@ -658,6 +660,167 @@ Before = the first run (every channel centred on the demo + view bias); after = 
 ### 6d.7 Eighth review: speed centred on the demo (M15, post-hoc exploratory only)
 The primary speed component stays expert-centred (M5a). Exploratory only (`speed_exploratory.csv`): the speed distance centred on the demo instead does **not** agree better (E01 experts PF2 −0.14 [−0.39, 0.14] vs 0.28 [0.07, 0.45] expert-centred; total / MQ within ±0.22 with CIs including 0 in every group). A score variant with the demo-centred speed is worse on PF2 (Δρ −0.31 [−0.57, −0.03]) and not better elsewhere (Δ −0.14 to −0.06). So the Phase 4 signal comes from the **angular-velocity deviation from the demo along the DTW path** (E02 0.24 [0.06, 0.41], non-experts 0.40 [0.15, 0.60]), which also carries amplitude differences, not from the demo's speed itself. Being post-hoc, none of these intervals is confirmatory.
 
+## 6e. Phase 5 A: cross-view protocol, GroupKFold-5 (2026-10-19)
+User request (Phase 5, in order A then B, stop after B): train on two views, test on the held-out third (rotate F / L / R) for B1, B2-MediaPipe, B2-KTPFormer and Proposed (λ 1.0); report on the held-out view the exercise classification, the movement-quality score within groups, the VCI and the view stability of the embedding distance to the PT reference. Decision E24 in `DESIGN_DECISIONS.md`. How to run: README "Phase 5". Tables: `outputs/results/phase5_crossview/summary.md` + CSVs (gitignored). All §0 limitations apply.
+
+### 6e.1 Setup
+- Same GroupKFold-5 folds, inner splits, seeds, epoch budget, early stopping (T8a, T8b) and schedule as step (a2). **Each run sees only its two training views**: supervised items, inner validation, target scalers, the video head's count statistics, CVDC pretraining and its validation, the joint loss's CVDC batches and the embedding centre (`trainer.with_views`; tests in `tests/test_crossview.py`, including CVDC batches drawn only from the training views).
+- **Proposed pretrains CVDC afresh on the two training views** in every rotation and fold (15 pretrainings): the step (a) encoders saw all three views, and `reuse_cvdc` now refuses an encoder trained on other views. Synthetic views stay on (rotations of the training views' world landmarks; they can reach the held-out camera's angle).
+- **What still crosses from the held-out camera is timing, not poses:** synced groups share rep boundaries segmented on their best view (P6b), and rep-matched pairs are DTW-aligned onto the set's reference view (A5).
+- Every run predicts all views of its test subjects, so each of the 915 evaluated videos (F 373 / L 270 / R 272) is scored **once as a held-out view** (the rotation that held its view out; each by a model that saw neither the subject nor the camera) and twice as a seen view. The step (a2) models (trained on all three views) are the 'all-view' reference.
+- **MQ** (D13) comes from the video head's items: 100 × mean(PF1, PF2, CF1, CF2, CF3), with items that do not vary in the video's group (T14, not learned there) set to their training mean in that group. The group-only baseline is fitted on the training subjects' training-view videos.
+- **VCI pairings:** held-out↔seen = same rep seen by the held-out camera and a seen camera, minus other groups with one member in each; seen↔seen = two different seen cameras, with the other-group pairs restricted the same way. Pooled over rotations both pairings hold the same camera pairs, and for an all-view model they agree exactly (checked).
+- Runtime (one GPU job at a time): B1 0.53 h, B2-MediaPipe 0.48 h, B2-KTPFormer 0.48 h, Proposed 2.40 h (CVDC 1.53 h) for 15 runs each; 3.9 h in total. Kept fine-tuning epochs median 32 / 26 / 23 / 18; CVDC kept epochs median 54 (30–70).
+- **Finding on compute:** two GPU processes at once were slower than running them in sequence (CVDC epoch 14.4 s shared vs 5.3 s alone; A9), so every Phase 5 job was chained.
+- Tests: `tests/test_crossview.py` (the view restriction, the plans keeping the Phase 3 folds, no reuse of an encoder trained on other views, CVDC batches of the training views only, the VCI pair filter against brute force); `python -m pytest -q tests`: **165 passed**.
+
+### 6e.2 Exercise classification on the held-out view (secondary, E6)
+Video level, pooled over both exercises and groups, accuracy [95% CI] / macro F1:
+
+| Method | held-out view | seen views (same models) | all-view model | held-out − seen | vs B1 (held-out) |
+|---|---|---|---|---|---|
+| B1 | 0.903 [0.867, 0.937] / 0.900 | 0.971 / 0.970 | 0.979 / 0.979 | −0.068 [−0.099, −0.041] | – |
+| B2-MediaPipe | 0.793 [0.751, 0.838] / 0.788 | 0.972 / 0.971 | 0.984 / 0.983 | −0.179 [−0.222, −0.135] | −0.109 [−0.150, −0.067] |
+| B2-KTPFormer | 0.827 [0.788, 0.866] / 0.821 | 0.956 / 0.955 | 0.973 / 0.972 | −0.128 [−0.167, −0.091] | −0.075 [−0.126, −0.025] |
+| **Proposed** | **0.968 [0.952, 0.983] / 0.968** | 0.983 / 0.982 | 0.991 / 0.991 | **−0.014 [−0.026, −0.001]** | **+0.066 [0.035, 0.098]** |
+
+- Per held-out view (F / L / R): B1 0.93 / 0.83 / 0.93; B2-MediaPipe 0.78 / 0.78 / 0.82; B2-KTPFormer 0.84 / 0.89 / 0.76; Proposed 0.98 / 0.96 / 0.97. Per group, Proposed 0.963 / 0.987 / 0.936 (E01 expert / E02 expert / E01 non-expert).
+- **The 3D-input baselines generalise worst to a new camera.** A likely reason: MediaPipe world landmarks (and the lifted 3D) are expressed in the camera's frame (A8 found the camera pitch in them), so a new camera shows the model a rotated skeleton it never saw.
+
+### 6e.3 Movement-quality score within groups (held-out view)
+Video level, RMSE [95% CI] / Spearman ρ:
+
+| Method | E01 expert (377) | E02 expert (381) | E01 non-expert (157) |
+|---|---|---|---|
+| B1 | 14.68 [11.22, 18.70] / 0.00 | 14.88 [11.64, 18.37] / −0.02 | 12.53 [9.74, 15.44] / 0.04 |
+| B2-MediaPipe | 15.98 [13.38, 19.51] / 0.06 | 16.58 [14.31, 18.91] / 0.05 | 12.37 [9.67, 15.09] / 0.12 |
+| B2-KTPFormer | 15.76 [12.68, 19.73] / 0.08 | 16.65 [14.09, 19.01] / −0.00 | 11.91 [9.74, 14.27] / 0.07 |
+| **Proposed** | 12.86 [9.17, 17.40] / 0.15 | 12.16 [9.08, 15.29] / 0.07 | 12.91 [9.57, 16.51] / −0.01 |
+| group-only (within-group mean) | **11.67** [7.31, 16.66] | **11.32** [7.97, 14.69] | **10.81** [8.10, 13.41] |
+| predict-the-mean | 12.49 | 12.10 | 25.11 |
+| *seen views, same models: B1 / B2-MP / B2-KTP / Proposed* | 12.53 / 12.04 / 12.45 / 12.31 | 12.29 / 11.45 / 12.22 / 11.55 | 11.55 / 11.60 / 11.70 / 11.42 |
+
+Paired MQ RMSE differences:
+
+| | E01 expert | E02 expert | E01 non-expert |
+|---|---|---|---|
+| held-out − seen: B1 | +2.15 [0.80, 4.13] | +2.59 [0.40, 4.70] | +0.99 [−0.64, 2.45] |
+| held-out − seen: B2-MediaPipe / B2-KTPFormer | +3.94 / +3.31 | +5.12 / +4.43 | +0.77 / +0.21 |
+| held-out − seen: **Proposed** | **+0.55 [0.22, 0.96]** | **+0.61 [−0.05, 1.22]** | +1.50 [0.22, 2.60] |
+| Proposed − B1 (held-out) | **−1.81 [−3.63, −0.51]** | −2.71 [−6.00, 0.02] | +0.38 [−1.30, 1.72] |
+| Proposed's gap − B1's gap | **−1.60 [−3.31, −0.43]** | −1.97 [−4.25, 0.37] | +0.51 [−0.68, 1.58] |
+| Proposed − group-only (held-out) | +1.20 [0.34, 2.49] | +0.84 [−0.26, 2.11] | +2.10 [0.27, 3.81] |
+
+- **CVDC shrinks the cross-view degradation of the MQ prediction** (E01 experts clearly, E02 experts by a similar amount but with a CI touching 0). B1 loses 2.2–2.6 points on an unseen camera and B2 loses 3.3–5.1 (worst on held-out L: B2 E02 RMSE 22–23 vs ~12 on seen views); Proposed loses about 0.6.
+- **The gain is in calibration, not ranking.** No method beats the within-group mean on the held-out view: every Δ vs group-only is positive (+0.84 to +5.33), and only two CIs include 0 (Proposed in E02, B2-KTPFormer in E01 non-experts). Held-out ρ ≤ 0.15 with every CI including 0 (Proposed E01 0.15 [−0.05, 0.33]; vs B1 +0.15 [−0.02, 0.28]). This is the same negative result as E21.
+- **E01 non-experts show no CVDC benefit.** Proposed's gap +1.50 [0.22, 2.60] is not smaller than B1's. 116 of their 157 videos are front views, so "held-out F" means training on just 21 + 21 non-expert side videos.
+- Total score (secondary, `summary.md`): the same pattern. No model beats the group mean; Proposed has the lowest expert RMSE (15.11 / 17.74 vs B1 16.00 / 20.64).
+
+### 6e.4 VCI on the held-out view (centred 256-d, held-out subjects)
+
+| Model | E01 expert | E02 expert | E01 non-expert |
+|---|---|---|---|
+| random init, held-out↔seen | 0.060 | 0.093 | 0.257 |
+| B1, held-out↔seen | 0.066 [−0.006, 0.122] | 0.028 [−0.010, 0.063] | 0.073 [−0.114, 0.201] |
+| B2-MediaPipe / B2-KTPFormer, held-out↔seen | 0.011 / 0.059 | 0.023 / 0.022 | 0.066 / 0.066 |
+| Proposed after CVDC (2 views), held-out↔seen | 0.268 [0.157, 0.349] | 0.203 [0.131, 0.240] | 0.310 [0.119, 0.407] |
+| **Proposed final, held-out↔seen** | **0.213 [0.133, 0.266]** | **0.209 [0.141, 0.241]** | 0.209 [0.064, 0.302] |
+| Proposed final, seen↔seen | 0.259 [0.181, 0.310] | 0.248 [0.173, 0.275] | 0.260 [0.117, 0.334] |
+| Proposed all-view model, same pairs | 0.258 | 0.271 | 0.187 |
+| same-rep pairs (held-out↔seen) | 6,502 | 6,906 | 142 |
+
+- **Proposed − B1 (held-out↔seen): +0.15 [0.08, 0.19], +0.18 [0.10, 0.22], +0.14 [−0.01, 0.26].** The CVDC embedding stays view-consistent for a camera it never saw. B1 and B2 are at the random-encoder level.
+- The unseen camera costs Proposed a little: held-out↔seen is 0.04–0.05 below seen↔seen (all three CIs below 0), and 0.05–0.06 below the all-view model on the same pairs (expert CIs below 0).
+- Per held-out view, Proposed's fold-mean held-out↔seen VCI is F 0.28 / L 0.17 / R 0.20 (E01 experts) and 0.23 / 0.21 / 0.20 (E02).
+- **E01 non-experts: no evidence for CVDC.** Under the cross-camera pairing the random encoder already scores 0.257 [0.020, 0.398] on their 142 rep-matched pairs, so Proposed's 0.209 is not above it.
+
+### 6e.5 View stability of the embedding distance to the PT reference
+Synced expert performances, ICC(1) [95% CI] of the standardised distance, rep level (video level in `summary.md`):
+
+| Model | E01 held-out↔seen | E01 seen↔seen | E01 all three | E02 held-out↔seen | E02 seen↔seen | E02 all three |
+|---|---|---|---|---|---|---|
+| B1 | 0.04 [−0.06, 0.14] | 0.04 | 0.03 | 0.01 [−0.11, 0.11] | 0.16 | 0.05 |
+| B2-MediaPipe | −0.06 | −0.05 | −0.06 | 0.01 | 0.17 | 0.05 |
+| B2-KTPFormer | 0.04 | 0.11 | 0.07 | −0.07 | 0.13 | −0.02 |
+| **Proposed** | **0.19 [0.09, 0.30]** | 0.37 [0.26, 0.50] | 0.23 | **0.40 [0.29, 0.51]** | 0.48 [0.39, 0.55] | 0.43 |
+| Proposed all-view model (Phase 4) | 0.32 | 0.32 | 0.32 | 0.62 | 0.62 | 0.62 |
+
+- **Proposed − B1, held-out↔seen: ΔICC +0.15 [0.04, 0.26] (E01), +0.40 [0.24, 0.55] (E02)**; video level 0.14 / 0.44 vs B1 0.03 / 0.01. B2 is not more stable than B1.
+- With an unseen camera Proposed's distance is less stable than with all views seen (ΔICC −0.14 [−0.21, −0.05] / −0.22 [−0.32, −0.09]), and less stable than between its own training views.
+- The PT demo is a front-view clip, so with F held out the reference itself comes from the unseen camera.
+
+### 6e.6 Conclusion of A
+- **On an unseen camera, CVDC is the only method that holds up.** It keeps exercise accuracy (0.968 vs B1 0.903, B2 0.79–0.83), keeps the embedding view-consistent (held-out VCI 0.21 vs ≤ 0.07) and keeps the reference distance view-stable (ICC 0.19 / 0.40 vs ≤ 0.04). Its MQ prediction degrades about a quarter as much as B1's (gap +0.55 / +0.61 vs +2.15 / +2.59 points).
+- **3D input (B2) generalises worst across cameras**, worse than plain 2D.
+- **Not solved:** on the held-out view no method predicts MQ (or the total score) within a group better than the group mean, and CVDC's advantage there is calibration, not ranking. Seeing the camera still helps Proposed a little (VCI −0.05, ICC −0.14 / −0.22 vs the all-view model).
+- **E01 non-experts:** no CVDC benefit; they are mostly front-only and enter CVDC almost only through synthetic views (D12).
+
+## 6f. Phase 5 B: CVDC pair-source ablation on the VCI (2026-10-19)
+User request: CVDC pretraining plus the held-out within-group VCI, no fine-tuning, for sync only / + audio / + rep / + synthetic / synthetic only, with pair counts per source. Decision E25. Tables: `outputs/results/phase5_sources/summary.md` + CSVs (gitignored).
+
+**Setup**
+- Same folds, inner splits, seeds, budget, schedule, augmentations, synthetic-view settings and early stopping (T8a) as the step (a) pretraining; only `cvdc.sources` changes.
+- **(d) all sources is the step (a) pretraining itself**, reused after checking that its configuration equals today's.
+- **(d′) all without rep-matched pairs** was added because C5 requires every source comparison with and without them.
+- The VCI is scored on identical same-rep pairs for every setting (all sources in `cvdc_members.csv`), so the evaluation does not depend on the training sources.
+- New pretraining: 108 min for 25 runs.
+
+**Pair counts per source:** positive pairs in one training epoch, all subjects (per-fold inner-training counts in `pair_counts.csv`):
+
+| Setting | E01 expert: sets / sync / audio / rep / synthetic | E02 expert | E01 non-expert |
+|---|---|---|---|
+| (a) sync only | 898 / 2,114 / 0 / 0 / 0 | 637 / 1,563 / 0 / 0 / 0 | 0 sets |
+| (b) + audio | 1,128 / 2,114 / 1,084 / 0 / 0 | 1,174 / 1,563 / 1,837 / 0 / 0 | 0 sets |
+| (c) + rep-matched | 1,147 / 2,114 / 1,084 / 53 / 0 | 1,193 / 1,563 / 1,837 / 53 / 0 | 29 / 0 / 0 / 71 / 0 |
+| (d) + synthetic (all) | 1,148 / 2,114 / 1,084 / 53 / 7,842 | 1,194 / 1,563 / 1,837 / 53 / 8,228 | 181 / 0 / 0 / 71 / 643 |
+| (d′) all − rep-matched | 1,148 / 2,114 / 1,084 / 0 / 7,770 | 1,194 / 1,563 / 1,837 / 0 / 8,156 | 181 / 0 / 0 / 0 / 543 |
+| (e) synthetic only | 1,148 / 0 / 0 / 0 / 3,444 | 1,194 / 0 / 0 / 0 / 3,582 | 181 / 0 / 0 / 0 / 543 |
+
+Real pair counts match Phase 2 (§6.2). Synthetic pairs are one epoch's random draw (2 views per set).
+
+**VCI after pretraining** (centred 256-d, held-out subjects, VCI [95% CI]; same-rep pairs 3,251 / 3,453 / 71):
+
+| Setting | E01 expert | E02 expert | E01 non-expert | kept CVDC epochs (folds) |
+|---|---|---|---|---|
+| random init | −0.019 [−0.116, 0.059] | 0.024 [−0.051, 0.065] | 0.072 [−0.188, 0.257] | – |
+| (a) sync only | 0.244 [0.095, 0.358] | 0.305 [0.151, 0.368] | 0.146 [−0.085, 0.334] | 30, 29, **3**, 35, 25 |
+| (b) + audio | 0.280 [0.132, 0.377] | 0.284 [0.151, 0.351] | 0.304 [0.032, 0.456] | 44, 24, 14, 19, 17 |
+| (c) + rep-matched | 0.273 [0.117, 0.378] | 0.296 [0.152, 0.382] | 0.301 [0.014, 0.440] | 28, 41, 27, 20, 30 |
+| (d) + synthetic = all (step a) | 0.298 [0.192, 0.379] | 0.257 [0.156, 0.326] | 0.296 [0.095, 0.383] | 53, 62, 75, 80, 77 |
+| (d′) all − rep-matched | 0.278 [0.168, 0.353] | 0.241 [0.141, 0.315] | 0.333 [0.110, 0.450] | 40, 48, 58, 44, 94 |
+| (e) synthetic only | 0.116 [0.016, 0.175] | 0.131 [0.054, 0.180] | 0.302 [0.072, 0.415] | 95, 93, 78, 95, 90 |
+
+Paired differences (centred VCI; E01 expert / E02 expert / E01 non-expert):
+- + audio: +0.037 [−0.016, 0.086] / −0.021 [−0.070, 0.051] / +0.158 [0.023, 0.241]
+- + rep-matched: −0.007 / +0.012 / −0.003 (all CIs include 0)
+- + synthetic on top of real pairs, (d) − (c): +0.025 [−0.049, 0.095] / −0.039 [−0.152, 0.066] / −0.005
+- rep-matched given synthetic, (d) − (d′): +0.020 [−0.001, 0.043] / +0.016 [−0.010, 0.039] / −0.037 [−0.111, 0.057]
+- synthetic only − all: **−0.182 [−0.253, −0.110] / −0.126 [−0.202, −0.044]** / +0.005 [−0.115, 0.115]
+
+**Findings**
+- **The real synchronized pairs alone give the experts' full view consistency.** Sync only reaches 0.24 / 0.31, and every real-pair mix reaches 0.24–0.30. No added source changes the expert VCI by an amount whose CI excludes 0.
+- **Synthetic views alone give about half** (0.12 / 0.13; −0.18 and −0.13 vs all sources), and on top of the real pairs they add nothing measurable. Rep-matched pairs (53 + 53 expert pairs, under 2% of the experts' real pairs) have no measurable effect.
+- **Caveat: sync-only fold 2 kept epoch 3.** On its small, noisy validation set the agreed rule (T8a: patience 10, no smoothing) stopped at epoch 13. That fold's E01-expert VCI is 0.065, against 0.22–0.40 in the other folds, which pulls the sync-only mean down. The rule was not changed after seeing this (see §8).
+- **E01 non-experts (71 rep-matched pairs from ~22 subjects): the stratum cannot separate the sources.**
+  - Every setting except sync only gives ~0.30, including (b), which has **no** non-expert positives at all; so their VCI is transfer from the experts' pairs.
+  - The one CI that excludes 0 (+ audio vs sync only, +0.158) involves the epoch-3 fold, and the fold values swing from −0.20 to 0.67 (the random encoder's alone from −0.20 to 0.43).
+  - Synthetic views, the only positives most non-expert sets get (D12), do not raise their VCI: synthetic only 0.302 vs 0.304 for (b).
+
+## 6g. LOSO runtime estimate (no LOSO run; 2026-10-19)
+`scripts/phase5/loso_estimate.py` → `outputs/results/phase5_loso_estimate/` (E26). 50 rep-level folds, inner split by the T8 rule (median 39 inner-training / 10 inner-validation subjects, 5,568 inner-training reps per fold vs 4,185–4,835 in GroupKFold). Epoch time per inner-training rep and epochs to early stopping come from the step (a2) runs. One GPU job at a time. Proposed = joint loss λ 1.0, fine-tuned from the step (a) CVDC encoder of the GroupKFold fold that held the subject out (C7), so no CVDC pretraining:
+
+| Method | s / epoch (median fold) | epochs run in step (a2) | central (mean epochs) | low (fewest) | cap (60 epochs) |
+|---|---|---|---|---|---|
+| B1 | 5.1 | 35, 39, 60, 42, 60 | 3.4 h | 2.5 h | 4.3 h |
+| B2-MediaPipe | 5.2 | 43, 33, 49, 37, 48 | 3.1 h | 2.4 h | 4.4 h |
+| B2-KTPFormer | 5.6 | 29, 38, 49, 42, 37 | 3.1 h | 2.3 h | 4.7 h |
+| Proposed (λ 1.0) | 10.6 | 27, 42, 60, 34, 60 | 6.6 h | 4.1 h | 8.9 h |
+| **4 main methods** | | | **16.2 h** | 11.4 h | 22.3 h |
+
+- Without the shortcut, Proposed would add 9.4 h of CVDC pretraining.
+- The Phase 2 estimate (20.5 h) assumed full budgets and no joint loss. The joint loss doubles Proposed's epoch cost, so early stopping saves less than expected.
+- The LOSO runner is not written yet: `fold_plan` supports GroupKFold only, and the shortcut needs the subject → encoder map (`splits.fold_of`) in place of the current subject check in `reuse_cvdc`.
+
 ## 7. Phase checklist
 All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
 
@@ -699,10 +862,11 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - [x] trainer (`cvdc/train/`): rep-level training as the default (T1, E12); targets standardised per training fold (T7); bf16; early stopping on an inner validation split of the training subjects, stopping epochs logged (T8, T8a); TensorBoard, checkpoints, config snapshot per run; full fine-tuning or linear probe (T10);
   - [x] smoke test (3 subjects, 2 epochs; `python -m cvdc.train.run --smoke`);
   - [x] **LOSO runtime estimate** (§6.5; upper bound without early stopping);
+  - [x] **LOSO runtime re-estimate with early stopping and the shortcut** (Phase 5, §6g, E26);
   - [x] **(a) GroupKFold-5: B1, B2-MediaPipe, B2-KTPFormer, Proposed** (CVDC pretraining + fine-tuning): within-group results vs mean / group-only / duration-only baselines, within-group VCI; **stop and report**; done 2026-10-18, results in §6b;
   - [x] **(a2) score setup** (user request after step (a)): label diagnostics and set-level baselines (rep-count-only, set-features); video head (mean + attention pooling + set rep count, T13); T6 per-video weighting; early stopping min 10 / patience 15 / EMA (T8b); items only where they vary (T14); Proposed variants (i) frozen, (ii) λ 0.1 / 1.0, (iii) full fine-tune (T15); re-run of B1, Proposed variants, B2-MediaPipe, B2-KTPFormer on GroupKFold-5; **stop and report**; done 2026-10-18, results in §6c;
-  - [ ] (b) after approval: CVDC ablations on GroupKFold (C5);
-  - [ ] (c) then the final LOSO table (per-fold-encoder shortcut, C7) for the 4 main methods.
+  - [ ] (b) CVDC ablations on GroupKFold (C5): **pair sources done (Phase 5 B, §6f)**; τ, embedding size, 2 vs 3 views, augmentation not run;
+  - [ ] (c) then the final LOSO table (per-fold-encoder shortcut, C7) for the 4 main methods: **runtime estimated (§6g, ~16 h), not started; the LOSO runner is not written yet**.
 - [x] **Phase 4, Module III** (2026-10-19, E01 + E02; results in §6d):
   - [x] templates (PT demo at 30 fps, mirrored, 3D angles; per-view bias and tolerance bands from expert videos scoring ≥ 95, refitted per fold);
   - [x] DTW alignment, angle deviation, ROM shortfall, speed and angular-velocity deviation, left/right symmetry;
@@ -715,10 +879,10 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - **within-group metrics first** (expert-only, non-expert-only), pooled second (E9);
   - group-only baseline next to mean and duration-only (E10);
   - group-separability probe on the embeddings vs within-group score probes, incl. a view-matched subset (E11);
-  - GroupKFold and LOSO;
+  - GroupKFold (done for the main table, §6b–6c) and LOSO (estimated, §6g; not started);
   - stats;
-  - cross-view protocol;
-  - ablations (a)–(e) and (d′) (with and without rep-matched pairs), plus τ, embedding size, augmentation; E01 non-experts as a separate stratum (C5, D12);
+  - [x] cross-view protocol (GroupKFold-5, 4 main methods; §6e, E24);
+  - [x] pair-source ablations (a)–(e) and (d′) on the VCI, E01 non-experts as a separate stratum (§6f, E25); [ ] τ, embedding size, 2 vs 3 views, augmentation (C5);
   - VCI: centred 256-d (primary), raw, projection; within strata (E13);
   - B2 with MediaPipe-3D and KTPFormer-3D inputs (A10);
   - label-noise floor;
@@ -745,6 +909,13 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
 **Answered in the seventh review (2026-10-19)** (the step (a2) questions; §4): within-group score prediction is reported as a negative result with the label diagnostics (E21); Proposed = joint loss λ 1.0, frozen encoder as the alternative (T15); no angle / ROM inputs to the heads (T16); total score official, movement-quality score secondary (D13). Still my choices, not reviewed: the T14 thresholds (≥ 5 subjects off the mode, SD ≥ 0.05), the EMA factor 0.7 (T8b), and the reuse of the step (a) CVDC encoders (T15).
 
 **Answered in the eighth review (2026-10-19)** (the Phase 4 questions; §4, §6d.6–6d.7): posture checks centred on the experts (M14, post-hoc, before / after reported); speed stays expert-centred, demo-centred speed exploratory only (M15); the demo defaults to the front view with `--view` (X4).
+
+**Questions after Phase 5 A and B (not applied):**
+1. **LOSO:** start the final LOSO table for the 4 main methods? Estimated ~16 h of GPU (11–22 h), run as one job at a time; the LOSO runner (shortcut encoder map, inner splits per LOSO fold) still has to be written and smoke-tested first.
+2. **CVDC early stopping in the ablations:** the agreed rule (T8a: patience 10, no smoothing) kept epoch 3 in sync-only fold 2 (§6f), which pulls that setting's VCI down. Keep T8a as decided (as now), or give CVDC pretraining the T8b smoothing / minimum epochs for the remaining ablations? Changing it would also change (d) and need re-runs.
+3. **Synthetic views and the unseen camera:** in A the held-out camera was reachable during CVDC only through synthetic views, while B shows synthetic views add nothing on top of real pairs between seen cameras. A cross-view run of Proposed without synthetic views (~2.4 h) would show whether they are what carries CVDC to the unseen camera. Run it?
+4. **Remaining C5 ablations** (τ, embedding size, 2 vs 3 views, augmentation): run them on GroupKFold before LOSO, or after?
+5. **E01 non-experts:** no CVDC benefit in A or B (mostly front-only, 71 rep-matched pairs). Report as a limitation (D12) and keep them as a separate stratum, as now?
 
 **Still open after Phase 4:**
 - **E01 CF item meanings** (which EAAQ criterion is CF1, CF2, CF3): the user asks the supervisor (dataset author). Until then the rules do not follow the items, and the non-expert end-range finding (a higher end range goes with lower scores, ρ −0.31) stays unexplained.

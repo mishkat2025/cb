@@ -109,8 +109,12 @@ class PackData:
         return {"score": self.score[idx], "quality": self.quality[idx], "exercise": self.exercise[idx],
                 "items": torch.stack([self.items[k][idx] for k in items], -1) if items else None}
 
-    def subject_mask(self, subjects):
-        return torch.tensor(self.meta.subject.isin(set(subjects)).to_numpy(), device=self.device)
+    def subject_mask(self, subjects, views=None):
+        """Items of ``subjects``; with ``views``, only those filmed from these views (cross-view protocol, E24)."""
+        m = self.meta.subject.isin(set(subjects)).to_numpy()
+        if views is not None:
+            m = m & self.meta.view.isin(set(views)).to_numpy()
+        return torch.tensor(m, device=self.device)
 
     def video_targets(self, vids, items):
         """Video-level labels (score 0-100, items 0-1) for video codes ``vids``."""
