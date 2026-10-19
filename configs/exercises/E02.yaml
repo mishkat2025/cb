@@ -30,6 +30,8 @@ assess:                          # Module III (Phase 4); supervisor answers 1, 2
   # shoulder_elevation = the spec's "shoulder abduction angle (trunk line vs upper arm)": the arm stays low in E02.
   channels: [horizontal_adduction, shoulder_elevation, elbow_extension, contralateral_elevation, trunk_lateral_lean,
              shoulder_asymmetry]
+  posture_channels: [shoulder_elevation, elbow_extension, contralateral_elevation, trunk_lateral_lean,
+                    shoulder_asymmetry]   # M14: centred on the experts
   score:
     angle_channels: [horizontal_adduction, shoulder_elevation, elbow_extension, contralateral_elevation,
                      trunk_lateral_lean]

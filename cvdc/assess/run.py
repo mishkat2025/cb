@@ -10,9 +10,11 @@
   4. Per-video JSON reports (M13), with the embedding-to-reference distance of ``eval.proposed_default`` if
      outputs/phase4/embedding_distance_reps.csv exists (scripts/phase4/embedding_distance.py, run first).
 
-usage: python -m cvdc.assess.run [--config C] [--workers 8]
-Writes outputs/phase4/: module3_reps.csv, module3_errors.csv, module3_videos.csv, reference_curves.csv,
-library_fold_counts.csv, json/<video_id>.json; outputs/phase4/library/<EX>.{npz,json}.
+usage: python -m cvdc.assess.run [--config C] [--workers 8] [--posture-centre pt_demo|experts] [--out DIR] [--no-json]
+Writes <out> (default outputs/phase4/): module3_reps.csv, module3_errors.csv, module3_videos.csv, reference_curves.csv,
+library_fold_counts.csv, json/<video_id>.json; outputs/phase4/library/<EX>.{npz,json}. ``--posture-centre`` overrides
+``assess.posture_centre`` (M14); the before / after comparison runs the old setting with
+``--posture-centre pt_demo --out outputs/phase4/posture_pt --no-json``.
 """
 import argparse
 import json
@@ -69,11 +71,17 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--posture-centre", choices=["pt_demo", "experts"], help="override assess.posture_centre (M14)")
+    ap.add_argument("--out", help=f"output directory (default {OUT})")
+    ap.add_argument("--no-json", action="store_true", help="skip the per-video JSON files")
     a = ap.parse_args()
     t0 = time.time()
     cfg = load_config(a.config)
-    out = resolve(OUT)
+    if a.posture_centre:
+        cfg["assess"]["posture_centre"] = a.posture_centre
+    out = resolve(a.out or OUT)
     (out / "json").mkdir(parents=True, exist_ok=True)
+    print(f"posture checks centred on: {cfg['assess'].get('posture_centre', 'pt_demo')}; output {out}")
     tc = cfg["templates"]
     idx = pd.read_csv(resolve(cfg["data"]["index_csv"]))
     idx["MQ"] = movement_quality(idx, cfg["labels"]["movement_quality_items"])
@@ -84,7 +92,7 @@ def main():
     fold_of = {s: p["fold"] for p in plans for s in p["test"]}
     pre = idx.set_index("video_id").pre_path
     vscore = idx.set_index("video_id").score
-    emb_path = out / "embedding_distance_reps.csv"
+    emb_path = resolve(OUT) / "embedding_distance_reps.csv"
     emb = None
     if emb_path.exists():
         e = pd.read_csv(emb_path)
@@ -151,11 +159,12 @@ def main():
             meta = {"exercise": f"{ex}_{ex_cfg['name']}", "video_id": vid, "view": d.view.iloc[0],
                     "angle_source": ac["angle_source"],
                     "template": {"source": tc["source"], "file": ref_file, "library": f"fold{f}",
-                                 "min_score": tc["min_score"]},
+                                 "min_score": tc["min_score"], "posture_centre": ac.get("posture_centre", "pt_demo")},
                     "n_reps_set": n_set, "expected_reps": (ex_cfg.get("eaaq") or {}).get("expected_reps")}
             rep_ = video_report(meta, entries, serr, ac)
             validate_report(rep_)
-            (out / "json" / f"{vid}.json").write_text(json.dumps(rep_, indent=1), encoding="utf-8")
+            if not a.no_json:
+                (out / "json" / f"{vid}.json").write_text(json.dumps(rep_, indent=1), encoding="utf-8")
             vid_rows.append(dict(video_id=vid, exercise=ex, fold=f, ref_set_score=rep_["set_score"],
                                  n_reps=len(entries), n_reps_set=n_set, too_few_reps=int(bool(serr)),
                                  n_rep_errors=sum(len(x["errors"]) for x in entries)))

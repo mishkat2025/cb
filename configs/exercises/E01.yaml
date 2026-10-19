@@ -29,6 +29,7 @@ assess:                          # Module III (Phase 4); supervisor answers 1, 2
     eaaq_phase_s: [1.5, 2.5]     # documented alternative (PF2 text), used when source: eaaq
   # Phase 4 (M7): channels compared with the PT template (3D, moving arm = side; left arms mirrored)
   channels: [shoulder_elevation, elbow_extension, contralateral_elevation, trunk_lateral_lean, shoulder_asymmetry]
+  posture_channels: [elbow_extension, contralateral_elevation, trunk_lateral_lean, shoulder_asymmetry]   # M14: centred on the experts
   score:
     angle_channels: [shoulder_elevation, elbow_extension, contralateral_elevation, trunk_lateral_lean]
     symmetry_channel: shoulder_asymmetry

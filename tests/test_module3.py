@@ -255,3 +255,24 @@ def test_movement_quality_score():
     df = pd.DataFrame({"PF1": [1, 1, 0], "PF2": [1, 0.5, 0], "PF3": [0, 1, 1], "PF4": [0.3, 1, 1], "CF1": [1, 1, 0],
                        "CF2": [1, 0.5, 0], "CF3": [1, 1, 0]})
     np.testing.assert_allclose(movement_quality(df), [100, 80, 0])  # PF3 / PF4 do not enter
+
+
+def test_posture_centre_experts():
+    from cvdc.assess.module3 import compare
+
+    ref = make_ref()
+    rng = np.random.default_rng(4)
+    lib = library_for(ref, {"F": [rep_signals(movement(int(n), elbow_bend=30), 0, int(n) - 1, "right", AC, FPS)
+                                  for n in rng.integers(70, 95, 12)]})  # every expert bends the elbow by 30 deg
+    sig = rep_signals(movement(80, elbow_bend=30), 0, 79, "right", AC, FPS)
+    al = aligned_rep(sig, ref)
+    pt = compare(sig, al, ref, lib["F"], {**AC, "posture_centre": "pt_demo"})
+    ex = compare(sig, al, ref, lib["F"], {**AC, "posture_centre": "experts", "posture_channels": ["elbow_extension"]})
+    np.testing.assert_allclose(ex["target"]["elbow_extension"], lib["F"]["mean"]["elbow_extension"])
+    np.testing.assert_allclose(ex["target"]["shoulder_elevation"], pt["target"]["shoulder_elevation"])  # main channel
+    assert pt["measures"]["dev_abs_elbow_extension"] > 20 > 3 > ex["measures"]["dev_abs_elbow_extension"]
+    errs = detect_errors(ex, al, ref, lib["F"], sig, {**AC, "posture_centre": "experts"}, AC["rules"])
+    assert not [e for e in errs if e["type"] == "elbow_bent"]
+    assert ex["measures"]["z_speed_demo"] == pytest.approx(al["log2_speed"] / lib["F"]["speed_sd"])
+    with pytest.raises(ValueError):
+        compare(sig, al, ref, lib["F"], {**AC, "posture_centre": "median"})

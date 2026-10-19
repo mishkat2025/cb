@@ -19,6 +19,12 @@ row of a stratum):
                  standardised distance, between-view Spearman, and R_view = mean |change between views| / mean
                  |difference between performances|; Module III's score and end-range angle as comparison rows
   recording      item 6 (recording_noise.json)
+  posture centre before / after (M14, post-hoc): the Phase 4 first run with every channel centred on the PT demo
+                 (outputs/phase4/posture_pt, ``python -m cvdc.assess.run --posture-centre pt_demo --out ... --no-json``)
+                 vs the posture checks centred on the high-scoring experts (default): agreement with paired
+                 differences, rule rates overall and in the >= 95 videos, view stability of the score
+  speed (exploratory, M15): the speed centred on the demo instead of the experts, as a component and as a score
+                 variant; post-hoc, not the primary score
 Agreement signs: "closeness" = -distance, so for every row a positive rho means agreement with the physiotherapists.
 
 usage: python scripts/phase4/report_phase4.py [--boot 2000]
@@ -165,6 +171,91 @@ def standardise_per_fold(E, plans, col):
             mu, sd = d.loc[tr, col].mean(), d.loc[tr, col].std()
             E.loc[d.index, col + "_z"] = (d[col] - mu) / sd
     return E
+
+
+def rescore(R, sc, replace=None):
+    """Rep score from the group distances X_g (M11), optionally with some groups replaced (dict g -> array)."""
+    gs = ("angle", "rom", "speed", "symmetry")
+    cols = {g: R[f"X_{g}"].to_numpy(float) for g in gs}
+    cols.update(replace or {})
+    P = np.stack([np.minimum(1.0, cols[g] / sc["d_zero"]) * sc["weights"][g] for g in gs], 1)
+    Wt = np.stack([np.isfinite(cols[g]) * sc["weights"][g] for g in gs], 1)
+    return 100 * (1 - np.nansum(P, 1) / Wt.sum(1))
+
+
+def paired_rho(d, cols, targets, n_boot, seed, ci, active, ex, grp, signs=None):
+    """Spearman of each column with each target on the same subject draws, plus paired differences vs cols[0]."""
+    d = d.reset_index(drop=True)
+    subs, M = draws(d.subject.to_numpy(), d.group.to_numpy(), n_boot, seed)
+    W = np.vstack([np.ones(len(d)), item_weights(d.subject.to_numpy(), subs, M)])
+    rows = []
+    for t in targets:
+        if t not in ("score", "MQ") and t not in active.get((ex, grp), set()):
+            continue
+        base = None
+        for c in cols:
+            x = (signs or {}).get(c, 1) * d[c].to_numpy(float)
+            y = d[t].to_numpy(float)
+            ok = np.isfinite(x) & np.isfinite(y)
+            r = regression(y[ok], x[ok], W[:, ok])["spearman"]
+            row = dict(target=t, column=c, rho=float(r[0]), lo=interval(r[1:], ci)[0], hi=interval(r[1:], ci)[1])
+            if base is None:
+                base = r
+            else:
+                dd = r - base
+                row.update(delta=float(dd[0]), delta_lo=interval(dd[1:], ci)[0], delta_hi=interval(dd[1:], ci)[1])
+            rows.append(row)
+    return rows
+
+
+def before_after(cfg, V, R, Vb, Rb, reps, synced, active, n_boot, seed, ci):
+    """M14: posture checks centred on the PT demo (before) vs on the high-scoring experts (after)."""
+    agree, rates, stab = [], [], []
+    vb = Vb.set_index("video_id").ref_set_score
+    Vx = V.assign(score_before=V.video_id.map(vb).to_numpy(), score_after=V.ref_set_score)
+    for sname, ex, grp in STRATA:
+        d = Vx[mask(Vx, ex, grp)]
+        for r in paired_rho(d, ["score_before", "score_after"], TARGETS, n_boot, seed, ci, active, ex, grp):
+            agree.append(dict(stratum=sname, **r))
+    vscore = V.set_index("video_id").score
+    errs = sorted({c for c in R.columns if c.startswith("err_")} | {c for c in Rb.columns if c.startswith("err_")})
+    for nm, RR in (("before", Rb), ("after", R)):
+        RR = RR.assign(vscore=RR.video_id.map(vscore))
+        for sname, ex, grp in STRATA:
+            d = RR[mask(RR, ex, grp)]
+            top = d[d.vscore >= cfg["templates"]["min_score"]]
+            for e in errs:
+                if e not in d:
+                    continue
+                rates.append(dict(variant=nm, stratum=sname, error=e[4:], rate=d[e].mean(),
+                                  rate_ge95=top[e].mean() if len(top) else np.nan,
+                                  rate_lt80=d[d.vscore < 80][e].mean() if (d.vscore < 80).any() else np.nan))
+        rr = RR.merge(reps[["video_id", "rep", "rep_uid", "group_id"]], on=["video_id", "rep"], how="left")
+        rr = rr[rr.group_id.isin(synced) & (rr.group == "expert")]
+        for sname, ex, _ in STRATA[:2]:
+            x = rr[rr.exercise == ex]
+            r, _, _ = view_stability(x.assign(perf=x.rep_uid), "ref_score", n_boot, seed, ci)
+            stab.append(dict(variant=nm, stratum=sname, **r))
+    return pd.DataFrame(agree), pd.DataFrame(rates), pd.DataFrame(stab), Vx
+
+
+def speed_exploratory(cfg, V, R, active, n_boot, seed, ci):
+    """M15 (post-hoc, exploratory): speed centred on the demo vs on the experts (primary)."""
+    sc = cfg["assess"]["score"]
+    R = R.copy()
+    R["X_speed_demo"] = np.abs(R.z_speed_demo.to_numpy(float))
+    R["score_speed_demo"] = rescore(R, sc, {"speed": R.X_speed_demo.to_numpy(float)})
+    v = R.groupby("video_id")[["X_speed", "X_speed_demo", "score_speed_demo", "omega_dev"]].mean()
+    d0 = V.join(v, on="video_id")
+    rows = []
+    for sname, ex, grp in STRATA:
+        d = d0[mask(d0, ex, grp)]
+        for r in paired_rho(d, ["X_speed", "X_speed_demo", "omega_dev"], TARGETS, n_boot, seed, ci, active, ex, grp,
+                            signs={"X_speed": -1, "X_speed_demo": -1, "omega_dev": -1}):
+            rows.append(dict(stratum=sname, part="component", **r))
+        for r in paired_rho(d, ["ref_set_score", "score_speed_demo"], TARGETS, n_boot, seed, ci, active, ex, grp):
+            rows.append(dict(stratum=sname, part="score", **r))
+    return pd.DataFrame(rows)
 
 
 def main():
@@ -374,9 +465,19 @@ def main():
     ER = pd.DataFrame(er_rows)
     ER.to_csv(out / "errors_summary.csv", index=False)
 
+    assert np.allclose(rescore(R, cfg["assess"]["score"]), R.ref_score, equal_nan=True)  # M11 reproduced
+    bdir = out / "posture_pt"
+    BA = None
+    if (bdir / "module3_videos.csv").exists():
+        BA = before_after(cfg, V, R, pd.read_csv(bdir / "module3_videos.csv"), pd.read_csv(bdir / "module3_reps.csv"),
+                          reps, synced, active, n_boot, seed, ci)
+        for k, t in zip(("agreement", "error_rates", "view_stability"), BA[:3]):
+            t.to_csv(out / f"posture_before_after_{k}.csv", index=False)
+    SPX = speed_exploratory(cfg, V, R, active, n_boot, seed, ci)
+    SPX.to_csv(out / "speed_exploratory.csv", index=False)
     rn = json.loads((out / "recording_noise.json").read_text(encoding="utf-8"))
     figures(cfg, out, R, V)
-    write_summary(out, cfg, A, C, VW, SEP, EMB, REG, VS, ER, rn, V, R, methods, n_boot, act)
+    write_summary(out, cfg, A, C, VW, SEP, EMB, REG, VS, ER, rn, V, R, methods, n_boot, act, BA, SPX)
     print(f"report written to {out / 'summary.md'} ({time.time() - t0:.0f} s)")
 
 
@@ -429,13 +530,14 @@ def figures(cfg, out, R, V):
     plt.close(fig)
 
 
-def write_summary(out, cfg, A, C, VW, SEP, EMB, REG, VS, ER, rn, V, R, methods, n_boot, act):
+def write_summary(out, cfg, A, C, VW, SEP, EMB, REG, VS, ER, rn, V, R, methods, n_boot, act, BA=None, SPX=None):
     L = []
     w = L.append
     w("# Phase 4: Module III (reference-based assessment) and the embedding-to-reference distance\n")
     w(f"E01 and E02, GroupKFold-5 (the Phase 3 folds), video level, {int(V.shape[0])} videos / {int(R.shape[0])} reps; "
       f"95% CIs: subject bootstrap ({n_boot} draws). Within groups first (E9). Libraries (view bias, bands, ROM and speed "
-      "tolerances) are fitted on each fold's training subjects only; the PT demo is the reference.\n")
+      "tolerances) are fitted on each fold's training subjects only; the PT demo is the reference curve. Posture checks "
+      f"centred on: **{cfg['assess'].get('posture_centre', 'pt_demo')}** (M14; before / after at the end).\n")
     w("## Reference score vs physiotherapist scores (within groups)\n")
     w("Spearman ρ [95% CI] of the set score (mean rep score) with each label; '·' = the item does not vary in the "
       "group (T14).\n")
@@ -550,6 +652,59 @@ def write_summary(out, cfg, A, C, VW, SEP, EMB, REG, VS, ER, rn, V, R, methods, 
           f"{r['PF3_1_given_count_ge10']:.0%} of views with ≥ 10 recorded reps vs {r['PF3_1_given_count_lt10']:.0%} "
           f"with fewer.")
     w("")
+    if BA is not None:
+        agree, rates, stab, _ = BA
+        w("## Posture checks centred on the experts: before / after (M14, post-hoc change)\n")
+        w("Before = every channel centred on the PT demo (+ view bias); after = the posture channels "
+          f"({', '.join(sorted(set(sum((cfg['exercises'][e]['assess'].get('posture_channels', []) for e in cfg['data']['include_exercises']), []))))}) "
+          "centred on the ≥ 95 experts' mean curve per view (training subjects of each fold). The main movement curve, "
+          "ROM, speed and the bands are unchanged.\n")
+        w("**Agreement** (Spearman of the set score; Δ = after − before, paired CI):\n")
+        w("| stratum | label | before | after | Δ |")
+        w("|---|---|---|---|---|")
+        for s_, _, _ in STRATA:
+            for t in ("score", "MQ", "PF2", "CF1", "CF2", "CF3"):
+                d = agree[(agree.stratum == s_) & (agree.target == t)]
+                if len(d) < 2:
+                    continue
+                b_, a_ = d[d.column == "score_before"].iloc[0], d[d.column == "score_after"].iloc[0]
+                w(f"| {s_} | {t} | {fci(b_.rho, b_.lo, b_.hi)} | {fci(a_.rho, a_.lo, a_.hi)} | "
+                  f"{fci(a_.delta, a_.delta_lo, a_.delta_hi)} |")
+        w("\n**Rule rates** (share of reps; overall / in videos scoring ≥ 95 / in videos < 80):\n")
+        w("| stratum | error | before | after |")
+        w("|---|---|---|---|")
+        for s_, _, _ in STRATA:
+            for e in sorted(set(rates[rates.stratum == s_].error)):
+                cells = []
+                for nm in ("before", "after"):
+                    r = rates[(rates.variant == nm) & (rates.stratum == s_) & (rates.error == e)]
+                    cells.append("–" if not len(r) else f"{r.rate.iloc[0]:.2f} / {fmt(r.rate_ge95.iloc[0])} / "
+                                 f"{fmt(r.rate_lt80.iloc[0])}")
+                if rates[(rates.stratum == s_) & (rates.error == e)].rate.fillna(0).max() == 0:
+                    continue  # a rule of the other exercise
+                w(f"| {s_} | {e} | {cells[0]} | {cells[1]} |")
+        w("\n**View stability of the score** (rep level, synced expert performances): " + "; ".join(
+            f"{r.stratum} {r.variant}: ICC {fci(r.icc, r.icc_lo, r.icc_hi)}" for r in stab.itertuples()) + "\n")
+    if SPX is not None:
+        w("## Speed centred on the demo (M15, post-hoc exploratory; not the primary score)\n")
+        w("The primary speed component stays centred on the experts (M5a). Here the same speed distance is centred on "
+          "the demo instead (|log2(demo / rep duration)| / expert SD), next to the angular-velocity deviation from the "
+          "demo, and as a score variant with that speed group. Post-hoc: chosen after seeing the Phase 4 components, so "
+          "these intervals are not confirmatory.\n")
+        w("| stratum | label | speed, expert-centred (primary) | speed, demo-centred | angular-velocity dev. from demo | "
+          "score (primary) | score with demo-centred speed (Δ) |")
+        w("|---|---|---|---|---|---|---|")
+        for s_, _, _ in STRATA:
+            for t in ("score", "MQ", "PF2"):
+                d = SPX[(SPX.stratum == s_) & (SPX.target == t)]
+                if not len(d):
+                    continue
+                g = {r.column: r for r in d.itertuples()}
+                cell = lambda r: fci(r.rho, r.lo, r.hi)  # noqa: E731
+                sd_ = g["score_speed_demo"]
+                w(f"| {s_} | {t} | {cell(g['X_speed'])} | {cell(g['X_speed_demo'])} | {cell(g['omega_dev'])} | "
+                  f"{cell(g['ref_set_score'])} | {cell(sd_)} (Δ {fci(sd_.delta, sd_.delta_lo, sd_.delta_hi)}) |")
+        w("")
     (out / "summary.md").write_text("\n".join(L), encoding="utf-8")
 
 

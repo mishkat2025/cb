@@ -106,6 +106,8 @@ assess:                                 # Module III comparison, errors and scor
   fps: 30                               # the uniform grid (P5)
   angle_source: 3d_mediapipe_world      # M6: channels from MediaPipe world landmarks
   band_k: 2.0                           # M9: tolerance band = target +- k * sigma (expert SD per view and frame)
+  posture_centre: experts               # M14 (post-hoc, user 2026-10-19): posture checks centred on the >= 95 experts'
+                                        # mean curve per view (training subjects); pt_demo = the Phase 4 first run
   sigma_floor_deg: {default: 3.0, rom: 5.0}   # minimum band SD (deg), so a tight expert spread does not explode u
   min_defined_frac: 0.3                 # a channel is assessed in a rep only if >= 30% of its template frames are defined
   min_run_frac: 0.1                     # M12: an error needs an out-of-band run of >= 10% of the template ...
@@ -122,3 +124,6 @@ outputs:
   phase1: outputs/phase1
   phase2: outputs/phase2
   checks: outputs/checks
+
+demo:                                   # Phase 6 (X4): live / video-file demo
+  default_view: F                       # the per-view Module III library needs the camera view; --view F|L|R overrides it

@@ -157,15 +157,18 @@ python scripts/phase3/report_phase3a2.py          # within-group tables (video a
 Module III follows proposal Figure 2: the PT demo of each exercise is the reference template (30 fps, 3D angles,
 left arms mirrored); high-scoring expert videos (≥ 95) give per-view bias and tolerance bands; every rep is
 DTW-aligned to the template, compared channel by channel, scored 0–100 and checked by YAML rules (joint, frames,
-degrees, severity). Config: `templates` and `assess` in `configs/data.yaml`, `assess.channels / score / rules` in
+degrees, severity). Posture checks (elbow, other arm, trunk, shoulder symmetry) are centred on the high-scoring experts
+(`assess.posture_centre: experts`, a post-hoc change, M14); the main movement curve stays the demo's. Config: `templates` and `assess` in `configs/data.yaml`, `assess.channels / score / rules` in
 `configs/exercises/EXX.yaml`. Outputs go to `outputs/phase4/` (gitignored). Needs the Phase 3 step (a2) runs for the
 embedding distance.
 
 ```bash
 python scripts/phase4/embedding_distance.py   # encode all reps + the PT demo per method and fold (~1 min, GPU)
 python -m cvdc.assess.run                       # Module III: templates, per-fold libraries, scores, errors, JSON (~20 s)
+python -m cvdc.assess.run --posture-centre pt_demo --out outputs/phase4/posture_pt --no-json   # the first run (before M14)
 python scripts/phase4/recording_noise.py        # item 6: reps contained in each view vs PF3 / PF4 (~45 s)
-python scripts/phase4/report_phase4.py          # agreement, components, errors, distance tracking, view stability (~40 s)
+python scripts/phase4/report_phase4.py          # agreement, components, errors, distance tracking, view stability,
+                                                # posture before / after (M14), exploratory demo-centred speed (M15) (~40 s)
 ```
 
 | Piece | Code | Notes |

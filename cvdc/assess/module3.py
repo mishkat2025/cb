@@ -2,12 +2,18 @@
 the per-video report.
 
 For one rep (already on the template's time axis, ``template.aligned_rep``) in camera view v:
-  target_c(t) = PT_c(t) + b_v,c(t)               the demo as camera v reads it (M8)
+  target_c(t) = PT_c(t) + b_v,c(t)               the demo as camera v reads it (M8): the main movement channel, and
+                                                 every channel with ``assess.posture_centre: pt_demo``
+  target_c(t) = mu_v,c(t)                        the high-scoring experts' mean curve in view v (fitted on training
+                                                 subjects): the posture channels (``assess.posture_channels``) with
+                                                 ``assess.posture_centre: experts`` (M14, post-hoc, user 2026-10-19)
   dev_c(t)    = rep_c(t) - target_c(t)           angle deviation (deg), per channel and template frame
   u_c(t)      = |dev_c(t)| / sigma_v,c(t)        in units of the high-scoring experts' spread (M9)
 Measures (``measures``): per channel the mean |dev| (deg), the signed mean dev (deg) and the mean u (D_c); the ROM of
 the main angle against the target ROM (shortfall, deg); the speed ratio (demo / rep duration) and the main angle's
-angular-velocity deviation mean |omega_rep - omega_target| (deg/s); the left/right symmetry channel.
+angular-velocity deviation mean |omega_rep - omega_target| (deg/s); the left/right symmetry channel. ``z_speed_demo``
+(log2 speed ratio / expert SD: the speed centred on the demo instead of the experts) is a post-hoc exploratory measure
+only (M15); it does not enter the score or the rules.
 
 Score (M11): four groups, each a normalised distance from the reference in expert-SD units, X_g >= 0:
   angle      mean of D_c over the posture channels (``assess.score.angle_channels``)
@@ -51,8 +57,15 @@ def compare(sig, al, ref, lib_v, ac):
     dev, u, tgt = {}, {}, {}
     m = {}
     min_def = ac["min_defined_frac"]
+    centre = ac.get("posture_centre", "pt_demo")
+    if centre not in ("pt_demo", "experts"):
+        raise ValueError(f"assess.posture_centre {centre!r}: pt_demo | experts")
+    posture = set(ac.get("posture_channels") or []) - {ref["main"]}
     for c in ref["channels"]:
-        t = ref["curves"][c] + lib_v["bias"][c]
+        if centre == "experts" and c in posture:
+            t = lib_v["mean"][c]  # M14: posture checks centred on the high-scoring experts of this view
+        else:
+            t = ref["curves"][c] + lib_v["bias"][c]
         d = al["curves"][c] - t
         s = lib_v["sigma"][c]
         ok = np.isfinite(d) & np.isfinite(s)
@@ -69,6 +82,7 @@ def compare(sig, al, ref, lib_v, ac):
     m["z_rom"] = m["rom_shortfall"] / lib_v["rom_sd"]
     m["log2_speed"] = al["log2_speed"]
     m["z_speed"] = (al["log2_speed"] - lib_v["speed_mu"]) / lib_v["speed_sd"]
+    m["z_speed_demo"] = al["log2_speed"] / lib_v["speed_sd"]  # M15: exploratory only (demo-centred speed)
     w_t = np.gradient(tgt[main]) * ac["fps"]
     dw = al["omega"] - w_t
     m["omega_dev"] = float(np.nanmean(np.abs(dw))) if np.isfinite(dw).mean() >= min_def else np.nan
