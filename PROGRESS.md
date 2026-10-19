@@ -1,10 +1,12 @@
 # Progress
 
-Last updated 2026-10-19 (Phase 5 A and B, LOSO estimate).
+Last updated 2026-10-20 (full dataset downloaded; Step 0 check of E03–E09; scope change requested).
 
-**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the fifth-review changes (§6.5). Phase 3 **step (a)** (§6b) and **step (a2)** (§6c) are done; the seventh review's decisions are recorded (§4). **Phase 4 (Module III, embedding-to-reference distance, recording-noise test) is done** (§6d), with the eighth review's changes (§6d.6–6d.7). **Phase 5 has started:** **A, the cross-view protocol** (train on two views, test on the held-out third, 4 main methods, GroupKFold-5) is done (§6e); **B, the CVDC pair-source ablation on the VCI** is done (§6f); the **LOSO runtime is estimated** (§6g: ~16 h for the 4 methods). **Work stops here, as asked: LOSO has not started**, and the other ablations (τ, embedding size, 2 vs 3 views, augmentation) have not run.
+**State (2026-10-20):** the user downloaded the **full dataset (all 9 exercises, 3,686 videos)** and asked to **expand the scope from E01/E02 to all usable exercises**, starting with the Step 0 check of E03–E09 and **without starting LOSO**. **That Step 0 check is done (§3.7): all seven new exercises are usable with caveats; none is unusable.** Nothing has been extracted, trained or evaluated on E03–E09 beyond a 355-video pose sample; the next step waits for approval (§8). **All E01/E02 results stay as the pilot**, unchanged; the new work writes to new folders (`outputs/step0_full/`, `data/cache/step0_full/`; D15).
 
-**Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
+**Pilot state (E01/E02, unchanged since 2026-10-19):** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the fifth-review changes (§6.5). Phase 3 **step (a)** (§6b) and **step (a2)** (§6c) are done; the seventh review's decisions are recorded (§4). **Phase 4 (Module III, embedding-to-reference distance, recording-noise test) is done** (§6d), with the eighth review's changes (§6d.6–6d.7). **Phase 5 has started:** **A, the cross-view protocol** (train on two views, test on the held-out third, 4 main methods, GroupKFold-5) is done (§6e); **B, the CVDC pair-source ablation on the VCI** is done (§6f); the **LOSO runtime is estimated** (§6g: ~16 h for the 4 methods). **Work stops here, as asked: LOSO has not started**, and the other ablations (τ, embedding size, 2 vs 3 views, augmentation) have not run.
+
+**Scope:** the pilot is **E01 and E02** (supervisor, 2026-10-17). **2026-10-20: the user expands the scope to all usable exercises**; the Step 0 verdicts are in §3.7, and `data.include_exercises` stays `[E01, E02]` until the expansion is approved and run (§0, D0).
 
 Read this together with `DESIGN_DECISIONS.md` (every open choice, with its status) and the task specification `../CVDC_implementation_prompt.md`.
 
@@ -12,10 +14,12 @@ Read this together with `DESIGN_DECISIONS.md` (every open choice, with its statu
 
 ## 0. Scope and limitations
 
-**In scope:** E01 (Abduction) and E02 (Adduction). That is 942 videos from 51 subjects: 24 experts, who did both exercises, and 27 non-experts, who did E01 only.
+**Scope change (user, 2026-10-20):** expand from E01/E02 to **all usable exercises** now that the full dataset is on disk. First step, done: the Step 0 check of E03–E09 (§3.7), with a verdict per exercise. LOSO is not started. The E01/E02 work below is kept as the **pilot**: its results, tables and caches are not deleted or overwritten, and full-scope work writes to new output folders (D15). Until the expansion is approved, everything below this paragraph describes the pilot.
 
-**Excluded for now:** E03 and every other exercise. Nothing is extracted, trained or evaluated on them.
-- The E03 Step 0 results (§3.4) and its template decision (V3, §3.6) stay documented for later.
+**Pilot scope:** E01 (Abduction) and E02 (Adduction). That is 942 videos from 51 subjects: 24 experts, who did both exercises, and 27 non-experts, who did E01 only.
+
+**Not in the pilot:** E03–E09. Nothing is extracted, trained or evaluated on them beyond the full-data Step 0 pose sample (§3.7).
+- The E03 Step 0 results (§3.4, partial data; superseded by §3.7) and its template decision (V3, §3.6, re-confirmed in §3.7.7) stay documented.
 - The pipeline still **discovers exercises at runtime**, with an include list in the config (`data.include_exercises: [E01, E02]`). Adding E03 or others later is a config change, not a code change.
 
 **Main results** (headline):
@@ -52,24 +56,22 @@ Read this together with `DESIGN_DECISIONS.md` (every open choice, with its statu
 | MediaPipe | 1.1.1 has only the **Tasks API** (`PoseLandmarker`); there is no `mp.solutions`. Models live in `data/models/` (gitignored): `pose_landmarker_lite.task`, `pose_landmarker_full.task`. The heavy pose model is approved when needed; the hand landmarker comes later for E06. |
 | Pose speed | CPU only (no GPU delegate in MediaPipe Python on Windows): ~36 fps per process at 960 px with the full model; 8 processes ≈ 290 fps (Step 0); Phase 1 full run: 12 processes ≈ 315 fps (712,585 frames in 37.6 min) |
 | Camera | **No physical webcam** (only "Camo", a virtual camera in error state), so the demo runs on video files (§4, change 1) |
-| Disk | D: ~730 GB free; local videos ~42 GB |
+| Disk | D: is a **7200 rpm HDD** (WD10EZEX); full dataset 154 GB (E03–E09 117 GB). Jobs that stream whole videos (audio census) are disk-bound: 21 min for E03–E09; running two such jobs at once stalls both (seen on 2026-10-20). Pose extraction is CPU-bound (~16 MB/s), so the disk is not its limit. |
 | Git | this repo (`cvdc-physio/`); identity `mishkat <sbmishkat10@gmail.com>` |
 
 ## 2. Data on disk
 
-Dataset root = `D:\cb` (the folder that contains this repo). Never modify it.
+**Layout since 2026-10-20 (full download):** the nine exercise folders are in **`D:\cb\mobiphysio\`**; the scores CSV, `MobiPhysio.md` and the PT reference folder stay in `D:\cb`. The old partial folders `D:\cb\E01(…)`, `E02(…)`, `E03(…)` are gone. Never modify any of it.
 
 | Folder / file | Content | Status |
 |---|---|---|
-| `E01(Abduction)` | 558 videos | complete (matches Dataverse) |
-| `E02(Aduction)` | 384 videos | complete |
-| `E03(Lateral_Rotation)` | 199 of 550 videos | **out of scope for now (§0).** Also partial: experts P01–P12 (P04 missing `E03_P04_AL_VLL_GM`), P13 has 8 of 18 videos. P14–P24 and all 27 non-experts are missing. |
-| `__E03(Lateral_Rotation)` | `E03_P04_AL_VLL_GM.mp4_Error.txt` | download-error marker ("service temporarily unavailable"); not a data folder |
-| `Reference-Model Videos by PTs` | 14 physiotherapist demos | see §3.6 |
-| `Physiotherapist Exercise Marking.csv` | scores, 3 judges × 7 EAAQ items | all 3,686 videos |
-| `MobiPhysio.md` | dataset README | names E08 "Both Leg Flexion" (the paper says Lumbar Flexion) |
+| `mobiphysio\E01(Abduction)` … `E09(Back _Extension)` | 558 / 384 / 550 / 383 / 511 / 354 / 251 / 356 / 339 videos = **3,686** | **complete**: every count equals the Dataverse listing and the README's Table 1 per participant and exercise. E01/E02 files are byte-size and score identical to the pilot's (§3.7). |
+| `__E03(Lateral_Rotation)`, `__E03(Lateral_Rotation)_Error.txt`, `___All_Errors.txt` | download-error markers of the first, partial download | stale: `E03_P04_AL_VLL_GM.mp4` is now present in `mobiphysio\E03(…)` |
+| `Reference-Model Videos by PTs` | 14 physiotherapist demos | see §3.6 and §3.7.7 |
+| `Physiotherapist Exercise Marking.csv` | scores, 3 judges × 7 EAAQ items | all 3,686 videos; every video has exactly 3 judge rows |
+| `MobiPhysio.md` | dataset README | names E08 "Both Leg Flexion" (the paper says Lumbar Flexion; §3.7.7) |
 
-More exercises are still downloading. **Don't touch a folder until the user announces it**, then run the Step 0 check on it (§9).
+**The pipeline config still points at the old layout:** `data.root: ..` finds no exercise folder in `D:\cb` any more, so `python -m cvdc.data.index` would now find no videos (it has not been run; `data/index.csv` and all pilot caches are untouched). The full-scope runs need a separate video root (proposed `data.video_root`, D1); not changed yet, pending approval (§8).
 
 ## 3. Step 0 findings
 
@@ -112,7 +114,7 @@ More exercises are still downloading. **Don't touch a folder until the user anno
 8. **Non-square frames:** MediaPipe warns "NORM_RECT without IMAGE_DIMENSIONS". Check whether padding frames to square changes the landmarks.
 9. **Low-light Left views** can have poor detection (42–74% of frames in the sample).
 
-### 3.4 E03 check (requested 2026-10-17; kept for later, E03 is out of scope for now)
+### 3.4 E03 check (requested 2026-10-17, on the partial download; superseded by §3.7)
 - **Coverage:** 199/199 parse, and all 199 have scores. The 351 E03 CSV rows without a local file are the missing videos listed in §2.
 - **Composition:** 13 subjects (P01–P13; P13 incomplete), all experts. Views 70/65/64 (F/L/R). Variations FL 38, ML 37, LL 36, O 37, HJ 26, LJ 25. 63 complete F+L+R groups.
 - **Scores:** mean 73.8, median 77.1. The histogram is bimodal only because of P02 (wrong exercise). ≥95: 18 videos. PF3/PF4 = 1 on only 10.6%.
@@ -176,7 +178,165 @@ One physiotherapist, one view per video, ~1–4 reps each. Most are 20 fps (resa
   - V2: 55–64°
 - **Template: V3 (confirmed by the supervisor, applied when E03 is brought into scope).** Use both arms (left mirrored) and keep only the working phase (abduction ≥ 70°).
 - V3 is ~2× slower than the dataset (~5.4 s per rep), so the **speed reference comes from expert videos**, not from the demo.
-- The pool behind this comparison is only 4 front-view videos scoring ≥ 80. Re-check when the rest of E03 arrives.
+- The pool behind this comparison is only 4 front-view videos scoring ≥ 80. Re-check when the rest of E03 arrives. **Re-checked on the full data in §3.7.7: V3 is still the closest.**
+
+### 3.7 Step 0 on the full dataset: E03–E09 (2026-10-20)
+User request (2026-10-20): run the Step 0 check on every new exercise with the same method, report usable / usable with caveats / not usable per exercise, estimate the full-scope runtimes, and stop; do not start LOSO; keep the E01/E02 pilot untouched. How to run: `scripts/step0_full/README.md`. Outputs: `outputs/step0_full/` (gitignored; nothing in `outputs/step0`, `outputs/phase*`, `data/index.csv` or the pilot caches was rewritten). The scripts reuse the Phase 1 code (parser, CSV loader, extractor, preprocessing, rep segmenter, sync tests).
+
+#### 3.7.1 Files and labels
+- **3,686 / 3,686 filenames parse (100%)** with the D2 regex. One name is not in the strict form: **`E03_P41_AF_VP_GM`** (variation code `VP`, not one of the seven; the CSV has the same name). It is a single front-view non-expert clip, kept with variation `unknown` (D16). Every exercise code matches its folder; no duplicate ids, no file under 0.5 MB, no non-video files.
+- **Scores CSV:** all 3,686 files have a score and every CSV row has a file; 3 judge rows per video. The only name mismatch is the known `E01_P26_Al_VFL_GF` typo.
+- **Subjects:** 58 participants (P01–P24 experts, P26–P62 non-experts; 25, 44, 51, 54 absent), each with one gender in every exercise. Per-participant counts equal the README's Table 1 for every exercise.
+- **The E01/E02 files in `mobiphysio\` are the pilot's files:** the same 942 names (941 in the pilot index + the dropped LR copy, D7), identical sizes and scores.
+- **Bad files: none.** All 3,686 open and decode their first frame and a frame in their last second (8 clips under 1.5 s were only checked at the start). All have audio. 8 have no `creation_time`: the 4 pilot ones plus `E03_P34_AF_VLL`, `E03_P60_AF_VLL`, `E05_P34_AF_VLL`, `E05_P60_AF_VML` (non-experts).
+- **Duplicates: no new ones.** MD5 of every same-subject, same-view, same-size pair: only the known `E01_P60_AF_VLR` = `VML` copy; the 3 new same-size pairs (`E03_P53_AF` LJ/O, `E04_P19_AL` LL/ML, `E05_P20_AR` LL/ML) differ in content. None of the 36 new LR videos is an audio copy of another variation. The 4 new files without `creation_time` match no other video of the same subject and view (best audio peak ratio 1.2–2.7; the known copy has 284).
+- **Partial or separate takes:** `E05_P19_AF_VLJ_GM` (expert) lasts 4.2 s against 26–27 s for its L/R partners (it ends with them: the front phone caught only the last seconds); the R views of `E05_P03` LL and ML were recorded 24 s and 61 s away from F/L (separate takes).
+
+| Exercise | Videos | Subjects exp / non-exp | Views F / L / R | Complete F+L+R groups exp / non-exp | Mean score exp / non-exp | ≥ 95 (front, exp) | Bins ≥ 80 / 50–79 / < 50 | Label-noise floor* | Median duration exp / non-exp (s) |
+|---|---|---|---|---|---|---|---|---|---|
+| E03 Lateral rotation | 550 | 24 / 27 | 255 / 148 / 147 | 125 / 17 | 75.4 / 44.4 | 32 (18) | 135 / 293 / 122 | 3.38 | 26.3 / 3.1 |
+| E04 Medial rotation | 383 | 24 / 0 | 129 / 126 / 128 | 125 / 0 | 75.8 / – | 24 (10) | 112 / 271 / 0 | 2.45 | 25.0 / – |
+| E05 Circumduction | 511 | 23 / 22 | 233 / 141 / 137 | 119 / 16 | 87.0 / 40.6 | 133 (44) | 254 / 153 / 104 | 4.76 | 26.8 / 2.9 |
+| E06 Wrist extension | 354 | 22 / 0 | 119 / 117 / 118 | 114 / 0 | 94.4 / – | 253 (92) | 322 / 32 / 0 | 3.16 | 28.8 / – |
+| E07 Hip joint flexion | 251 | 14 / 0 | 83 / 84 / 84 | 83 / 0 | 82.5 / – | 45 (15) | 144 / 98 / 9 | 2.76 | 40.3 / – |
+| E08 Both leg flexion | 356 | 14 / 16 | 160 / 98 / 98 | 84 / 14 | 93.4 / 32.9 | 168 (61) | 234 / 47 / 75 | 4.04 | 45.0 / 4.5 |
+| E09 Back extension | 339 | 14 / 13 | 150 / 94 / 95 | 83 / 11 | 83.6 / 9.5 | 103 (35) | 179 / 60 / 100 | 2.68 | 47.2 / 3.8 |
+
+\*As in §3.1: RMSE of each view's score against its expert group mean.
+
+- **Variations:** experts have FL/ML/LL/LJ/HJ/O (no LR) in every exercise; non-experts have all seven but most variations front-only, as in E01. **E07–E09 are all male** (and E08/E09 non-experts too).
+- **Label structure** (`labels_check.csv`): PF3 = 1 exactly when PF4 = 1 in every exercise (D5 holds). Share of the within-expert score variance carried by the repetition items PF3 + PF4: E03 0.41, **E04 0.84**, **E05 0.80**, E06 0.59, E07 0.56, **E08 0.81**, E09 0.54 (pilot: E01 0.50, E02 0.61). PF1, PF2 and CF1–CF3 are identical across the views of every expert performance in E04 and E06–E09 (as in the pilot); in E03 CF2 and in E05 CF1/CF2 differ across views in some groups. Items active under the T14 rule (expert strata): E03 PF4 CF1 CF2; E04 PF4 CF1 CF2; E05 PF4 CF1 CF2 CF3; E06 CF1 CF2 only; E07 PF2 PF4 CF2 CF3; E08 PF4 CF3; E09 PF1 PF2 PF4 CF1 CF2.
+- **Score skew:** E06 experts 49% at exactly 100 (SD 8.0, minimum 67.6; no video below 50); E08 experts 56% at 100 (SD 9.3); E04 SD 8.7, minimum 57.1 (no video below 50); E09 experts 31% at 100. **E09 non-experts score a median of 0** (mean 9.5).
+- **Subjects whose mean PF1 is below 0.5 in an exercise** (the E03 P02 signature; D14): E03 P02 (PF1 = 0 on all 18, mean 22.6; known); E05 non-experts P30, P34, P57, P58, P59 (PF1 0) and P32 (0.38); E08 non-experts P29, P38, P41; **E09 expert P21** (PF1 = 0 on all 18 videos, mean 52.0) and E09 non-experts P29, P32, P35, P37, P38, P39, P41, P42. Side note on the pilot: in E02, experts P07 and P10 also have PF1 = 0 on all their videos (mean 48.0 / 52.4); nothing in the pilot results changes. PF1's meaning is not known (EAAQ pending, §3.7.8), and the motion shows it is not always "wrong exercise" (E09 P21, §3.7.5).
+
+#### 3.7.2 Videos
+- 25–60 fps (E07: all 30 fps), mostly 1080×1920 with a rotation flag; the non-expert batch also has landscape, 1440×1440, 720p and the 352×640 LR files, as in E01.
+- E03–E09 hold **2.35 M frames** (all nine exercises 3.07 M).
+
+#### 3.7.3 Synchronization: all multi-view groups of E03–E09
+Same evidence order as §3.5 (audio → creation time → motion), with two changes (S8):
+
+| Exercise, group | synced: audio | synced: creation time | synced: creation time, start times | not synced | unknown |
+|---|---|---|---|---|---|
+| E03 expert | 38 | 90 | 1 | 0 | 0 |
+| E03 non-expert | 0 | 0 | 0 | 22 | 0 |
+| E04 expert | 42 | 86 | 0 | 0 | 1 |
+| E05 expert | 49 | 72 | 3 | 1 | 1 |
+| E05 non-expert | 0 | 0 | 0 | 17 | 0 |
+| E06 expert | 38 | 80 | 2 | 0 | 0 |
+| E07 expert | 35 | 46 | 2 | 0 | 1 |
+| E08 expert | 34 | 48 | 2 | 0 | 0 |
+| E08 non-expert | 0 | 0 | 0 | 14 | 0 |
+| E09 expert | 42 | 40 | 1 | 0 | 1 |
+| E09 non-expert | 0 | 0 | 0 | 11 | 0 |
+
+- **Experts: simultaneous, as in the pilot.** 2,179 of 2,222 expert view pairs have |ΔC| ≤ 3 s; audio additivity passes for 30–51% of expert F+L+R groups (median error 20–36 ms); audio lags vs F median 0.46 s, max 2.56 s.
+- **creation_time stamps the end of the recording more often than the start.** On audio-synced pairs, ΔC fits "end time" (ΔC = Δduration − lag) to a median 0.7 s (p90 1.3 s) against 0.9 s (p90 2.3 s) for "start time", and fits it better in 68% of pairs. In the long lying exercises the phones stopped up to ~15 s apart, so the plain rule (|ΔC| ≤ 3 s, in effect comparing stop times) missed groups whose start times agree. New rule (S8): synced (medium) when every pair's start times (creation − duration) agree within 3 s: 11 groups. It passes 2 of 5,902 control pairs (0.03%; the plain rule 0), so it stays medium confidence until motion confirms.
+- **Non-experts: never simultaneous.** Their views were recorded 8–473 s apart, in windows that cannot overlap: 64 non-expert groups are not synced. One E03 group (P59 FL) passed the audio test (peak ratio 2.6 on all three pairs, additivity error 0.1 ms) although its three ~2 s clips were recorded 14–39 s apart: the same sound cue in separate takes. **Non-overlapping recording windows now override audio** (S8). The offsets also change between exercises for the same subject (P59 F→R: 75 s in E01, 39 s in E03, 30 s in E05), so these are not simultaneous recordings with offset clocks.
+- **Unknown (4 expert groups):** E04 P12 LL, E05 P03 LL (R view 24 s away), E07 P19 LJ (L+R only), E09 P05 ML (R view 16–17 s away). **Not synced (1 expert group):** E05 P03 ML (R view 61 s later).
+- **Motion test on the pose sample** (§3.7.4; pairs searched within ±0.3 s of the device-corrected audio lag; Phase 1 rep-timing test, < 42 ms): confirmed E03 36%, E04 26%, E05 5%, E06 3%, E07 24%, E08 21%, E09 48% of same-group pairs; **controls 2 of 258 testable pairs (0.8%; pilot 0.7%)**. Low for E05 (circular arm path) and E06 (small wrist movement), where audio and creation time carry the classification. In the two sampled unknown groups motion confirmed 0 of 3 and 1 of 3 pairs, so they stay unknown. Device offsets from the motion-confirmed pairs: F→L +100 ms, F→R +36 ms, L→R −61 ms (n = 20 / 23 / 19), consistent with the pilot's +93 / +57 / −44 ms (S5).
+
+#### 3.7.4 Pose sample: detection and posture
+Sample (`pose_sample.csv`, seeded): per exercise 6 expert subjects × 2 variations × 3 views (36 videos, variations spread over all six), 8 more front-view expert videos scoring ≥ 80 (reference pool), and for E03/E05/E08/E09 one non-expert F+L+R group plus 8 non-expert single clips; E09 P21 FL added; E03 P02 was drawn anyway. **355 videos (337k frames) and the 9 PT demos of E03–E09**, Phase 1 settings (full model, 960 px, PyAV timestamps), 22 min with 12 processes (256 frames/s). Keypoints in `data/cache/step0_full/` (gitignored).
+- **Detection:** mean share of frames with a pose: F ≥ 99.5% and R ≥ 98.3% in every exercise; L 88.4% (E04), 88.5% (E05), 90.6% (E07), 92.0% (E09), 92.7% (E06), 93.5% (E08), 98.9% (E03). HJ is the weakest variation in most exercises (84–99%; E04 LL 87.5%). 19 of 355 videos fall below 90% and 3 below 50% (`E04_P11_AL_VLL` 0%, `E07_P08_AL_VHJ` 29%, `E05_P13_AL_VHJ` 47%): all left-view LL/HJ takes, the pilot's pattern (P7).
+- **E07–E09 are lying exercises, and MediaPipe detects them well.** The 2D trunk axis lies 79–106° from image vertical in E07/E08 (supine, body across the frame in all three views) and 52–61° in E09 (prone, trunk raised); detection 98.3–99.9% in F/R and 90.6–93.5% in L. The far-side limbs are often low-visibility: E08 knees visible (≥ 0.5) in 58/68% of F frames, E09 knees 60/52% of F frames; E07 arms 39–60% in F (not needed). 3D angles of lying people cannot be checked against a 3D reference (none exists; E8), but the 3D hip angle gives consistent rep counts across views (E08 92%, §3.7.5).
+- **Upper-limb side views self-occlude the far arm**, as in the pilot (AL: left elbow/wrist visible in 9–21% of frames in E03–E05).
+- **Root:** both hips visible in ≥ 87% of frames in every exercise and view, so the mid-hip root (P5) works for all nine.
+
+#### 3.7.5 Rep segmentation feasibility
+Phase 1 segmenter (P6) with per-video adaptive thresholds (prominence 0.4×, minimum amplitude 0.3× the signal's p5–p95 range; oriented so the first second is the rest level). Feasibility = the share of synced expert F+L+R groups of the sample (9–12 per exercise) whose three per-view counts lie within ±1, the P6 criterion; subjects with mean PF1 < 0.5 are left out. Pilot reference (per-view segmentation, before boundary transfer): E01 69%, E02 42%. Synced groups will again share one rep set segmented on their best view (P6b). `rep_signal_agreement.csv`:
+
+| Exercise | Best signal (3D unless stated) | Within ±1 | Exact | Median reps per view | Others |
+|---|---|---|---|---|---|
+| E03 | wrist-path PC1 of the moving arm | **90%** | 60% | 9 | all-joint 2D PC1, 2D wrist height 80%; forearm elevation 70% |
+| E04 | all-joint 2D PC1 / wrist-path PC1 / forearm elevation | **64%** | 55% | 9 | shoulder elevation 36% |
+| E05 | 2D wrist height / wrist-path PC1 | **82%** | 27% | 10 | shoulder elevation, forearm elevation 73% |
+| E06 | 2D wrist height | **75%** | 58% | 9 | wrist angle from the Pose hand points: 25% (3D), 33% (2D) |
+| E07 | all-joint 2D PC1 | **70%** | 30% | 9 | summed hip flexion 60% |
+| E08 | hip flexion | **92%** | 67% | 10 | summed knee flexion 92% |
+| E09 | hip angle / 2D trunk inclination | **78%** | 22% | 10 | trunk–thigh angle 56% |
+
+- Expert sets hold a median of 9–10 reps per view, matching the EAAQ's "≥ 10" (PF4). Non-expert clips hold 1–3 reps (E08/E09: 0–1).
+- As for E02, the best signals of E03–E05 and E07 are not joint angles: they are for **segmentation only**; Module III keeps joint angles (§3.7.7).
+- **E03 P02** gives 2 reps per view against 9 for everyone else; **E09 P21** gives 10 per view and the back-extension posture (§3.7.6).
+
+#### 3.7.6 Known issues
+- **E03 P02 (wrong exercise): confirmed on the full data.** PF1 = 0 on all 18 videos, mean 22.6 (every other E03 expert: subject means 68.6–85.1, no video below 64.3), 2 reps per view. Excluded from the templates and from the exercise labels, kept in score regression (D8).
+- **E06 needs MediaPipe Hands.** The Pose hand points (index, pinky) give no usable wrist angle: cross-view rep agreement 25–33%. Module III's wrist-extension angle needs the Hands model (`hand_landmarker.task`, ~7.8 MB, Google), which is **not downloaded and needs approval** (P1). Rep segmentation and the networks can use Pose alone (2D wrist height 75%).
+- **E07–E09 lie down** (E07/E08 supine, E09 prone); detection is fine (§3.7.4).
+- **E09 P21 is not a wrong-exercise case:** PF1 = 0 on all 18 videos, but the posture matches the back-extension demo and the high scorers (Chamfer 2–6° against 4.1° for a high scorer against the rest of the pool) with 10 reps per view (one high-jitter left-view video looks like the E08 demo instead, probably mis-tracked). What PF1 rates is unknown until the EAAQs arrive (§3.7.8).
+- **Other issues found:** the `VP` variation (`E03_P41_AF_VP_GM`); `E05_P19_AF_VLJ_GM` is a 4.2 s partial take; the E05 P03 R views are separate takes; the E09 non-experts score a median of 0 and 8 of 13 have PF1 ≈ 0; E06 and E08 experts are about half at 100 and E04 has no low scores (little score variance for regression); E07 has only 14 subjects, all male, and no non-experts; the pipeline config needs the new video root (§2).
+
+#### 3.7.7 PT references and the joint angles for Module III
+Chamfer distance in a per-exercise 3D angle space (moving side first) between the demo's frames and the frames of the sample's expert videos scoring ≥ 80 (front view; all views in brackets). Spaces: upper limb = shoulder elevation, elbow flexion, forearm elevation and azimuth in the trunk frame; E06 = Pose-point wrist deviation, elbow flexion, shoulder elevation; E07/E08 = hip and knee flexion of both legs; E09 = trunk–thigh angle, hip and knee flexion (`ref_compare.csv`).
+
+| Demo | Exercise | Apparent view, posture | Reps found, s per rep | Expert s per rep (sample) | Chamfer front (all) | Pool front / all |
+|---|---|---|---|---|---|---|
+| `Later Rotation V3.mp4` | E03 | front, upright, 90/90 | 2, 4.8 s | 1.8 | **13.5** (17.2) | 13 / 19 |
+| `Lateral Rotation.mp4` (v1) | E03 | oblique | 2, 4.9 s | 1.8 | 19.1 (21.0) | 13 / 19 |
+| `lateral rotation V2.mp4` | E03 | front, arms at the side | 2, 2.5 s | 1.8 | 55.3 (52.9) | 13 / 19 |
+| `Medial Rotation.mp4` | E04 | oblique, right arm | 1, 4.1 s | 2.0 | 16.5 (20.9) | 9 / 10 |
+| `Circumduction.mp4` | E05 | side, right arm | 4, 2.7 s | 2.1 | 23.1 (19.2) | 19 / 37 |
+| `Wrist Extension.mp4` | E06 | front-oblique, both wrists | 2, 12.0 s | 1.7 | 6.0 (7.0) | 19 / 40 |
+| `Hip Joint Flection.mp4` | E07 | side, supine, right leg | 1, 3.1 s | 2.9 | 7.8 (13.9) | 14 / 26 |
+| `Both Leg Flection.mp4` | E08 | side, supine, both legs | 2, 5.9 s | 3.5 | 9.5 (10.5) | 19 / 40 |
+| `Back Extension.mp4` | E09 | side, prone | 2, 4.9 s | 3.4 | 2.9 (5.6) | 15 / 29 |
+
+- **E03: V3 is still the closest** (13.5° vs 19.1° for v1 and 55.3° for V2), now on 13 high-scoring front videos instead of 4 (the numbers are not comparable with §3.6's 7.5–10.8°: this space adds the forearm azimuth). The dataset is right-arm external rotation in 90/90: shoulder elevation median 89°, forearm elevation from ~130° (forward-down) to ~27° (up). V3 is 2.6× slower than the experts (4.8 vs 1.8 s per rep), so speed comes from expert data (M5a).
+- **E04:** the demo is oblique and holds the upper arm lower (elevation median 40° vs 69° in the dataset): use the per-view bias from the experts, as in M8. The dataset is internal rotation with the arm abducted ~70°: forearm elevation from ~70° (about horizontal) to ~145° (down).
+- **E05:** elevation 19–152° in the demo vs 7–163° in the dataset; the circle's wide posture space explains the larger distance.
+- **E06:** posture matches (6.0°), but the demo holds each extension (12 s per rep vs 1.7 s): speed from expert data.
+- **E07:** the moving hip flexes to ~125° with the knee bent to ~110–125° while the other leg stays straight (hip 13°, knee 9° in the demo; median 13° / 14° in the dataset).
+- **E08 = "Both Leg Flexion"** (README, demo name): supine, both hips and knees flex together (hips to ~125–145°, knees to ~130–145°), i.e. knees to chest, which flexes the lumbar spine. The paper's "Lumbar Flexion" names the same videos.
+- **E09:** prone trunk extension, trunk–thigh angle 4–49° in the demo vs 2–45° in the dataset; knees stay straight on the floor.
+- **Demos are slower than the experts in every exercise** (1.1–7×), so the speed reference comes from expert data everywhere (M5a).
+
+**Joint angles proposed for Module III** (3D world landmarks, moving side, left side mirrored; M16, to be refined against the data when each exercise is brought in):
+
+| Exercise | Main angle (ROM, rep score) | Posture checks |
+|---|---|---|
+| E03 Lateral rotation | forearm rotation about the upper arm, read as forearm elevation in the trunk frame (~130° → ~27°) | shoulder abduction ~90° (90/90), elbow flexion ~90°, shoulder asymmetry (shrug), trunk lateral lean |
+| E04 Medial rotation | forearm rotation, as forearm elevation in the trunk frame (~70° → ~145°) | shoulder elevation (~70° in the dataset), elbow flexion, trunk lean |
+| E05 Circumduction | shoulder elevation over the circle (ROM) + wrist-path circularity and amplitude (two principal components of the wrist path) | elbow extension, trunk lean, shoulder hitch |
+| E06 Wrist extension | wrist extension: forearm vs hand, **from MediaPipe Hands**, both wrists | elbow flexion, forearm position (shoulder elevation) |
+| E07 Hip joint flexion | hip flexion of the moving leg (trunk vs thigh, 0 → ~125°) | knee flexion of the moving leg; the other leg's hip and knee staying extended (pelvis stability) |
+| E08 Both leg flexion | hip flexion of both legs | knee flexion of both legs, left/right symmetry |
+| E09 Back extension | trunk extension (trunk vs thigh line, 0 → ~45°) | knee flexion (legs straight on the floor), left/right symmetry |
+
+#### 3.7.8 EAAQ questionnaires for the other exercises
+- **They are not in the dataset.** The Dataverse dataset holds exactly 3,688 files: 3,686 videos, 1 markdown file (the README) and 1 CSV (the scores) (Dataverse API, file counts by content type, read 2026-10-20; nothing downloaded). The local CSV has item numbers only ("Primary Factors 1–4", "Control Factors 1–3"), no question text.
+- The Data in Brief paper says one sample questionnaire is in Fig. 4 (E01) and "the others are provided in the Appendix", but the local PDF (16 pages) has no appendix; it points to supplementary material online (doi:10.1016/j.dib.2026.112635). The publisher's page refused automated access (HTTP 403), so I could not check it. **The E02–E09 EAAQs are most likely in the article's online supplementary material**; someone with access needs to download it.
+
+#### 3.7.9 Verdict per exercise
+**None is unusable. All seven are usable with caveats**:
+
+| Exercise | Verdict | Why usable | Caveats |
+|---|---|---|---|
+| **E03** Lateral rotation | usable with caveats | 24 experts + 27 non-experts, 125 synced expert F+L+R groups, detection ≥ 98.9% in every view, best rep signal 90%, V3 template confirmed | P02 wrong exercise (excluded from templates and exercise labels); `VP` clip; non-experts are single-rep, mostly front-only, not synced (the E01 confound); V3 2.6× slower than the experts; CF2 differs across views in some groups |
+| **E04** Medial rotation | usable with caveats | 24 experts, 128 synced groups, F/R detection ≥ 99.6% | experts only (no group contrast); narrow scores (SD 8.7, none below 57) with 84% of the variance in PF3/PF4; rep agreement 64% (between E01 and E02); L view 88% detection; demo posture differs (arm lower) |
+| **E05** Circumduction | usable with caveats | 23 experts + 22 non-experts, 124 synced groups, rep signal 82% | 6 non-experts with PF1 ≈ 0; 80% of the expert variance in PF3/PF4; E05_P19 partial front take; E05 P03 separate R takes; low motion-sync confirmation (5%); CF1/CF2 differ across views in some groups |
+| **E06** Wrist extension | usable with caveats; Module III blocked until MediaPipe Hands is approved | 22 experts, 120 synced groups, rep counting from wrist height 75% | Pose hand points give no usable wrist angle; experts only; 49% of videos at 100 and none below 67.6, so little score variance; only CF1/CF2 active; demo 7× slower |
+| **E07** Hip joint flexion | usable with caveats | 14 experts, 83 synced groups, supine poses detected 91–100%, demo matches (7.8°) | smallest set: 14 subjects, all male, experts only; rep agreement 70% (moderate) |
+| **E08** Both leg flexion | usable with caveats | 14 experts + 16 non-experts, 84 synced groups, rep signal 92%, demo matches (9.5°) | experts 56% at 100 with 81% of the variance in PF3/PF4; only PF4/CF3 active for experts; all male; 3 non-experts with PF1 ≈ 0; knees often low-visibility in F |
+| **E09** Back extension | usable with caveats | 14 experts + 13 non-experts, 83 synced groups, rep signal 78%, demo matches (2.9°) | non-experts score a median of 0 (8 of 13 with PF1 ≈ 0), so the non-expert stratum has almost no score range; expert P21 PF1 = 0 everywhere (movement correct); all male |
+
+**Across the full scope:** 58 subjects; 756 expert multi-view groups in E03–E09, 751 of them synced; 64 non-expert groups, none synced. The pilot's limitations carry over (no error labels, 3 views, scores skewed, PF3/PF4 view noise), and the repetition items dominate the expert score in E04, E05 and E08 even more than in E01/E02, so within-group score prediction is likely to stay hard (E21).
+
+#### 3.7.10 Runtime estimates for the full scope (all 9 exercises)
+From the pilot's measured timings (`scripts/step0_full/runtime_estimate.py`, `runtime_estimate.csv`): one GPU job at a time; training time proportional to the number of training reps, with the pilot's epochs to early stopping. **Estimated training reps: 26,564** (E01/E02 measured 7,095; E03–E09 = expert videos × the sample's median 9–10 reps per video × 0.9 for dropped edge reps + 1 rep per non-expert clip): **3.74× the pilot**.
+
+| Item | Estimate | Basis |
+|---|---|---|
+| Phase 1 pose extraction of E03–E09 (2.35 M frames) | **2.1–2.6 h** | pilot 315 frames/s; this session's sample 256 frames/s (12 CPU processes) |
+| + MediaPipe Hands pass for E06 | ~0.3 h | assumed to cost as much as the pose pass (not measured) |
+| + audio sync stage of Phase 1 | ~0.4 h | the E03–E09 audio census took 21 min (disk-bound) |
+| + KTPFormer lifting (B2) | 0.8 h (GPU) | 850 frames/s (A10) |
+| **Main GroupKFold-5 run** (B1, B2-MediaPipe, B2-KTPFormer, Proposed λ 1.0, with the CVDC pretraining) | **7.9 h** (B1 1.0, B2-MP 0.9, B2-KTP 0.9, Proposed 2.1, CVDC pretraining 2.9) | pilot step (a2) + step (a) pretraining 2.1 h × 3.74 |
+| **Cross-view protocol** (3 rotations × 5 folds × 4 methods) | **14.6 h** | pilot 3.9 h × 3.74 |
+| **LOSO** (58 folds, per-fold-encoder shortcut C7, 4 methods) | **70.5 h central** (49–97 h; B1 14.7, B2-MP 13.4, B2-KTP 13.5, Proposed 28.9) | pilot E26 cost per inner-training rep and epoch × 58 folds × ~20,900 inner-training reps (4.35× the pilot's LOSO) |
+
+- Without E06: 7.0 h, 13.0 h and 62.9 h.
+- Uncertain by at least ±30%: more data per epoch may change when early stopping fires, and the rep counts come from a sample. **Full-scope LOSO is about 3 days of GPU** (the pilot's 16 h × 4.35); options in §8.
 
 ## 4. Approved plan (supervisor review, 2026-10-17)
 The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, balanced for expert/non-expert) for development and ablations; LOSO for the final comparison; rep-level training by default; quality bins 80/50; one shared encoder with an exercise embedding. Changes:
@@ -226,6 +386,8 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 2. Add a **group-only baseline** (predicts each group's mean score) next to the mean and duration-only baselines (E10, T3).
 3. Check whether the embeddings separate experts from non-experts more than they separate scores within a group: a linear probe for the group label (balanced accuracy, AUC) next to within-group score probes, for B1, B2 and Proposed, plus a view-matched subset (E11).
 4. Keep rep-level training as the default so clip length cannot be a cue (T1, E12); the remaining cues (rep duration, rep count per set, view mix) are listed in E12.
+
+**Scope change (user, 2026-10-20): full dataset.** The full MobiPhysio dataset (all 9 exercises) is downloaded. Expand from E01/E02 to all usable exercises; do not start LOSO. Step 1: the Step 0 check of every new exercise (E03–E09) with the same method (parse rate, counts, CSV join, duplicates and bad files, F/L/R groups and sync classes, rep-segmentation feasibility, match to the PT demos and the Module III angles, the known issues E03 P02 / E06 Hands / E07–E09 lying, and whether the other EAAQs exist in the dataset), a verdict per exercise, and runtime estimates for Phase 1 extraction, the main GroupKFold runs, the cross-view protocol and LOSO; then stop. Keep every E01/E02 result as the pilot and write new results to new folders. Done: §3.7 (D0, D14–D17, S8, M16, E27).
 
 **Eighth review (2026-10-19): answers to the Phase 4 questions** (`DESIGN_DECISIONS.md` M14, M15, M7, X4; applied in §6d.6–6d.7):
 1. **Keep the PT demo as the reference curve, but centre the posture checks (e.g. elbow) on the high-scoring experts (≥ 95)**, fitted per fold on training subjects; marked as a post-hoc change, reported before / after (M14).
@@ -825,6 +987,7 @@ Paired differences (centred VCI; E01 expert / E02 expert / E01 non-expert):
 All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
 
 - [x] **Step 0:** environment, inventory, labels, sync census, references (E01, E02, E03-partial)
+- [x] **Step 0 on the full dataset (E03–E09)** (2026-10-20; §3.7): inventory and CSV join, decode and copy checks, sync classes for all groups, 355-video pose sample (detection, posture, rep signals, motion sync with controls), PT-demo comparison, label structure, EAAQ search, verdicts, full-scope runtime estimates. **Not started:** Phase 1 and later for E03–E09 (waits for approval, §8).
 - [x] **Phase 1, keypoints and preprocessing** (2026-10-17; results in §5)
   - [x] `cvdc/data/`:
     - filename parser (runtime discovery of `E\d{2}(...)` folders, filtered by `data.include_exercises` = [E01, E02]; skip `__*` folders);
@@ -894,6 +1057,16 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - `demo/app.py`.
 
 ## 8. Open items and questions
+**Questions after the full-dataset Step 0 (2026-10-20; nothing applied yet):**
+1. **Which exercises to bring in.** Proposal: all seven (E03–E09), each with the caveats in §3.7.9; E06 enters the networks at once, its Module III after MediaPipe Hands is approved (question 2). Then `data.include_exercises` = all nine.
+2. **MediaPipe Hands for E06:** download `hand_landmarker.task` (~7.8 MB, from Google's MediaPipe model storage; licence to be checked and recorded as for KTPFormer, A10) and run it on E06 only? Without it E06 has no wrist angle (§3.7.6).
+3. **New video root and new output folders.** The videos moved to `D:\cb\mobiphysio\`. Proposal: a `data.video_root` key (CSV and demos stay under `data.root`), a new index `data/index_full.csv`, and new cache / output folders for the full scope (`data/cache/full/…`, `outputs/full/…`, `runs/full/…`), so the pilot's `data/index.csv`, caches, runs and tables stay as they are. The E01/E02 keypoint files can be reused (identical videos, same extractor settings). OK?
+4. **Sync rules (S8):** non-overlapping recording windows override audio (one E03 non-expert false positive), and a start-time variant of the creation-time rule adds 11 expert groups at medium confidence (2 of 5,902 controls pass it). Accept both?
+5. **PF1 ≈ 0 subjects (D14).** E03 P02 stays excluded from templates and exercise labels (D8). For the others (E05 non-experts P30/P34/P57/P58/P59/P32, E08 non-experts P29/P38/P41, E09 expert P21 and 8 E09 non-experts, and E02 P07/P10 in the pilot) PF1's meaning is unknown, and E09 P21 performs the right movement. Proposal: keep all of them everywhere (they never reach the ≥ 95 template pools), and decide exclusions from exercise labels only after the EAAQs arrive or a motion check per subject. OK, or exclude them now like P02?
+6. **LOSO on the full scope is ~70 h** (49–97 h) of GPU for the 4 methods, against 16 h for the pilot. Options: (a) run it as planned (about 3 days, one job at a time); (b) make GroupKFold-10 the final table (10 folds × 90% of the data ≈ 2.25× the GroupKFold-5 cost, ~18 h) and run LOSO only for B1 vs Proposed (~44 h); (c) LOSO per exercise family. Not started either way.
+7. **Exercise-specific settings:** templates = the single demo of E04–E09 and V3 for E03 (M3, M16); the proposed Module III angles (§3.7.7, M16) and the segmentation-only rep signals of §3.7.5 (wrist-path PC1 for E03, all-joint PC1 for E04/E07, 2D wrist height for E05/E06). OK to proceed with these as the starting definitions?
+8. **EAAQs for E02–E09:** most likely in the paper's online supplementary material (§3.7.8); can you download it? Until then only E01 has questionnaire-derived rules, and PF1/CF item meanings stay unknown.
+
 **Answered in the third review (2026-10-17):** the four Phase 1 questions (§4, applied in §5.6).
 
 **Answered in the fifth review (2026-10-17):** the four Phase 2 questions (§4, applied in §6.5).
@@ -923,9 +1096,10 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
 - Score and rule defaults (equal weights, d_zero 4, k 2, σ floors, run length) are my choices (M9–M12), not tuned.
 
 **Other open items:**
-- **EAAQ appendix** for E02–E09: the user is looking for it. Until it arrives, only E01 has questionnaire-derived rules.
-- **E03 is out of scope for now**, and it is incomplete (199/550, including one failed download). If it comes back into scope, rerun the Step 0 check on the full folder and add it to `data.include_exercises`.
-- **Other exercises** stay out of scope until the supervisor says otherwise. When one is announced and brought into scope, run the Step 0 check (§9).
+- **EAAQ appendix** for E02–E09: not in the dataset (§3.7.8); most likely in the paper's online supplementary material. Until it arrives, only E01 has questionnaire-derived rules.
+- **E03–E09:** downloaded in full and checked (§3.7); bringing them in waits for the answers above.
 
 ## 9. Re-running the Step 0 check
-See `scripts/step0/README.md` for the order and arguments. Minimum for a new exercise: `inventory.py` → `video_meta.py` → `scores.py` → `sync_av.py <EX>` → `sync_classify.py`, plus a pose sample (`select_groups_ex.py` → `extract_pose.py` → `sync_analysis3.py`) and a reference comparison.
+**Full dataset (2026-10-20):** `scripts/step0_full/README.md` (order, arguments, run times; outputs in `outputs/step0_full/`).
+
+**Pilot:** see `scripts/step0/README.md` for the order and arguments. Minimum for a new exercise: `inventory.py` → `video_meta.py` → `scores.py` → `sync_av.py <EX>` → `sync_classify.py`, plus a pose sample (`select_groups_ex.py` → `extract_pose.py` → `sync_analysis3.py`) and a reference comparison.

@@ -30,6 +30,11 @@ Dataset root = the folder that contains this repo (override with the env variabl
 hold the exercise folders (`E01(Abduction)`, ...), `Reference-Model Videos by PTs/` and
 `Physiotherapist Exercise Marking.csv`. The raw dataset is never modified.
 
+**Note (2026-10-20):** the full download put the nine exercise folders in `D:\cb\mobiphysio\`, while the CSV and the
+reference folder stay in `D:\cb`. The pipeline below still expects the old layout (it ran on the E01/E02 pilot); a
+separate video root is proposed (`DESIGN_DECISIONS.md` D1). The full-dataset Step 0 check takes both roots as
+arguments: `scripts/step0_full/README.md`, results in `PROGRESS.md` §3.7.
+
 ## Phase 1: keypoints and preprocessing
 
 One command (resumable; cached keypoints are skipped):
