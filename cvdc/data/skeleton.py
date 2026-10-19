@@ -29,3 +29,14 @@ COCO17_DRAW_EDGES = COCO17_EDGES + [(5, 6), (11, 12)]
 MP_DRAW_EDGES = [(JOINT_SETS["coco17"][a], JOINT_SETS["coco17"][b]) for a, b in COCO17_DRAW_EDGES]
 LEFT = {i for i, n in enumerate(MP33) if n.startswith("left")}
 RIGHT = {i for i, n in enumerate(MP33) if n.startswith("right")}
+COCO17_MIRROR = [0, 2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15]  # left <-> right in coco17 order
+
+
+def mirror_coco17(X):
+    """Mirror image of root-centred coco17 keypoints (..., 17, C): x -> -x and left / right joints swapped (a left-arm
+    performance seen as a right-arm one, P8)."""
+    import numpy as np
+
+    Y = np.asarray(X)[..., COCO17_MIRROR, :].copy()
+    Y[..., 0] = -Y[..., 0]
+    return Y

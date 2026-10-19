@@ -80,6 +80,40 @@ def horizontal_adduction(P, side="right", min_proj=0.0):
     return ang
 
 
+def other(side):
+    return "left" if side == "right" else "right"
+
+
+def elbow_extension(P, side="right"):
+    """Elbow angle shoulder-elbow-wrist: 180 = straight arm, smaller = bent."""
+    return joint_angle(P, f"{side}_shoulder", f"{side}_elbow", f"{side}_wrist")
+
+
+def contralateral_elevation(P, side="right"):
+    """Shoulder elevation of the arm that should stay at the side (the other arm of ``side``)."""
+    return shoulder_elevation(P, other(side))
+
+
+def trunk_lateral_lean(P, side="right"):
+    """Signed lateral trunk lean (3D): 90 - the angle between the trunk axis (mid-hip -> mid-shoulder) and the hip
+    line pointing to ``side`` (other hip -> ``side`` hip). 0 = trunk perpendicular to the hip line; + = leaning
+    toward ``side``. Forward flexion and axial rotation keep the trunk perpendicular to the hip line, so only the
+    lateral (frontal-plane) component moves it."""
+    trunk = mid(P, "left_shoulder", "right_shoulder") - mid(P, "left_hip", "right_hip")
+    hips = P[..., J[f"{side}_hip"], :] - P[..., J[f"{other(side)}_hip"], :]
+    return 90.0 - angle_between(trunk, hips)
+
+
+def shoulder_asymmetry(P, side="right"):
+    """Left/right shoulder-level asymmetry (3D): elevation of the ``side`` shoulder over the other one along the trunk
+    axis, as the angle of the shoulder line (other -> ``side`` shoulder) above the plane perpendicular to the trunk
+    axis. 0 = level shoulders; + = the ``side`` shoulder is hitched up (shrug). A trunk lean tilts the trunk axis with
+    the shoulder line, so it does not change this angle."""
+    trunk = mid(P, "left_shoulder", "right_shoulder") - mid(P, "left_hip", "right_hip")
+    sh = P[..., J[f"{side}_shoulder"], :] - P[..., J[f"{other(side)}_shoulder"], :]
+    return 90.0 - angle_between(sh, trunk)
+
+
 def wrist_path_pc1(P, side="right"):
     """Not an angle: the wrist position relative to the shoulder in the trunk frame (torso units after
     preprocessing), projected on its first principal component over the video, oriented so that moving the
@@ -102,6 +136,11 @@ PRIMARY_ANGLES = {"shoulder_elevation": shoulder_elevation, "arm_frontal_angle":
                   "horizontal_adduction": horizontal_adduction, "wrist_path_pc1": wrist_path_pc1}
 UNITS = {"shoulder_elevation": "deg", "arm_frontal_angle": "deg", "horizontal_adduction": "deg",
          "wrist_path_pc1": "torso"}
+# Module III channels (Phase 4, M7): every function takes (P, side) with side = the moving arm, so a left-arm
+# performance is assessed as its mirror image (P8).
+ASSESS_ANGLES = {"shoulder_elevation": shoulder_elevation, "horizontal_adduction": horizontal_adduction,
+                 "elbow_extension": elbow_extension, "contralateral_elevation": contralateral_elevation,
+                 "trunk_lateral_lean": trunk_lateral_lean, "shoulder_asymmetry": shoulder_asymmetry}
 
 
 def primary_angle(P, name, side):

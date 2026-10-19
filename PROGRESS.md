@@ -1,8 +1,8 @@
 # Progress
 
-Last updated 2026-10-18 (step a2).
+Last updated 2026-10-19 (Phase 4).
 
-**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the supervisor's fifth-review changes (§4, §6.5: standardised targets, three VCI variants, the KTPFormer lifter for B2, bf16, the runtime estimate). The user's sixth-review decisions (§4) set the Phase 3 run order: **step (a), GroupKFold-5 for the 4 main methods, is done (§6b)**. **Step (a2), the score-setup diagnosis and fixes (label diagnostics, set-level baselines, video head, T6 weighting, stabilised early stopping, Proposed variants), is done (§6c)** and stops here for review, before the ablations (b) and the LOSO table (c).
+**State:** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the supervisor's fifth-review changes (§4, §6.5: standardised targets, three VCI variants, the KTPFormer lifter for B2, bf16, the runtime estimate). The user's sixth-review decisions (§4) set the Phase 3 run order: **step (a), GroupKFold-5 for the 4 main methods, is done (§6b)**. **Step (a2), the score-setup diagnosis and fixes (label diagnostics, set-level baselines, video head, T6 weighting, stabilised early stopping, Proposed variants), is done (§6c).** The seventh review's decisions are recorded (§4: within-group score prediction is a negative result; Proposed = joint loss λ 1.0; no angle inputs to the heads; the movement-quality score as a secondary target). **Phase 4 (Module III with the PT demo as the reference, the embedding-to-reference distance and its view stability, the recording-noise test) is done for E01 and E02 (§6d)** and stops here for review; the ablations (b) and the LOSO table (c) have not started.
 
 **Scope: E01 and E02 only** (supervisor, 2026-10-17). E03 is excluded from every phase for now; see §0.
 
@@ -531,6 +531,97 @@ Proposals for the review (not applied):
 3. Test whether explicit angle / ROM inputs (Module III features) let a head reach the set-features level on non-expert CF1.
 4. Check with the supervisor whether PF3/PF4 can be re-derived from the detected rep count, or should be dropped from within-group targets.
 
+## 6d. Phase 4: Module III and the embedding-to-reference distance (2026-10-19)
+User request (seventh review): Module III as in proposal Figure 2 for E01 and E02, with the **PT demo as the reference ("truth")**; score every video by its distance from the reference and check agreement with the physiotherapists; the embedding distance for B1, B2 and Proposed (λ 1.0), including its view stability; a recording-noise test for PF3/PF4. **No LOSO, no ablations.** Decisions M2, M6, M7, M7a, M8–M13, E5, E22, E23 in `DESIGN_DECISIONS.md`. How to run: README "Phase 4". Tables: `outputs/phase4/summary.md` + CSVs, figures `outputs/phase4/figs/` (curves only, no frames), one JSON per video in `outputs/phase4/json/` (all gitignored). Same GroupKFold-5 folds as Phase 3; video level; 95% CIs from the subject bootstrap (2,000 draws). All §0 limitations apply.
+
+### 6d.1 What was built
+- **Reference Template Library** (`cvdc/assess/template.py`, M8): per exercise, the primary PT demo's reps on the 30 fps grid, 3D angles for the moving arm (left arms mirrored), averaged after DTW alignment: E01 `Abduction .mp4` (2 reps, 4.2 and 3.2 s → 112 frames, end range 161.0°), E02 `Aduction.mp4` (2 reps, 2.3 and 2.2 s → 68 frames, end-range horizontal adduction 150.9°). **Per view**, the experts' videos scoring ≥ 95 give the view bias (how a side camera reads the movement differently from the front camera that filmed the demo) and the tolerance band (±2 SD of the experts per template frame) (M2, M9). In the front view the experts' mean curves lie on the demo for shoulder elevation, trunk lean and the other arm; their elbows are 5–10° more bent than the demo's. Side views read the same performances differently (e.g. E01 R-view peak elevation ~25° lower; E02 R-view horizontal adduction ~60° lower) and have much wider bands (`figs/template_E01.png`, `template_E02.png`).
+- **Comparison** (`cvdc/assess/module3.py`): every rep DTW-aligned to the template on the upper-arm direction; per channel (E01: shoulder elevation, elbow extension, other-arm elevation, trunk lateral lean, shoulder asymmetry = the left/right symmetry channel; E02: + horizontal adduction as the main angle, M7) the angle deviation in degrees and in expert-SD units; the ROM as the end-range angle vs the view-corrected target (M10); speed (demo / rep duration) and the angular-velocity deviation from the demo along the DTW path.
+- **Errors** (M12): YAML rules → `abduction_range_insufficient` / `adduction_range_insufficient`, `elbow_bent`, `other_arm_raised`, `trunk_lean`, `shoulder_asymmetry`, `arm_elevation_deviation` (E02), `too_fast`, `too_slow`, and the set rule `too_few_reps`, each with joint, video frame range, measured / target / deviation (deg or s) and severity.
+- **Score** (M11): 100 × (1 − mean of four capped distances: angle deviation, ROM shortfall, speed, symmetry); set score = mean rep score. Defaults chosen before looking at agreement; nothing is fitted to the physiotherapists' scores except the ≥ 95 selection of the band experts.
+- **Out of fold:** the libraries are refitted per GroupKFold fold on the training subjects (E01 F/L/R: 137–185 / 85–113 / 93–103 expert reps per fold; E02: 127–216 / 79–116 / 43–70, from as few as 4–9 subjects per view). An all-subject library is saved for the demo (`outputs/phase4/library/`).
+- **Output:** 915 per-video JSON reports (spec §8 shape, validated), including the Proposed (λ 1.0) embedding distance from the fold where the subject is held out. Runtime 16 s for 7,095 reps.
+- **Tests:** 12 new (angles on known geometry, mirrored left arms, template recovery under time warps, end range, library bias and floors, score and errors on synthetic reps, JSON schema, library round trip, contained-rep counts, weighted ICC vs the closed form, MQ): **159 tests, all passing.**
+
+### 6d.2 Reference score vs the physiotherapists (item 4; `summary.md`, `agreement*.csv`)
+**Within groups, Spearman ρ [95% CI] of the set score with each label** ('·' = the item does not vary in the group, T14):
+
+| Label | E01 expert (377 videos) | E02 expert (381) | E01 non-expert (157) | E01 pooled (secondary) |
+|---|---|---|---|---|
+| total score | 0.03 [−0.10, 0.17] | 0.13 [−0.06, 0.31] | −0.02 [−0.26, 0.22] | 0.59 [0.52, 0.66] |
+| **movement-quality score (MQ)** | **0.18 [0.01, 0.34]** | **0.30 [0.09, 0.49]** | −0.02 [−0.26, 0.22] | 0.62 [0.53, 0.71] |
+| PF1 | · | 0.16 [0.05, 0.28] | · | −0.03 |
+| PF2 (speed) | **0.24 [0.07, 0.38]** | · | · | 0.72 |
+| PF3 / PF4 | −0.10 / −0.09 | −0.03 / −0.02 | · | 0.20 / 0.57 |
+| CF1 / CF2 / CF3 | 0.02 / 0.06 / 0.11 | 0.09 / 0.21 [−0.01, 0.40] / · | −0.07 / 0.03 / · | −0.07 / 0.55 / −0.07 |
+
+- **The reference score separates the groups, not the performances within them.** Set score 82.5 ± 9.1 (E01 experts), 73.3 ± 9.8 (E02 experts), 50.3 ± 12.0 (E01 non-experts); expert vs non-expert AUC 0.98 (1.00 in the view-matched front-view FL subset, 24 / 19 videos). Within groups it agrees weakly with MQ (E01 0.18, E02 0.30) and E01's speed item PF2 (0.24), and not with the total score (CIs include 0 everywhere). For non-experts total and MQ rank identically (PF3 = PF4 = 0), and neither agrees.
+- **By view** (experts, ρ with MQ): E01 F 0.29 [0.09, 0.47], L 0.10, R 0.19; E02 F 0.25, L 0.34 [0.10, 0.56], R 0.33 [0.11, 0.52].
+- **Components** (`agreement_components.csv`; 9 components × 3 groups × 2 labels = 54 intervals, so ~3 exclusions of 0 are expected by chance): the **angular-velocity deviation from the demo** agrees in E02 experts (0.24 [0.06, 0.41]) and E01 non-experts (0.40 [0.15, 0.60]); the end-range angle in E01 experts (0.10 [0.00, 0.21]). In E01 non-experts a **higher** end range goes with **lower** scores (ρ −0.31 [−0.57, 0.01]), against the ROM-shortfall rule; the plane of elevation, checked as a possible reason, carries no signal (M7).
+- **As a predictor** (out-of-fold within-group line on the set score): RMSE total 12.52 / 16.20 / 7.92 vs the group mean 12.45 / 16.01 / 7.78 (Δ +0.07 [−0.00, 0.19], +0.19 [−0.14, 0.62], +0.14 [−0.04, 0.37]); MQ Δ −0.06 [−0.45, 0.38], −0.08 [−0.52, 0.44], +0.20. **No gain over the within-group mean**, consistent with E21.
+- **Errors** (`errors_summary.csv`, rep rates): the rules describe the expert/non-expert difference (E01 non-experts vs experts: range insufficient 71% vs 3%, too fast 81% vs 7%, elbow bent 57% vs 29%, trunk lean 29% vs 10%). **Within experts they fire as often in the videos scoring ≥ 95 as overall** (E01 elbow bent 26% vs 29%; E02 elbow bent 40% vs 48%, shoulder asymmetry 36% vs 33%, arm elevation 27% vs 40%), so they are not specific to worse performances; their video rates correlate with total / MQ at |ρ| ≤ 0.25 (largest: E02 arm elevation 0.20, non-expert trunk lean −0.25, i.e. the wrong sign).
+
+### 6d.3 Embedding distance to the PT reference (item 5; `embedding_tracking.csv`, `view_stability.csv`)
+The demo's reps are encoded with each fold's final checkpoint (mirrored for left-arm reps); centred cosine distance; standardised per fold and group with training subjects before pooling (E5). The embeddings reproduce the Phase 3 snapshots to bf16 precision.
+
+**(a) Tracking the physiotherapists** (closeness = −distance; ρ with total / MQ; CIs in `summary.md`):
+
+| Method | E01 expert | E02 expert | E01 non-expert |
+|---|---|---|---|
+| B1 | 0.04 / **0.19 [0.04, 0.33]** | 0.10 / −0.01 | 0.10 / 0.10 |
+| B2-MediaPipe | −0.08 / −0.04 | −0.01 / −0.06 | 0.02 / 0.02 |
+| B2-KTPFormer | 0.10 / 0.15 [0.01, 0.28] | 0.09 / 0.04 | 0.14 / 0.14 |
+| **Proposed (λ 1.0)** | 0.02 / 0.01 | 0.17 [−0.08, 0.40] / 0.13 | −0.10 / −0.10 |
+| Proposed alt. (frozen CVDC) | −0.02 / 0.02 | 0.16 / 0.21 [−0.01, 0.41] | −0.03 / −0.03 |
+| random-init encoder | 0.04 / −0.01 | 0.02 / −0.06 | −0.24 [−0.45, 0.02] / −0.25 |
+| Module III reference score | 0.03 / 0.18 | 0.13 / **0.30** | −0.02 / −0.02 |
+
+No distance tracks the total score within any group (all CIs include 0), and none beats the within-group mean as an out-of-fold predictor (Proposed Δ RMSE +0.33 [0.03, 0.76] / +0.41 [−1.11, 1.84] / +0.17 [−0.38, 0.92]). The L2 distance gives the same picture.
+
+**(b) View stability: the same performance filmed from F / L / R** (synced expert groups; ICC(1) of the distance across views, higher = more stable; ΔICC vs B1 with paired CIs; E22):
+
+| Method | E01 rep-level ICC | E02 rep-level ICC | ΔICC vs B1 (E01 / E02) | E01 / E02 video-level ICC | R_view (E01 / E02, rep) |
+|---|---|---|---|---|---|
+| B1 | 0.02 [−0.09, 0.13] | 0.11 [−0.08, 0.30] | – | −0.01 / 0.10 | 0.92 / 0.92 |
+| B2-MediaPipe | 0.07 | 0.03 | +0.06 [−0.09, 0.18] / −0.08 [−0.34, 0.17] | 0.08 / 0.03 | 0.92 / 0.98 |
+| B2-KTPFormer | 0.12 | 0.01 | +0.10 [−0.07, 0.25] / −0.10 [−0.31, 0.11] | 0.13 / −0.04 | 0.90 / 0.98 |
+| **Proposed (λ 1.0)** | **0.32 [0.21, 0.43]** | **0.62 [0.51, 0.70]** | **+0.31 [0.17, 0.43] / +0.51 [0.34, 0.67]** | 0.27 / 0.68 | 0.75 / 0.58 |
+| Proposed alt. (frozen CVDC) | 0.30 | 0.68 | +0.29 [0.16, 0.45] / +0.57 [0.38, 0.73] | 0.25 / 0.73 | 0.70 / 0.53 |
+| random-init encoder | −0.14 | 0.10 | −0.15 / −0.01 | −0.18 / 0.16 | 1.07 / 0.93 |
+| Module III score | 0.54 | 0.50 | – | 0.52 / 0.44 | 0.67 / 0.70 |
+| Module III score without speed | 0.24 | 0.31 | – | 0.27 / 0.34 | 0.88 / 0.84 |
+| Module III end-range angle | −0.02 | −0.11 | – | −0.05 / −0.21 | 0.99 / 1.12 |
+
+- **CVDC makes the vector difference view-stable**, as hypothesised: Proposed's ICC is 0.31 (E01) and 0.51 (E02) above B1's, with CIs well above 0, at rep and video level; B2 (3D input without CVDC) is no more stable than B1. The views also rank performances alike under CVDC (between-view Spearman, rep level: E02 0.62–0.66 for Proposed vs 0.38 / 0.05 / −0.06 for B1 on F–L / F–R / L–R; E01 0.47 / 0.46 / 0.21 vs 0.30 / 0.16 / −0.09).
+- Module III's full score looks as stable (0.54 / 0.50), but synced views share the rep boundaries (P6b), so its speed part is identical across views by construction; **without speed it drops to 0.24 / 0.31**, below Proposed's distance. Its 3D end-range angle is not view-stable at all (ICC ≤ 0).
+- **Stable but not clinically informative:** within groups the CVDC distance does not track the physiotherapists' scores (6d.3a). CVDC fixes the view dependence of the vector difference; it does not make the difference measure movement quality as rated.
+
+### 6d.4 Recording-noise test (item 6; `recording_noise.json`, E23)
+Per synced expert performance, the reps each view's video fully contains (the best view's reps on the aligned clock):
+
+| | E01 (127 performances, 371 views) | E02 (127, 375) |
+|---|---|---|
+| performances with different PF4 across views / PF3 / contained count | 100 / 56 / 97 | 71 / 36 / 96 |
+| view pairs with different PF4: higher-PF4 view holds **more / the same / fewer** complete reps | **47% / 35% / 18%** (209 pairs) | **39% / 45% / 16%** (163 pairs) |
+| 'more' under the within-performance permutation null | 28% (p < 0.001) | 28% (p = 0.001) |
+| within-performance Spearman PF4 vs contained count | 0.26 | 0.21 |
+| share of the between-view variance of the total score explained by the count | 18% | 3% |
+| PF3 = 1 when ≥ 10 / < 10 reps are contained | 57% / 9% | 32% / 18% |
+
+- **Partly.** Between-view PF3/PF4 differences follow the reps each video actually contains more often than chance, clearly so in E01 (the higher-PF4 view holds more complete reps 2.6× as often as fewer). But a third (E01) to almost half (E02) of the PF4 differences occur between views that contain the same number of complete reps, so they are rater variation, not recording. Counting at least half-recorded reps instead makes the views almost equal (88–93% of pairs), so the view differences are partially cut edge reps. In E01 the contained count explains 18% of the between-view variance of the total score; in E02 3%, where PF4 does not behave like a rep count anyway (D11).
+
+### 6d.5 Conclusion of Phase 4
+- Module III runs end to end as in proposal Figure 2 (template library → DTW alignment → angle, ROM, speed and symmetry deviations → localised errors with joint, frames, degrees and severity → score → JSON).
+- Against the PT reference, the score and the rules capture the **expert/non-expert difference** (AUC 0.98), but within groups they agree only weakly with the movement-quality score (E01 0.18, E02 0.30) and not with the total score, and the rules fire as often in the best expert videos as elsewhere.
+- **CVDC's clear, measurable effect is view stability**: the embedding distance to the reference is far more stable across F / L / R with CVDC (ICC +0.31 / +0.51 over B1), and more stable than the 3D-angle Module III score without timing. It does not make the distance track the physiotherapists' scores within groups.
+- The between-view PF3/PF4 label differences are partly real recording truncation (E01 especially) and partly rater variation.
+
+Questions for the review (not applied):
+1. **Rule specificity:** within experts, the rules fire as often in ≥ 95 videos as overall (e.g. E02 elbow bent 40%). The centre is the demo (whose elbows are straighter than the experts'), and the band is ±2 expert SD per frame. Keep "PT = truth" and report the rates as they are, widen k, or centre the posture channels on the experts?
+2. **Speed reference:** the score's speed part is centred on the experts (M5a), but the angular-velocity deviation from the **demo** is the component that agrees best (E02 experts 0.24, non-experts 0.40). Switch the speed centre to the demo? This would be a post-hoc change, so it would need a fresh check (e.g. on LOSO).
+3. **Non-expert end range:** a higher end range goes with lower non-expert scores (ρ −0.31). Can the physiotherapists say what CF1–CF3 mean for E01 (the EAAQ figure lists the criteria but not their item numbers), so the rules can follow the items?
+4. Single-view use (live demo): the library has per-view bands, so the demo needs the camera view (default front); OK?
+
 ## 7. Phase checklist
 All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
 
@@ -576,12 +667,14 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - [x] **(a2) score setup** (user request after step (a)): label diagnostics and set-level baselines (rep-count-only, set-features); video head (mean + attention pooling + set rep count, T13); T6 per-video weighting; early stopping min 10 / patience 15 / EMA (T8b); items only where they vary (T14); Proposed variants (i) frozen, (ii) λ 0.1 / 1.0, (iii) full fine-tune (T15); re-run of B1, Proposed variants, B2-MediaPipe, B2-KTPFormer on GroupKFold-5; **stop and report**; done 2026-10-18, results in §6c;
   - [ ] (b) after approval: CVDC ablations on GroupKFold (C5);
   - [ ] (c) then the final LOSO table (per-fold-encoder shortcut, C7) for the 4 main methods.
-- [ ] **Phase 4, Module III:**
-  - templates (PT demo at 30 fps, mirrored, 3D angles; tolerance bands from expert videos scoring ≥ 95);
-  - DTW, angle and angular-velocity deviation;
-  - rules;
-  - score;
-  - JSON with the embedding-to-reference distance.
+- [x] **Phase 4, Module III** (2026-10-19, E01 + E02; results in §6d):
+  - [x] templates (PT demo at 30 fps, mirrored, 3D angles; per-view bias and tolerance bands from expert videos scoring ≥ 95, refitted per fold);
+  - [x] DTW alignment, angle deviation, ROM shortfall, speed and angular-velocity deviation, left/right symmetry;
+  - [x] rules (joint, frames, degrees, severity);
+  - [x] reference score per rep and per video, clinical agreement within groups (total, movement-quality score, items);
+  - [x] JSON with the embedding-to-reference distance;
+  - [x] embedding distance for B1, B2, Proposed (λ 1.0): score tracking and view stability;
+  - [x] recording-noise test for PF3/PF4.
 - [ ] **Phase 5, evaluation:**
   - **within-group metrics first** (expert-only, non-expert-only), pooled second (E9);
   - group-only baseline next to mean and duration-only (E10);
@@ -594,7 +687,7 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
   - B2 with MediaPipe-3D and KTPFormer-3D inputs (A10);
   - label-noise floor;
   - baselines (mean, duration-only, group-only);
-  - embedding-distance analysis;
+  - embedding-distance analysis (within-group tracking and view stability done in Phase 4, §6d; repeat on LOSO);
   - UMAP/t-SNE with reference embeddings.
 - [ ] **Phase 6, demo:**
   - `demo/live.py` on video files (real-time playback, field picker, leakage warning, .mp4 export, embedding-distance overlay);
@@ -609,16 +702,18 @@ All phases run on **E01 + E02 only** (§0). Code stays exercise-agnostic, with e
 
 **Recorded, not open:** KTPFormer is less view-consistent than MediaPipe on 3 of 4 angles (only E01 shoulder elevation improves; §6.5); B2 is reported with both inputs.
 
-**Open for Phase 4:** the E02 horizontal adduction angle is view-dependent in 3D and often undefined in R views (§5.6, M7a); the left-arm CF difference is borderline (no flag under the agreed rule).
+**Addressed in Phase 4:** the E02 horizontal adduction angle's view dependence (per-view bias and bands, M7a, M8); the left-arm CF difference stays borderline (no flag under the agreed rule).
 
 **Addressed in step (a2) (§6c):** the step (a) open items (noisy early stopping → T8b; linear probe and the joint objective → Proposed variants; T6 → per-video weighting, decided).
 
-**Open after Phase 3 step (a2) (for the review):**
-- **No model beats the within-group mean in any group**, even with the video head, per-video weighting, stable stopping and the item masks (§6c.3). The label diagnostics (§6c.1) suggest the limit is in the labels: the expert score varies mostly through the repetition items PF3/PF4, which no set-level feature predicts out of fold and which differ between views of the same performance. Decide how to report score prediction (negative result vs other targets) before spending the ablation and LOSO compute.
-- **Proposed default for (b) and (c):** λ = 1.0 joint training keeps most of the CVDC view consistency (VCI 0.24 / 0.26 / 0.17 vs 0.14 / 0.13 / 0.09 for full fine-tuning), with no loss in score; proposed as the default (not applied).
-- Non-expert CF1 is predicted by the shoulder-elevation ROM (set-features R² 0.24) but by no network: test explicit angle / ROM inputs (Module III features) for the heads?
-- T14 thresholds (≥ 5 subjects off the mode, SD ≥ 0.05) and the EMA factor 0.7 are my choices (T8b, T14).
-- CVDC encoders were reused from step (a) (T15); their stopping rule is the step (a) one.
+**Answered in the seventh review (2026-10-19)** (the step (a2) questions; §4): within-group score prediction is reported as a negative result with the label diagnostics (E21); Proposed = joint loss λ 1.0, frozen encoder as the alternative (T15); no angle / ROM inputs to the heads (T16); total score official, movement-quality score secondary (D13). Still my choices, not reviewed: the T14 thresholds (≥ 5 subjects off the mode, SD ≥ 0.05), the EMA factor 0.7 (T8b), and the reuse of the step (a) CVDC encoders (T15).
+
+**Open after Phase 4 (for the review; §6d.5):**
+- Rule specificity: within experts the rules fire as often in ≥ 95 videos as overall; keep the demo as the centre, widen k, or centre the posture channels on the experts?
+- Speed reference: switch the score's speed centre from the experts (M5a) to the demo, whose angular-velocity deviation agrees best? (Post-hoc; would need a fresh check.)
+- Non-expert end range goes against the ROM rule (ρ −0.31): the item numbering of the E01 EAAQ (which criterion is CF1, CF2, CF3) would let the rules follow the items.
+- The demo needs the camera view for the per-view library (default front).
+- Score and rule defaults (equal weights, d_zero 4, k 2, σ floors, run length) are my choices (M9–M12), not tuned.
 
 **Other open items:**
 - **EAAQ appendix** for E02–E09: the user is looking for it. Until it arrives, only E01 has questionnaire-derived rules.

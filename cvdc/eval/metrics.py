@@ -12,6 +12,9 @@ same draws are used for every method, so differences between methods are paired.
   vci_sums, vci_from_sums   the Viewpoint Consistency Index (E13) from per-subject sums of cosine similarities,
                    so it can be pooled over folds and bootstrapped over subjects without recomputing similarities
   interval         percentile interval of the replicates
+  icc_weighted     one-way random-effects ICC(1) over sets (e.g. one performance seen from several views), with
+                   set multiplicities, for the view stability of a measure (Phase 4)
+  mean_abs_diff_weighted   weighted mean |x_i - x_j| over pairs (Gini mean difference)
 """
 import numpy as np
 
@@ -146,3 +149,33 @@ def vci_from_sums(s, M=None):
         other = np.einsum("bs,st,bt->b", M, s["other_sum"], M) / np.einsum("bs,st,bt->b", M, s["other_cnt"], M)
     out = {"vci": same - other, "same": same, "other": other}
     return {k: float(v[0]) for k, v in out.items()} if point else out
+
+
+def icc_weighted(x, set_code, Wset):
+    """One-way random-effects ICC(1) over sets (performances) with set multiplicities Wset (B, S); x: (n,) values,
+    set_code: (n,) in [0, S). Unbalanced ANOVA estimator with k0."""
+    S = Wset.shape[1]
+    n_s = np.bincount(set_code, minlength=S).astype(float)
+    s1 = np.bincount(set_code, weights=x, minlength=S)
+    s2 = np.bincount(set_code, weights=x * x, minlength=S)
+    N = Wset @ n_s
+    a = Wset.sum(1)
+    grand = (Wset @ s1) / N
+    ssb = Wset @ (s1 ** 2 / n_s) - N * grand ** 2
+    ssw = Wset @ (s2 - s1 ** 2 / n_s)
+    msb, msw = ssb / (a - 1), ssw / (N - a)
+    k0 = (N - (Wset @ n_s ** 2) / N) / (a - 1)
+    return (msb - msw) / (msb + (k0 - 1) * msw)
+
+
+def mean_abs_diff_weighted(x, w):
+    """Weighted mean |x_i - x_j| over ordered pairs i != j (rows of w: (B, n)), via sorting."""
+    o = np.argsort(x)
+    xs, ws = x[o], w[:, o]
+    C = np.cumsum(ws, 1)
+    tot = C[:, -1:]
+    below = C - ws
+    above = tot - C
+    s = 2 * (ws * xs * (below - above)).sum(1)
+    pairs = tot[:, 0] ** 2 - (ws ** 2).sum(1)
+    return s / pairs

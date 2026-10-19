@@ -96,6 +96,28 @@ sync:
   report_csv: outputs/sync_report.csv
   pairs_csv: outputs/sync_pairs.csv
 
+templates:                              # Module III Reference Template Library (Phase 4; M1, M2, M4, M8)
+  source: pt_demo                       # M1: the physiotherapist's demo is the reference curve ("truth")
+  min_score: 95                         # M2: experts' videos scoring >= this give the view bias and tolerance bands
+  min_reps: 10                          # a template frame needs >= this many defined expert values in a view
+  library_dir: outputs/phase4/library   # deployable library fitted on all experts (demo); evaluation refits per fold
+
+assess:                                 # Module III comparison, errors and score (Phase 4; M8-M13)
+  fps: 30                               # the uniform grid (P5)
+  angle_source: 3d_mediapipe_world      # M6: channels from MediaPipe world landmarks
+  band_k: 2.0                           # M9: tolerance band = target +- k * sigma (expert SD per view and frame)
+  sigma_floor_deg: {default: 3.0, rom: 5.0}   # minimum band SD (deg), so a tight expert spread does not explode u
+  min_defined_frac: 0.3                 # a channel is assessed in a rep only if >= 30% of its template frames are defined
+  min_run_frac: 0.1                     # M12: an error needs an out-of-band run of >= 10% of the template ...
+  min_run_frames: 3                     # ... and >= 3 frames
+  severity_sd: [1.0, 2.0]               # M12: excess beyond the band (SD): <= 1 mild, <= 2 moderate, > 2 severe
+  score:                                # M11: score = 100 (1 - sum_g w_g min(1, X_g / d_zero) / sum_g w_g)
+    d_zero: 4.0                         # a group's points reach 0 at a distance of 4 expert SDs from the reference
+    weights: {angle: 1.0, rom: 1.0, speed: 1.0, symmetry: 1.0}
+  quality_bins: [50, 80]                # D6 bins applied to the rep / set score
+  quality_names: [incorrect, partially_correct, correct]
+  json_dir: outputs/phase4/json         # per-video reports (M13)
+
 outputs:
   phase1: outputs/phase1
   phase2: outputs/phase2

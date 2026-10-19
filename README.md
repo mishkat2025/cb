@@ -5,10 +5,11 @@ Cross-View Depth-Consistency Learning" on the MobiPhysio dataset (doi 10.7910/DV
 
 - **Scope now:** E01 (Abduction) and E02 (Adduction) only (`data.include_exercises`). Exercises are
   discovered at runtime, so adding one later is a config change.
-- **Status:** Step 0, Phase 1 (keypoints and preprocessing), Phase 2 (models, CVDC loss, pair builder) and
+- **Status:** Step 0, Phase 1 (keypoints and preprocessing), Phase 2 (models, CVDC loss, pair builder),
   Phase 3 steps (a) (GroupKFold-5 for the 4 main methods) and (a2) (score-setup diagnosis and fixes, Proposed
-  variants) are done; the ablations (b) and the LOSO table (c) wait for review. See `PROGRESS.md` for the state and
-  the phase checklist, and `DESIGN_DECISIONS.md` for every open choice.
+  variants) and Phase 4 (Module III: PT-demo reference templates, DTW deviations, rule-based errors, the reference
+  score, the embedding-to-reference distance) are done; the ablations (b) and the LOSO table (c) wait for review.
+  See `PROGRESS.md` for the state and the phase checklist, and `DESIGN_DECISIONS.md` for every open choice.
 - **Privacy:** the videos show faces. Only keypoints are stored; renders are skeleton-only; `data/` and
   `outputs/` are gitignored. Audio is decoded in memory for synchronization and never written; GPS tags in
   the video containers are never read.
@@ -151,6 +152,32 @@ python scripts/phase3/report_phase3a2.py          # within-group tables (video a
 | runner | `cvdc/train/run.py` | methods `b1`, `proposed`, `proposed_lp`, `proposed_j01`, `proposed_j1`, `b2_mediapipe`, `b2_ktpformer`; reuses checked CVDC encoders |
 | report | `scripts/phase3/report_phase3a2.py`, `scripts/phase3/label_diagnostics.py` | `summary.md`, `label_diagnostics.md` and CSVs |
 
+## Phase 4: Module III (reference-based assessment) and the embedding distance
+
+Module III follows proposal Figure 2: the PT demo of each exercise is the reference template (30 fps, 3D angles,
+left arms mirrored); high-scoring expert videos (≥ 95) give per-view bias and tolerance bands; every rep is
+DTW-aligned to the template, compared channel by channel, scored 0–100 and checked by YAML rules (joint, frames,
+degrees, severity). Config: `templates` and `assess` in `configs/data.yaml`, `assess.channels / score / rules` in
+`configs/exercises/EXX.yaml`. Outputs go to `outputs/phase4/` (gitignored). Needs the Phase 3 step (a2) runs for the
+embedding distance.
+
+```bash
+python scripts/phase4/embedding_distance.py   # encode all reps + the PT demo per method and fold (~1 min, GPU)
+python -m cvdc.assess.run                       # Module III: templates, per-fold libraries, scores, errors, JSON (~20 s)
+python scripts/phase4/recording_noise.py        # item 6: reps contained in each view vs PF3 / PF4 (~45 s)
+python scripts/phase4/report_phase4.py          # agreement, components, errors, distance tracking, view stability (~40 s)
+```
+
+| Piece | Code | Notes |
+|---|---|---|
+| angles | `cvdc/assess/angles.py` | + elbow extension, contralateral elevation, trunk lateral lean, shoulder asymmetry (all for the moving arm) |
+| template | `cvdc/assess/template.py` | arm-direction DTW alignment, PT reference (one DBA step), per-view library (bias, bands, ROM / speed tolerances), save / load |
+| Module III | `cvdc/assess/module3.py` | deviations, score (M11), rule-based errors (M12), per-video JSON and its validator (M13), `Assessor` for single reps (demo) |
+| runner | `cvdc/assess/run.py` | per-fold libraries (training subjects only), `module3_{reps,videos,errors}.csv`, `json/<video>.json`, `library/<EX>.{npz,json}` (all subjects, for the demo) |
+| distance | `scripts/phase4/embedding_distance.py` | centred-cosine and L2 distance to the PT reference embedding for B1, B2, Proposed (λ 1.0), frozen CVDC, random init |
+| recording | `cvdc/eval/recording.py`, `scripts/phase4/recording_noise.py` | reps fully / half contained in each view of a synced performance |
+| report | `scripts/phase4/report_phase4.py` | `summary.md`, CSVs, `figs/template_<EX>.png`, `figs/agreement_scatter.png`; ICC with bootstrap in `cvdc/eval/metrics.py` |
+
 ## Tests
 
 ```bash
@@ -165,11 +192,13 @@ cvdc/data/          filenames, labels, index, video (PyAV), extract, skeleton, p
                     pairs, synthetic, augment, dataset, cvdc_batch
 cvdc/models/        graph, stgcn, heads, model, lifter (KTPFormer wrapper)
 cvdc/losses/        cvdc (weighted multi-positive InfoNCE), supervised
-cvdc/assess/        angles, dtw (Module III follows in Phase 4)
-cvdc/eval/          consistency (VCI), splits, metrics (bootstrap CIs), baselines (set features, video-level baselines)
+cvdc/assess/        angles, dtw, template (reference + library), module3 (score, errors, JSON), run (Phase 4 runner)
+cvdc/eval/          consistency (VCI), splits, metrics (bootstrap CIs, ICC), baselines (set features, video-level
+                    baselines), recording (reps contained per view)
 cvdc/train/         trainer, pretrain_cvdc, train_supervised, run (GroupKFold runner)
 cvdc/viz/           skeleton drawing, Phase 1 checks
-scripts/            run_phase1.py, phase1/ checks and report, phase2/ (smoke, lifter_check, bench), phase3/ (reports, label diagnostics), step0/
+scripts/            run_phase1.py, phase1/ checks and report, phase2/ (smoke, lifter_check, bench), phase3/ (reports, label
+                    diagnostics), phase4/ (embedding distance, recording noise, report), step0/
 third_party/        local clones used by wrappers (gitignored)
 tests/              pytest
 ```

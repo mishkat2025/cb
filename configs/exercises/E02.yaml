@@ -26,3 +26,20 @@ assess:                          # Module III (Phase 4); supervisor answers 1, 2
     source: expert_data
     expert_min_score: 95
     eaaq_phase_s: null           # TODO: verify when the E02 EAAQ appendix is available
+  # Phase 4 (M7): channels compared with the PT template (3D, moving arm = side; left arms mirrored).
+  # shoulder_elevation = the spec's "shoulder abduction angle (trunk line vs upper arm)": the arm stays low in E02.
+  channels: [horizontal_adduction, shoulder_elevation, elbow_extension, contralateral_elevation, trunk_lateral_lean,
+             shoulder_asymmetry]
+  score:
+    angle_channels: [horizontal_adduction, shoulder_elevation, elbow_extension, contralateral_elevation,
+                     trunk_lateral_lean]
+    symmetry_channel: shoulder_asymmetry
+  rules:                         # M12; TODO: verify against the E02 EAAQ when the appendix is available
+    - {type: adduction_range_insufficient, measure: rom_shortfall, joint: moving_shoulder}
+    - {type: arm_elevation_deviation, channel: shoulder_elevation, direction: both, joint: moving_shoulder}
+    - {type: elbow_bent, channel: elbow_extension, direction: below, joint: moving_elbow}
+    - {type: other_arm_raised, channel: contralateral_elevation, direction: above, joint: other_shoulder}
+    - {type: trunk_lean, channel: trunk_lateral_lean, direction: both, joint: trunk}
+    - {type: shoulder_asymmetry, channel: shoulder_asymmetry, direction: above, joint: moving_shoulder}
+    - {type: too_fast, measure: speed, direction: fast}
+    - {type: too_slow, measure: speed, direction: slow}
