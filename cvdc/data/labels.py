@@ -27,6 +27,16 @@ def load_scores(csv_path, regex, variations) -> pd.DataFrame:
     return per.dropna(subset=["video_id"]).reset_index(drop=True), list(bad.csv_name)
 
 
+MQ_ITEMS = ["PF1", "PF2", "CF1", "CF2", "CF3"]
+
+
+def movement_quality(df, items=MQ_ITEMS):
+    """Secondary target (D13, user 2026-10-19): the movement-quality score = the mean of the judge-mean items
+    PF1, PF2, CF1, CF2, CF3 (each 0-1), rescaled to 0-100. It leaves out the repetition items PF3 / PF4, which
+    a set's views rate differently (E3). The total score stays the official target."""
+    return 100.0 * df[list(items)].astype(float).sum(axis=1) / len(items)
+
+
 def quality_class(score, bins, names):
     """Score -> derived quality class (D6). bins=[50, 80] -> <50, 50-79.99, >=80."""
     score = np.asarray(score, float)

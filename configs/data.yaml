@@ -22,6 +22,7 @@ data:
 labels:
   score_col: avg_round                  # D4: CSV "Rounding to 2 Decimal"
   items: [PF1, PF2, PF3, PF4, CF1, CF2, CF3]   # all kept in the index; D5 drops PF3 as a target later
+  movement_quality_items: [PF1, PF2, CF1, CF2, CF3]   # D13: secondary 0-100 score (PF3/PF4 left out); total stays official
   quality_bins: [50, 80]                # D6
   quality_names: [incorrect, partially_correct, correct]
 

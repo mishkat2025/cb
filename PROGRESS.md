@@ -227,6 +227,13 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 3. Check whether the embeddings separate experts from non-experts more than they separate scores within a group: a linear probe for the group label (balanced accuracy, AUC) next to within-group score probes, for B1, B2 and Proposed, plus a view-matched subset (E11).
 4. Keep rep-level training as the default so clip length cannot be a cue (T1, E12); the remaining cues (rep duration, rep count per set, view mix) are listed in E12.
 
+**Seventh review (2026-10-19): decisions on step (a2)** (`DESIGN_DECISIONS.md` E21, T15, T16, D13):
+1. **Within-group score prediction is reported as a negative result**, together with the label diagnostics (§6c.1). The step (a) and (a2) results stay in the repo and the reports; nothing is deleted (E21).
+2. **Default Proposed = the joint loss with λ = 1.0** (`proposed_j1`; `eval.proposed_default`). The frozen CVDC encoder (`proposed_lp`) is kept as a reported alternative (`eval.proposed_alternative`) (T15).
+3. **No angle / ROM inputs to the deep heads.** Angles and ROM belong to Module III (T16).
+4. **The total score stays the official target.** A secondary **movement-quality score** = PF1 + PF2 + CF1 + CF2 + CF3, rescaled to 0–100 (100 × their sum / 5), is reported within groups (D13; `cvdc.data.labels.movement_quality`, `labels.movement_quality_items`). It leaves out PF3/PF4, the items that differ between views of one performance (E3).
+5. Then Phase 4 (Module III, proposal Figure 2) for E01 and E02, with the PT demo as the reference ("truth"); **no LOSO and no ablations yet** (§6d).
+
 **Sixth review (2026-10-18): decisions before Phase 3** (`DESIGN_DECISIONS.md` A10, E13, T8, E14):
 1. **KTPFormer:** keep using it locally for non-commercial research; never commit or share its code or weights; cite the paper. MotionBERT's weights are also Human3.6M-trained, so switching would not remove the non-commercial limit. The user informs the supervisor.
 2. **Headline VCI:** within each exercise and expert/non-expert group, mean-centred 256-d. The pooled value is secondary and reported with the random-encoder reference (0.41).
