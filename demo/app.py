@@ -26,7 +26,7 @@ from cvdc.config import load_config, resolve, video_root  # noqa: E402
 from cvdc.data.video import iter_frames  # noqa: E402
 from demo.pipeline import ExerciseModel, OnlineSession, PoseStream, dataset_subject  # noqa: E402
 
-CONFIG = "configs/per_exercise.yaml"
+CONFIG = REPO / "configs" / "per_exercise.yaml"
 
 
 @st.cache_resource
@@ -172,7 +172,7 @@ def main():
                  distance=(r.get("embedding_distance") or {}).get("cosine_centred"),
                  errors=", ".join(f"{e['type']} ({e.get('joint', '')}, {e['severity']})" for e in r["errors"]))
             for r in rep["reps"]]
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), hide_index=True)
     if rep["reps"]:
         k = st.slider("rep", 1, len(rep["reps"]), 1) - 1
         st.json(rep["reps"][k]["errors"], expanded=False)

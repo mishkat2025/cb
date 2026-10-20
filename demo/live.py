@@ -225,8 +225,8 @@ def main():
                 last_update = t
                 for e in sess.update(pose):
                     last_entry = e
-                    print(f"rep {e['rep'] + 1}: score {e['score']} ({e['quality']})"
-                          + (f", model {e['model_score']}" if "model_score" in e else "")
+                    print(f"rep {e['rep'] + 1}{' (updated)' if e.get('updated') else ''}: score {e['score']} "
+                          f"({e['quality']})" + (f", model {e['model_score']}" if "model_score" in e else "")
                           + (f", distance {e['embedding_distance']['cosine_centred']}" if e.get("embedding_distance") else "")
                           + "".join(f"\n    {x}" for x in error_lines(e, 9)))
             # ---------------- drawing
@@ -287,8 +287,8 @@ def main():
                     time.sleep(lag)
         for e in sess.update(pose, final=True):
             last_entry = e
-            print(f"rep {e['rep'] + 1}: score {e['score']} ({e['quality']})"
-                  + (f", model {e['model_score']}" if "model_score" in e else ""))
+            print(f"rep {e['rep'] + 1}{' (updated)' if e.get('updated') else ''} (final pass): score {e['score']} "
+                  f"({e['quality']})" + (f", model {e['model_score']}" if "model_score" in e else ""))
     finally:
         pose.close()
         if writer is not None:

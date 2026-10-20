@@ -282,7 +282,7 @@ class OnlineSession:
                 zs.append(z)
             if key not in self._seen:
                 self._seen.add(key)
-                new.append(e)
+                new.append({**e, "updated": i < len(self.entries)})  # an earlier rep whose boundaries moved
         self.pre, self.signal, self.side = pre, ang[side], side
         self.reps, self.entries, self.debug, self.zs = done, entries, debug, zs
         return new
