@@ -100,3 +100,54 @@ def test_e06_main_angle_comes_from_the_hands_in_the_side_views():
     a = FULL["exercises"]["E06"]["assess"]
     assert a["angle_source"] == "hands" and a["angle_views"] == ["L", "R"]
     assert a["near_hand"] == {"L": "right", "R": "left"}
+
+
+# ------------------------------------------------------------------ one model per exercise (T17)
+PEREX = load_config("configs/per_exercise.yaml")
+
+
+def test_per_exercise_config_has_no_exercise_head_and_groupkfold_5():
+    assert "exercise" not in PEREX["heads"]["targets_rep"]
+    assert PEREX["model"]["exercise_embedding"] == 0 and PEREX["heads"]["video_head"]["exercise_embedding"] == 0
+    assert PEREX["eval"]["k"] == 5 and PEREX["methods"]["proposed_lp"]["cvdc_from"] == "proposed_j1"
+    assert PEREX["eval"]["per_exercise_methods"] == ["b1", "b2_ktpformer", "proposed_j1", "proposed_lp"]
+    assert "exercise" in PILOT["heads"]["targets_rep"]  # the pilot keeps its shared model
+
+
+def test_model_without_exercise_head_predicts_from_keypoints_only():
+    import torch
+    from cvdc.models.model import CVDCModel
+    m = CVDCModel(PEREX).eval()
+    assert "exercise" not in m.heads.heads and m.heads.ex_emb is None and m.video_head.ex_emb is None
+    with torch.no_grad():
+        o = m(torch.zeros(2, 2, 64, 17))
+    assert set(o) == {"z", "score", "items", "quality"}
+
+
+def test_exercise_scope_restricts_every_item_selection():
+    from cvdc.data.dataset import PackData
+    meta = pd.DataFrame(dict(subject=["P01", "P01", "P02", "P30"], exercise=["E01", "E02", "E01", "E01"],
+                             view=["F", "F", "L", "F"]))
+    fake = types.SimpleNamespace(meta=meta, vmeta=meta, device="cpu", scope=None)
+    assert PackData.subject_mask(fake, ["P01", "P02"]).tolist() == [True, True, True, False]
+    PackData.set_scope(fake, ["E01"])
+    assert PackData.subject_mask(fake, ["P01", "P02"]).tolist() == [True, False, True, False]
+    assert PackData.subject_mask(fake, ["P01", "P02"], ["L"]).tolist() == [False, False, True, False]
+    assert PackData.subject_videos(fake, ["P01"]).tolist() == [0]
+    PackData.set_scope(fake, None)
+    assert PackData.subject_videos(fake, ["P01"]).tolist() == [0, 1]
+
+
+def test_per_exercise_plans_use_only_that_exercises_subjects():
+    from cvdc.train.run_per_exercise import exercise_plans
+    rows = [dict(subject=f"P{i:02d}", group="expert", exercise="E07") for i in range(1, 15)]
+    rows += [dict(subject=f"P{i:02d}", group="expert", exercise="E01") for i in range(1, 25)]
+    rows += [dict(subject=f"P{i:02d}", group="non-expert", exercise="E01") for i in range(26, 53)]
+    data = types.SimpleNamespace(meta=pd.DataFrame(rows))
+    p7 = exercise_plans(PEREX, data, "E07")
+    assert len(p7) == 5 and all(p["exercise"] == "E07" for p in p7)
+    assert sorted(s for p in p7 for s in p["test"]) == [f"P{i:02d}" for i in range(1, 15)]
+    for p in exercise_plans(PEREX, data, "E01"):  # both groups in every test fold and inner validation split
+        grp = {s: ("expert" if int(s[1:]) < 25 else "non-expert") for s in p["train"] + p["test"]}
+        assert {grp[s] for s in p["test"]} == {"expert", "non-expert"}
+        assert {grp[s] for s in p["inner_val"]} == {"expert", "non-expert"}

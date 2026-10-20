@@ -56,6 +56,19 @@ python -m cvdc.data.pairs --config configs/data_full.yaml                    # C
 python scripts/phase1_full/dtw_angle_check.py                                # known-warp test of the DTW angles
 ```
 
+## Full scope: Phase 3, one model per exercise (T17)
+
+Supervisor decision (2026-10-20): every exercise E01–E09 gets its own models, trained and tested on its videos only
+(GroupKFold-5 per exercise, stratified by expert / non-expert; no exercise head). Config `configs/per_exercise.yaml`;
+results in `PROGRESS.md` §6h. A shared all-exercise run was stopped and is archived in `runs/full/aborted_shared_model/`.
+
+```bash
+python scripts/phase3_full/runtime_estimate_perex.py                 # runtime estimates (nothing trained)
+python -m cvdc.train.run_per_exercise --smoke                         # smoke test: fold 0 of every exercise, 2 epochs (~1 min)
+python -m cvdc.train.run_per_exercise                                 # B1, B2-KTPFormer, Proposed (lambda 1.0), frozen Proposed (~8 h)
+python -m cvdc.train.run_per_exercise --exercises E07 --methods b1    # a subset
+```
+
 ## Phase 1: keypoints and preprocessing
 
 One command (resumable; cached keypoints are skipped):

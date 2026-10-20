@@ -22,6 +22,11 @@ ITEMS = ["PF1", "PF2", "PF4", "CF1", "CF2", "CF3"]  # D5: PF3 is not a target
 LIFTED = {"xyz_ktpformer": "ktpformer"}
 
 
+def scope_mask(scope, meta):
+    """(n,) bool: rows of ``meta`` whose exercise is in ``scope`` (None = every row; T17)."""
+    return np.ones(len(meta), bool) if scope is None else meta.exercise.isin(set(scope)).to_numpy()
+
+
 def exercise_label_ok(cfg, meta):
     """(n,) bool: False for rows of (exercise, subject) pairs in ``data.exercise_label_exclude`` (D8: the movement
     shows a wrong exercise, e.g. E03 P02), which the exercise head neither learns nor is scored on."""
@@ -101,6 +106,7 @@ class PackData:
         self.v_exercise = torch.tensor(vm.exercise.map(codes.index).to_numpy(), device=device)
         self.v_stratum = torch.tensor([spos[k] for k in zip(vm.exercise, vm.group)], device=device)
         self.v_count = None
+        self.scope = None  # set_scope: exercises the item selections are restricted to (T17)
         cpath = ((cfg.get("heads") or {}).get("video_head") or {}).get("count_csv")
         if unit == "rep" and cpath and resolve(cpath).exists():
             cnt = pd.read_csv(resolve(cpath)).set_index("video_id").n_reps_set
@@ -120,9 +126,17 @@ class PackData:
         return {"score": self.score[idx], "quality": self.quality[idx], "exercise": self.exercise_target[idx],
                 "items": torch.stack([self.items[k][idx] for k in items], -1) if items else None}
 
+    def set_scope(self, exercises=None):
+        """Restrict every item selection (subject_mask, items_of, subject_videos) to ``exercises`` (T17: one model
+        per exercise); None = all exercises. Item indices stay global, so CVDC pairs and saved embeddings keep
+        their item ids."""
+        self.scope = None if exercises is None else sorted(exercises)
+        return self
+
     def subject_mask(self, subjects, views=None):
-        """Items of ``subjects``; with ``views``, only those filmed from these views (cross-view protocol, E24)."""
-        m = self.meta.subject.isin(set(subjects)).to_numpy()
+        """Items of ``subjects`` (within the exercise scope); with ``views``, only those filmed from these views
+        (cross-view protocol, E24)."""
+        m = self.meta.subject.isin(set(subjects)).to_numpy() & scope_mask(getattr(self, "scope", None), self.meta)
         if views is not None:
             m = m & self.meta.view.isin(set(views)).to_numpy()
         return torch.tensor(m, device=self.device)
@@ -143,7 +157,8 @@ class PackData:
         return torch.cat(parts), seg
 
     def subject_videos(self, subjects):
-        return torch.tensor(np.flatnonzero(self.vmeta.subject.isin(set(subjects)).to_numpy()), device=self.device)
+        m = self.vmeta.subject.isin(set(subjects)).to_numpy() & scope_mask(getattr(self, "scope", None), self.vmeta)
+        return torch.tensor(np.flatnonzero(m), device=self.device)
 
     def item_masks(self, items, min_subjects=5, min_sd=0.05):
         """T14: (n_strata, len(items)) bool, True where the item varies within the stratum (from the video labels;

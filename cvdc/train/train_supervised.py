@@ -273,11 +273,12 @@ def predict(model, data, items, cfg, scaler):
     for j in range(pq.shape[1]):
         df[f"p_quality_{j}"] = pq[:, j]
     df["quality_pred"] = pq.argmax(1)
-    pe = torch.softmax(o["exercise"], -1).cpu().numpy()
-    codes = model.exercises
-    df["exercise_pred"] = [codes[j] for j in pe.argmax(1)]
-    for c in sorted(data.meta.exercise.unique()):
-        df[f"p_ex_{c}"] = pe[:, codes.index(c)]
+    if "exercise" in o:  # no exercise head in the per-exercise models (T17)
+        pe = torch.softmax(o["exercise"], -1).cpu().numpy()
+        codes = model.exercises
+        df["exercise_pred"] = [codes[j] for j in pe.argmax(1)]
+        for c in sorted(data.meta.exercise.unique()):
+            df[f"p_ex_{c}"] = pe[:, codes.index(c)]
     return df
 
 

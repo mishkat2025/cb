@@ -1,8 +1,10 @@
 # Progress
 
-Last updated 2026-10-20 (full scope: Phase 1 done for all nine exercises, tenth-review changes applied, CVDC pairs built; stopped before training).
+Last updated 2026-10-20 (full scope: E09 DTW angles chosen by the warp test; one model per exercise (T17): runner smoke-tested, runtimes estimated, step 1 launched).
 
 **State (2026-10-20):** the scope is now **all nine exercises** (user, ninth review, §4). The full-data Step 0 check (§3.7) found E03–E09 usable with caveats; the user brought all seven in. **Phase 1 is done for the full scope (§5b):** keypoints for all 3,685 videos (MediaPipe Hands for E06), sync, reps, packs and the KTPFormer lift, verified with the pilot's checks plus a comparison with the pilot and with Step 0. The E05 PF1 check (user answer 5) found no wrong exercise (§5b.7). **Tenth review (§4) applied:** E06's wrist angle is assessed in the side views only (§5b.3); the rep-phase fix is accepted (P6c); the rep signals of E03 and E09 were re-chosen by cross-view agreement (now forearm elevation and the 2D trunk inclination, §5b.10); the CVDC pairs are built with per-exercise DTW angles (§5b.11). **Work stops here, as asked: nothing is trained on the full scope until the user confirms the final evaluation scheme**, and no LOSO is started (the final table is planned as GroupKFold-10 until the supervisor decides, E1). **All E01/E02 results stay as the pilot**, unchanged; the full scope runs from `configs/data_full.yaml` into new folders (`data/full/`, `outputs/full/`, `runs/full/`; D15).
+
+**Update (2026-10-20, eleventh and twelfth reviews, §4, §6h):** E09's rep-matched pairs now use the arm angles, the set with the lowest known-warp error (§6h.1). A GroupKFold-10 run of one model shared by all nine exercises was started and then **stopped by the user** (supervisor decision: **one model per exercise**, T17); its partial outputs are kept, labelled as aborted (§6h.2). The per-exercise runner (`python -m cvdc.train.run_per_exercise`) is smoke-tested on all nine exercises, the runtimes are estimated (§6h.4: main runs ~7.7 h, cross-view ~14–17 h, LOSO per exercise ~38 h with the shortcut), and **step 1, GroupKFold-5 per exercise for B1, B2-KTPFormer, Proposed (λ 1.0) and the frozen Proposed, is running**. No full-scope result exists yet.
 
 **Pilot state (E01/E02, unchanged since 2026-10-19):** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the fifth-review changes (§6.5). Phase 3 **step (a)** (§6b) and **step (a2)** (§6c) are done; the seventh review's decisions are recorded (§4). **Phase 4 (Module III, embedding-to-reference distance, recording-noise test) is done** (§6d), with the eighth review's changes (§6d.6–6d.7). **Phase 5 has started:** **A, the cross-view protocol** (train on two views, test on the held-out third, 4 main methods, GroupKFold-5) is done (§6e); **B, the CVDC pair-source ablation on the VCI** is done (§6f); the **LOSO runtime is estimated** (§6g: ~16 h for the 4 methods). **Work stops here, as asked: LOSO has not started**, and the other ablations (τ, embedding size, 2 vs 3 views, augmentation) have not run.
 
@@ -388,6 +390,19 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 4. Keep rep-level training as the default so clip length cannot be a cue (T1, E12); the remaining cues (rep duration, rep count per set, view mix) are listed in E12.
 
 **Scope change (user, 2026-10-20): full dataset.** The full MobiPhysio dataset (all 9 exercises) is downloaded. Expand from E01/E02 to all usable exercises; do not start LOSO. Step 1: the Step 0 check of every new exercise (E03–E09) with the same method (parse rate, counts, CSV join, duplicates and bad files, F/L/R groups and sync classes, rep-segmentation feasibility, match to the PT demos and the Module III angles, the known issues E03 P02 / E06 Hands / E07–E09 lying, and whether the other EAAQs exist in the dataset), a verdict per exercise, and runtime estimates for Phase 1 extraction, the main GroupKFold runs, the cross-view protocol and LOSO; then stop. Keep every E01/E02 result as the pilot and write new results to new folders. Done: §3.7 (D0, D14–D17, S8, M16, E27).
+
+**Twelfth review (user, 2026-10-20): one model per exercise (supervisor decision; final plan)** (`DESIGN_DECISIONS.md` T17, E1, E14, E28; applied in §6h):
+0. **Stop the shared-model run**; keep its partial outputs in their own folder, labelled as aborted. Keep the code changes (E09 arm angles, set-feature angles, group probe, D8).
+1. For **each exercise E01–E09 separately**, using only that exercise's videos: B1, B2-KTPFormer, Proposed (CVDC pretraining on that exercise's multi-view pairs + λ = 1.0 joint fine-tuning) and the frozen-encoder Proposed as the reported alternative. **No exercise-classification head.** Same training settings as the pilot otherwise.
+2. **GroupKFold-5 per exercise**, grouped by subject, balanced expert / non-expert where both exist; CVDC pretraining inside each fold on training subjects only.
+3. Report per exercise: within-group score results (expert / non-expert) vs the mean, group-only, duration-only, rep-count-only and set-feature baselines; the movement-quality score; the within-group VCI; the view stability of the distance to the PT reference; the group probe. Flag exercises with few subjects (e.g. E07: 14) as low-confidence.
+4. The pilot (shared model, E01/E02) results stay as a reference only.
+5. One GPU job at a time; CPU work in parallel: Module III for E03–E09 (incl. the E06 side-view wrist angle) and the Phase 6 demo code (video-file input; the demo loads the selected exercise's model).
+6. After the main runs: the per-exercise cross-view protocol (rotate F / L / R) for B1, B2-KTPFormer and Proposed, on exercises with synced multi-view data.
+7. LOSO per exercise later (supervisor / cloud decision); do not start it.
+Before launching: runtime estimates for 1–2, 6 and per-exercise LOSO, a smoke test of the per-exercise runner; record the decision, commit and report after each step.
+
+**Eleventh review (user, 2026-10-20):** (1) E09 alignment angles: let the warp-recovery test decide, also testing trunk–thigh + knees + arm angles combined; use the lowest median warp error and rebuild the E09 pairs (done, §6h.1). (2) Final scheme GroupKFold-10 (subject-grouped, balanced for expert / non-expert), full scope; LOSO not now. (3) Start full-scope training for B1, B2-MediaPipe, B2-KTPFormer, Proposed (λ 1.0) and the frozen Proposed (started, then **superseded by the twelfth review**, §6h.2).
 
 **Tenth review (user, 2026-10-20): answers to the full-scope Phase 1 questions** (`DESIGN_DECISIONS.md` P1c, P6c, P6d, A5, M16; applied in §5b.3, §5b.10, §5b.11):
 1. **E06:** the wrist angle is assessed in the **side views only**; front-view E06 is assessed without the wrist angle, stated as a limitation.
@@ -1131,12 +1146,58 @@ Paired differences (centred VCI; E01 expert / E02 expert / E01 non-expert):
 - The Phase 2 estimate (20.5 h) assumed full budgets and no joint loss. The joint loss doubles Proposed's epoch cost, so early stopping saves less than expected.
 - The LOSO runner is not written yet: `fold_plan` supports GroupKFold only, and the shortcut needs the subject → encoder map (`splits.fold_of`) in place of the current subject check in `reuse_cvdc`.
 
+## 6h. Full scope, Phase 3: E09 DTW angles, the aborted shared-model run, one model per exercise (2026-10-20)
+Decisions T17, E1, E28 (new / updated), A5, D8, E11, E20 in `DESIGN_DECISIONS.md`. Code: `cvdc/train/run_per_exercise.py`, `configs/per_exercise.yaml`, `scripts/phase3_full/` (report, group probe, runtime estimate).
+
+### 6h.1 E09 alignment angles by the warp-recovery test (eleventh review, item 1)
+`scripts/phase1_full/dtw_angle_check.py --only E09` with every earlier set plus trunk–thigh + knees + arm angles (same 40 synced groups and 327 rep pairs as §5b.11; `outputs/full/phase1/dtw_angle_check_E09_v2.log`). Median error of the recovered known warp (t^1.5), frames:
+
+| Angle set | Median warp error | Same rep cheaper than the next |
+|---|---|---|
+| **arm angles (shoulder elevation + elbow, both sides)** | **4.78** | 46.5% |
+| trunk–thigh + knees + arm angles | 6.01 | 44.0% |
+| trunk–thigh + knees (the previous choice) | 7.39 | 50.8% |
+| hips + knees | 7.48 | 47.1% |
+| trunk–thigh + hips | 7.84 | 54.7% |
+| hips | 8.14 | 53.8% |
+| trunk–thigh | 10.81 | 55.0% |
+| no DTW | 9.79 | – |
+
+**E09 now uses the arm angles** (`configs/exercises/E09.yaml`). Pairs rebuilt (`python -m cvdc.data.pairs --config configs/data_full.yaml`): edges, rep sets and pair counts unchanged; only the 25 DTW-aligned E09 members (from the 34 E09 rep pairs) and their DTW costs changed (checked against a backup, `data/full/backup_pairs_e09_trunk/`).
+
+### 6h.2 The shared all-exercise run (GroupKFold-10), stopped
+Built and started per the eleventh review (commit `fb7da25`): GroupKFold-10 over the 58 subjects, stratified by expert / non-expert (2–3 experts and 3–4 non-experts per test fold), one model for all nine exercises with a 9-class exercise head; E03 P02 masked out of the exercise labels (D8); the frozen Proposed sharing the λ = 1.0 run's CVDC encoder per fold; set features with the E03–E09 main angles (E20). **Stopped by the user after B1 fold 0** (60 of 60 epochs, 16.9 min; fold 1 at epoch 30). Partial outputs: `runs/full/aborted_shared_model/` and `outputs/full/results/aborted_shared_model/` (with `ABORTED.md`); nothing from it is reported. The code it needed stays (report and group-probe scripts, D8 mask, set-feature angles).
+
+### 6h.3 One model per exercise: runner and smoke test (twelfth review)
+- `python -m cvdc.train.run_per_exercise` (config `configs/per_exercise.yaml`): per exercise, GroupKFold-5 over that exercise's subjects (stratified by group where both exist), inner validation 20% per group, then for each method and fold the same `run_method_fold` as the pilot, with the data scoped to the exercise (`PackData.set_scope`), so the supervised items, the target scalers, the video head's count statistics, the CVDC rep sets (pretraining and joint loss), the embedding centre and the test predictions all come from that exercise. No exercise head and no exercise embedding; everything else as the pilot's step (a2). Methods: B1, B2-KTPFormer, Proposed (λ 1.0; CVDC pretrained per fold), frozen Proposed (reuses that encoder).
+- Subjects per exercise (with ≥ 1 rep): E01 50 (24 / 26), E02 24, E03 49 (24 / 25), E04 24, E05 44 (23 / 21), E06 22, **E07 14**, E08 30 (14 / 16), E09 25 (14 / 11). Low-confidence flags (< 15 subjects): exercise E07; strata E07, E08, E09 experts (14) and E09 non-experts (11).
+- **Smoke test** (`--smoke`: fold 0, 3 training subjects, 2 epochs; all 9 exercises × 4 methods, 1.2 min; `outputs/full/results/perex_smoke_train.log`): every run finished; every run's test predictions, embeddings and CVDC rep sets hold only its exercise; no run has exercise-head outputs; the frozen variant reused the λ = 1.0 run's CVDC encoder in all nine exercises. Peak GPU memory 8.1 GB (λ 1.0).
+- Tests: `tests/test_phase3_full.py` (per-exercise config, a model without exercise head, the exercise scope on every item selection, per-exercise plans balanced by group, GroupKFold-10, D8, the encoder sharing, the set-feature angles); `python -m pytest -q tests`: **202 passed**.
+
+### 6h.4 Runtime estimates (before launching; E28)
+`scripts/phase3_full/runtime_estimate_perex.py`: measured cost per epoch and inner-training rep (pilot step (a2): B1 0.92 ms, B2-KTPFormer 0.99, Proposed λ 1.0 1.93, frozen 0.40; the aborted full-scope B1 fold 0.93 ms) and per CVDC rep set (4.34 ms), epochs to early stopping from the same runs; exact counts from each exercise's plans. One GPU job at a time.
+
+| Step | Central | Range (fewest epochs – cap) |
+|---|---|---|
+| **1–2: GroupKFold-5 per exercise** (B1 1.1, B2-KTPFormer 1.0, CVDC 2.9, Proposed λ 1.0 2.1, frozen 0.6 h) | **7.7 h** | 5.7–10.0 h |
+| **6: cross-view per exercise** (3 rotations × 5 folds; B1, B2-KTPFormer, Proposed with a fresh two-view CVDC) | **~14 h** (17.2 h by set counts) | 12.9–22.4 h |
+| **7: LOSO per exercise** (288 folds; B1, B2-KTPFormer, Proposed, frozen), per-fold-encoder shortcut (C7) | **37.5 h** | 26–50 h |
+| 7 without the shortcut (a CVDC pretraining per LOSO fold) | 60.8 h | 45–79 h |
+
+Per exercise (1–2): 0.6 h (E07) to 1.0 h (E01). The cross-view figure by set counts assumes CVDC costs scale with the rep sets of the two training views (2.9× the all-view pretraining); in the pilot it cost 2.0×, so ~14 h is likelier. Uncertainty ≥ ±30%.
+
+### 6h.5 Step 1 launched
+`python -m cvdc.train.run_per_exercise --tag perex_gkf5` (exercises E01 → E09, per exercise B1 → B2-KTPFormer → Proposed λ 1.0 → frozen; log `runs/full/perex_gkf5/train.log`). Results will be reported per exercise as each finishes (§3 of the twelfth review). Meanwhile on the CPU: Module III for E03–E09 and the Phase 6 demo.
+
 ## 7. Phase checklist
 The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase 1 (§5b). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
 
 - [x] **Step 0:** environment, inventory, labels, sync census, references (E01, E02, E03-partial)
 - [x] **Step 0 on the full dataset (E03–E09)** (2026-10-20; §3.7): inventory and CSV join, decode and copy checks, sync classes for all groups, 355-video pose sample (detection, posture, rep signals, motion sync with controls), PT-demo comparison, label structure, EAAQ search, verdicts, full-scope runtime estimates. Answers: ninth review (§4).
 - [x] **Phase 1 on the full scope (E01–E09)** (2026-10-20; §5b): video root and new folders (`configs/data_full.yaml`); Pose for 3,685 videos + Hands for E06 (on wrist crops); sync with S8 and the extended motion candidates; reps with the approved signals, adaptive thresholds and the rep-phase fix (P6c); packs; KTPFormer lift; renders and report; E05 PF1 motion check; E06 Hands check; E01/E02 vs the pilot and E03–E09 vs Step 0; 20 new tests.
+- [x] **E09 DTW angles by the warp test** (eleventh review; §6h.1): arm angles, pairs rebuilt.
+- [x] ~~Shared all-exercise GroupKFold-10 run~~ (eleventh review): started, **stopped** (twelfth review: one model per exercise); partial outputs archived (§6h.2).
+- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [running]; per-exercise report [ ]; Module III E03–E09 [ ]; Phase 6 demo [ ]; (6) cross-view per exercise [ ]; (7) LOSO per exercise: not started (supervisor / cloud).
 - [x] **Tenth-review changes** (2026-10-20; §5b.3, §5b.10, §5b.11): E06 wrist angle in side views only (Phase 4); rep-phase fix accepted; E03 / E09 rep signals re-chosen by cross-view agreement; per-exercise DTW angles; CVDC pairs built for the full scope; 2 more tests (187). **Not started:** any training on the full scope (waits for the user's confirmation of the final evaluation scheme).
 - [x] **Phase 1, keypoints and preprocessing** (2026-10-17; results in §5)
   - [x] `cvdc/data/`:
@@ -1207,11 +1268,11 @@ The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase
   - `demo/app.py`.
 
 ## 8. Open items and questions
-**Open after the tenth-review update (2026-10-20; nothing trained):**
-1. **Final evaluation scheme** (the user confirms before any training): GroupKFold-10 as the final table is the current plan (E1); LOSO is the supervisor's decision.
-2. **E09 DTW angles:** the instructed trunk / lower-body set recovers a known time warp worse than the arm angles (7.6 vs 4.9 frames, §5b.11); only 34 E09 rep pairs are affected. Keep the trunk set, or add the arm angles for E09?
-3. **EAAQs for E02–E09** (§3.7.8): still pending.
-4. Still to define before Phase 3 on the full scope: the GroupKFold-10 folds (stratified by expert / non-expert, as GroupKFold-5), `eval.noise_floor` for E03–E09 (E3), the exercise-label exclusion (E03 P02 only).
+**Open after the twelfth review (2026-10-20):**
+1. **LOSO per exercise:** the supervisor's (or cloud) decision; estimated 37.5 h with the shortcut (§6h.4); not started.
+2. **EAAQs for E02–E09** (§3.7.8): still pending.
+
+**Answered in the eleventh and twelfth reviews (2026-10-20):** the evaluation scheme (one model per exercise, GroupKFold-5 per exercise; T17), the E09 DTW angles (by the warp test: arm angles), the GroupKFold folds, the noise floors for E03–E09 (E3, `eval.noise_floor`), the exercise-label exclusion (E03 P02; no exercise head in the per-exercise models).
 
 **Answered in the tenth review (2026-10-20):** the four questions after Phase 1 on the full scope (§4; applied in §5b.3, §5b.10, §5b.11): E06 wrist angle in the side views only; the rep-phase fix accepted; E03 / E06 / E09 rep signals compared and re-chosen by cross-view agreement; per-exercise DTW angles.
 

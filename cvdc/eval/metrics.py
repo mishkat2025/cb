@@ -8,7 +8,8 @@ same draws are used for every method, so differences between methods are paired.
   subject_draws    (B, S) subject multiplicities, drawn with replacement within each stratum (e.g. expert /
                    non-expert, so a pooled resample keeps the group sizes)
   regression       RMSE, MAE, Pearson r, Spearman rho (Pearson on weighted mid-ranks)
-  classification   accuracy, macro F1 and Cohen's kappa (unweighted) from weighted confusion matrices
+  classification   accuracy, macro F1, macro precision / recall and Cohen's kappa (unweighted) from weighted
+                   confusion matrices
   vci_sums, vci_from_sums   the Viewpoint Consistency Index (E13) from per-subject sums of cosine similarities,
                    so it can be pooled over folds and bootstrapped over subjects without recomputing similarities
   interval         percentile interval of the replicates
@@ -104,11 +105,14 @@ def classification(t, p, W, k, labels=None):
     fp, fn = C.sum(1) - tp, C.sum(2) - tp
     with np.errstate(invalid="ignore", divide="ignore"):
         f1 = np.where(2 * tp + fp + fn > 0, 2 * tp / (2 * tp + fp + fn), 0.0)
+        prec = np.where(tp + fp > 0, tp / (tp + fp), 0.0)
+        rec = np.where(tp + fn > 0, tp / (tp + fn), 0.0)
         n = C.sum((1, 2))
         po = tp.sum(1) / n
         pe = (C.sum(2) * C.sum(1)).sum(1) / n ** 2
         kappa = np.where(pe < 1 - 1e-12, (po - pe) / (1 - pe), np.nan)
-    return {"accuracy": po, "macro_f1": f1[:, labels].mean(1), "kappa": kappa}
+    return {"accuracy": po, "macro_f1": f1[:, labels].mean(1), "macro_precision": prec[:, labels].mean(1),
+            "macro_recall": rec[:, labels].mean(1), "kappa": kappa}
 
 
 def vci_sums(z, key, view, group, subj, n_subj, center=None, pair_ok=None):

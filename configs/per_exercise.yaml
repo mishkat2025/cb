@@ -1,0 +1,19 @@
+# One model per exercise (supervisor decision, user 2026-10-20; DESIGN_DECISIONS T17). Extends the full-scope config
+# (all nine exercises' data, D15 folders) and trains / evaluates every exercise on its own videos only:
+# python -m cvdc.train.run_per_exercise --config configs/per_exercise.yaml
+extends: data_full.yaml
+
+model:
+  exercise_embedding: 0                 # T17 (supersedes T5): one exercise per model, so no exercise conditioning
+heads:
+  targets_rep: [score, CF1, CF2, CF3, quality]   # T17: no exercise-classification head
+  video_head:
+    exercise_embedding: 0
+
+methods:                                # T17: B1, B2-KTPFormer, Proposed (lambda 1.0), Proposed frozen (alternative);
+  proposed_lp: {cvdc_from: proposed_j1} # the frozen variant shares the per-fold CVDC encoder of proposed_j1 (T15)
+
+eval:
+  k: 5                                  # T17: GroupKFold-5 per exercise, subjects stratified by expert / non-expert
+  per_exercise_methods: [b1, b2_ktpformer, proposed_j1, proposed_lp]
+  per_exercise_low_confidence_subjects: 15   # T17: exercises with fewer subjects are flagged low-confidence
