@@ -8,17 +8,19 @@ references:                      # M3: V3 (90/90) is the closest demo (Chamfer 1
   primary: "Later Rotation V3.mp4"
   backup: ["Lateral Rotation.mp4"]
   notes: both arms (left mirrored), working phase only (shoulder abduction >= 70 deg)   # M3, applied in Phase 4
-primary_angle:                   # P6 / M16: rep signal, segmentation only (not a joint angle)
-  name: wrist_path_pc1           # PC1 of the wrist path in the trunk frame (3D); cross-view agreement 90% (Step 0)
-  source: world
+primary_angle:                   # P6 / M16 / P6d: rep signal = the Module III main angle
+  name: forearm_elevation        # forearm vs the trunk's up axis (3D); chosen by cross-view rep agreement (P6d): 57.0% of
+  source: world                  # 114 synced groups within +-1 vs 55.3% for the earlier wrist-path PC1
   side: auto                     # the arm whose signal has the larger p5-p95 range
-  orient_by: {name: forearm_elevation, source: world, sign: -1}   # P6c: PC rises as the forearm goes up
+  orient_by: {name: forearm_elevation, source: world, sign: -1}   # P6c: the signal rises as the forearm goes up
 reps:                            # P6c: per-video adaptive thresholds, the Step 0 method (PROGRESS §3.7.5)
   adaptive: true
   prominence_frac: 0.4           # x the video's p5-p95 signal range
   min_amplitude_frac: 0.3
   polarity: peak                 # P6c: rep = the forearm rising (signal oriented by orient_by)
   max_rep_s: 20.0
+pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (user, 2026-10-20: per exercise)
+  dtw_angles: [forearm_elevation_left, forearm_elevation_right, shoulder_elevation_left, shoulder_elevation_right]
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
 assess:

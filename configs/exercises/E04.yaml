@@ -18,6 +18,8 @@ reps:                            # P6c: per-video adaptive thresholds, the Step 
   min_amplitude_frac: 0.3
   polarity: peak                 # P6c: rep = the forearm rotating down (signal oriented by orient_by)
   max_rep_s: 20.0
+pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (user, 2026-10-20: per exercise)
+  dtw_angles: [forearm_elevation_left, forearm_elevation_right, shoulder_elevation_left, shoulder_elevation_right]
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
 assess:

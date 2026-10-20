@@ -166,6 +166,14 @@ def wrist_height_2d(P, side="right"):
     return -(P[..., J[f"{side}_wrist"], 1] - msh[..., 1])
 
 
+def trunk_inclination_2d(P, side=None):
+    """E09 rep signal (2D image keypoints): the angle of the trunk (mid-hip -> mid-shoulder) above the image horizontal,
+    degrees, independent of which way the person faces (|dx|); ``side`` is ignored. Raising the trunk from prone
+    increases it."""
+    d = mid(P, "left_shoulder", "right_shoulder") - mid(P, "left_hip", "right_hip")
+    return np.degrees(np.arctan2(-d[..., 1], np.abs(d[..., 0])))
+
+
 COCO17 = ["nose", "left_eye", "right_eye", "left_ear", "right_ear", "left_shoulder", "right_shoulder", "left_elbow",
           "right_elbow", "left_wrist", "right_wrist", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle",
           "right_ankle"]
@@ -213,10 +221,11 @@ PRIMARY_ANGLES = {"shoulder_elevation": shoulder_elevation, "arm_frontal_angle":
                   "horizontal_adduction": horizontal_adduction, "wrist_path_pc1": wrist_path_pc1,
                   "hip_flexion": hip_flexion, "knee_flexion": knee_flexion, "trunk_thigh_angle": trunk_thigh_angle,
                   "forearm_elevation": forearm_elevation, "wrist_height_2d": wrist_height_2d,
-                  "all_joint_pc1": all_joint_pc1}
+                  "all_joint_pc1": all_joint_pc1, "trunk_inclination_2d": trunk_inclination_2d}
 UNITS = {"shoulder_elevation": "deg", "arm_frontal_angle": "deg", "horizontal_adduction": "deg",
          "wrist_path_pc1": "torso", "hip_flexion": "deg", "knee_flexion": "deg", "trunk_thigh_angle": "deg",
-         "forearm_elevation": "deg", "wrist_height_2d": "torso", "all_joint_pc1": "torso", "wrist_extension": "deg"}
+         "forearm_elevation": "deg", "wrist_height_2d": "torso", "all_joint_pc1": "torso", "wrist_extension": "deg",
+         "trunk_inclination_2d": "deg"}
 # Module III channels (Phase 4, M7): every function takes (P, side) with side = the moving arm, so a left-arm
 # performance is assessed as its mirror image (P8).
 ASSESS_ANGLES = {"shoulder_elevation": shoulder_elevation, "horizontal_adduction": horizontal_adduction,

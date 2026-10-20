@@ -140,6 +140,29 @@ def test_forearm_elevation_and_wrist_height():
     assert np.allclose(wrist_height_2d(xy, "left"), -4)
 
 
+def test_trunk_inclination_2d_is_independent_of_facing_direction():
+    from cvdc.assess.angles import trunk_inclination_2d
+    xy = np.zeros((2, 33, 2))
+    for k, sx in enumerate((1, -1)):                  # lying with the head to the right, then to the left
+        xy[k, [J["left_hip"], J["right_hip"]]] = (0, 0)
+        xy[k, [J["left_shoulder"], J["right_shoulder"]]] = (sx * np.cos(np.radians(30)), -np.sin(np.radians(30)))
+    assert np.allclose(trunk_inclination_2d(xy), 30)   # image y points down: shoulders above the hips = positive
+
+
+def test_per_exercise_dtw_angles_and_their_features():
+    from cvdc.data.pairs import ANGLES, angle_features, dtw_angle_names
+    full, pilot = load_config("configs/data_full.yaml"), load_config("configs/data.yaml")
+    assert dtw_angle_names(pilot, "E01") == pilot["cvdc"]["pairs"]["dtw_angles"]       # the pilot is unchanged
+    assert dtw_angle_names(full, "E01") == pilot["cvdc"]["pairs"]["dtw_angles"]
+    for ex in ("E07", "E08", "E09"):                   # lower-body / trunk angles (user, 2026-10-20)
+        names = dtw_angle_names(full, ex)
+        assert names and all(n.startswith(("hip_", "knee_", "trunk_")) for n in names)
+    assert all(set(dtw_angle_names(full, ex)) <= set(ANGLES) for ex in full["exercises"])
+    w = np.repeat(_pose(), 5, 0)
+    F = angle_features(w, ["hip_flexion_left", "knee_flexion_right", "trunk_thigh"])
+    assert F.shape == (5, 3) and np.allclose(F, 0)
+
+
 def test_all_joint_pc1_follows_the_dominant_motion():
     t = np.linspace(0, 4 * np.pi, 200)
     P = np.repeat(_pose()[..., :2], 200, 0)

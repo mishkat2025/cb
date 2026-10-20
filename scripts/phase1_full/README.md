@@ -19,6 +19,9 @@ Run from the repo root with the venv's Python (`D:\cb\.venv\Scripts\python.exe`)
 | 5 | `scripts/phase1_full/hands_check.py` | E06: hand detection, the Hands wrist-extension angle vs the Pose-point angle (cross-view rep agreement and same-instant agreement in synced groups), skeleton + hand renders | minutes |
 | 6 | `scripts/phase1_full/pf1_motion_check.py --exercise E05` | user answer 5: do the E05 non-experts with mean PF1 < 0.5 perform a circumduction? (rule fixed in the script's docstring) | seconds |
 | 7 | `scripts/phase1_full/compare_pilot.py` | E01/E02 in the full scope vs the pilot (identical keypoints / preprocessing / reps except where the S8 sync rules changed a group); Phase 1 vs Step 0 per exercise | seconds |
+| 8 | `scripts/phase1_full/rep_signal_compare.py` | tenth review: Step 0's candidate rep signals of E03 / E06 / E09 compared by cross-view rep agreement on synced groups (criterion in the docstring); the winners are set in the exercise YAMLs, then `scripts/run_phase1.py --config configs/data_full.yaml --from reps --to report` | ~2 min |
+| 9 | `python -m cvdc.data.pairs --config configs/data_full.yaml` | CVDC rep sets and pairs with per-exercise DTW angles (`pairs.dtw_angles`; data only) | ~2 min |
+| 10 | `scripts/phase1_full/dtw_angle_check.py [--only E09 --extra-set E09=angle,angle]` | known-warp test of the DTW angle sets on synced groups | ~3 min |
 
 Outputs: `outputs/full/phase1/` (tables and logs), `outputs/full/checks/` (skeleton-only PNGs),
 `outputs/full/sync_report.csv`, `outputs/full/sync_pairs.csv`, `data/full/` (index, reps tables, caches, packs).

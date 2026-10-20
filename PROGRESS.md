@@ -1,8 +1,8 @@
 # Progress
 
-Last updated 2026-10-20 (full scope: Phase 1 done for all nine exercises; stopped before training).
+Last updated 2026-10-20 (full scope: Phase 1 done for all nine exercises, tenth-review changes applied, CVDC pairs built; stopped before training).
 
-**State (2026-10-20):** the scope is now **all nine exercises** (user, ninth review, §4). The full-data Step 0 check (§3.7) found E03–E09 usable with caveats; the user brought all seven in. **Phase 1 is done for the full scope (§5b):** keypoints for all 3,685 videos (MediaPipe Hands for E06), sync, reps, packs and the KTPFormer lift, verified with the pilot's checks plus a comparison with the pilot and with Step 0. The E05 PF1 check (user answer 5) found no wrong exercise (§5b.7). **Open:** the E06 wrist angle from MediaPipe Hands is not view-consistent (§5b.3), and the rep phase needed a post-hoc fix (P6c, §5b.6); questions in §8. **Work stops here, as asked: nothing is trained on the full scope**, and no LOSO is started (the final table is planned as GroupKFold-10 until the supervisor decides, E1). **All E01/E02 results stay as the pilot**, unchanged; the full scope runs from `configs/data_full.yaml` into new folders (`data/full/`, `outputs/full/`, `runs/full/`; D15).
+**State (2026-10-20):** the scope is now **all nine exercises** (user, ninth review, §4). The full-data Step 0 check (§3.7) found E03–E09 usable with caveats; the user brought all seven in. **Phase 1 is done for the full scope (§5b):** keypoints for all 3,685 videos (MediaPipe Hands for E06), sync, reps, packs and the KTPFormer lift, verified with the pilot's checks plus a comparison with the pilot and with Step 0. The E05 PF1 check (user answer 5) found no wrong exercise (§5b.7). **Tenth review (§4) applied:** E06's wrist angle is assessed in the side views only (§5b.3); the rep-phase fix is accepted (P6c); the rep signals of E03 and E09 were re-chosen by cross-view agreement (now forearm elevation and the 2D trunk inclination, §5b.10); the CVDC pairs are built with per-exercise DTW angles (§5b.11). **Work stops here, as asked: nothing is trained on the full scope until the user confirms the final evaluation scheme**, and no LOSO is started (the final table is planned as GroupKFold-10 until the supervisor decides, E1). **All E01/E02 results stay as the pilot**, unchanged; the full scope runs from `configs/data_full.yaml` into new folders (`data/full/`, `outputs/full/`, `runs/full/`; D15).
 
 **Pilot state (E01/E02, unchanged since 2026-10-19):** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the fifth-review changes (§6.5). Phase 3 **step (a)** (§6b) and **step (a2)** (§6c) are done; the seventh review's decisions are recorded (§4). **Phase 4 (Module III, embedding-to-reference distance, recording-noise test) is done** (§6d), with the eighth review's changes (§6d.6–6d.7). **Phase 5 has started:** **A, the cross-view protocol** (train on two views, test on the held-out third, 4 main methods, GroupKFold-5) is done (§6e); **B, the CVDC pair-source ablation on the VCI** is done (§6f); the **LOSO runtime is estimated** (§6g: ~16 h for the 4 methods). **Work stops here, as asked: LOSO has not started**, and the other ablations (τ, embedding size, 2 vs 3 views, augmentation) have not run.
 
@@ -389,6 +389,13 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 
 **Scope change (user, 2026-10-20): full dataset.** The full MobiPhysio dataset (all 9 exercises) is downloaded. Expand from E01/E02 to all usable exercises; do not start LOSO. Step 1: the Step 0 check of every new exercise (E03–E09) with the same method (parse rate, counts, CSV join, duplicates and bad files, F/L/R groups and sync classes, rep-segmentation feasibility, match to the PT demos and the Module III angles, the known issues E03 P02 / E06 Hands / E07–E09 lying, and whether the other EAAQs exist in the dataset), a verdict per exercise, and runtime estimates for Phase 1 extraction, the main GroupKFold runs, the cross-view protocol and LOSO; then stop. Keep every E01/E02 result as the pilot and write new results to new folders. Done: §3.7 (D0, D14–D17, S8, M16, E27).
 
+**Tenth review (user, 2026-10-20): answers to the full-scope Phase 1 questions** (`DESIGN_DECISIONS.md` P1c, P6c, P6d, A5, M16; applied in §5b.3, §5b.10, §5b.11):
+1. **E06:** the wrist angle is assessed in the **side views only**; front-view E06 is assessed without the wrist angle, stated as a limitation.
+2. **The rep-phase fix (P6c) is accepted.**
+3. **Compare Step 0's alternative rep signals for E03 / E06 / E09 on all synced groups**, choosing by cross-view rep agreement (±1) on synced groups only (criterion fixed before the run, no score results used); report the comparison and apply the winner.
+4. **Per-exercise angles for rep-matched pairing** (lower-body / trunk angles for E07–E09).
+Then re-run the affected Phase 1 steps, update the docs, commit, **stop: no training until the user confirms the final evaluation scheme**.
+
 **Ninth review (user, 2026-10-20): answers to the full-data Step 0 questions (§8)** (`DESIGN_DECISIONS.md` D0, D1, D8, D14, D15, P1, P1c, P6c, S8, S9, M16, E1; applied in §5b):
 1. **Bring in all seven exercises (E03–E09).**
 2. **Download the MediaPipe Hands model for E06** (done: `hand_landmarker.task`, Apache 2.0; P1).
@@ -517,8 +524,8 @@ User request (ninth review, §4): run Phase 1 for E03–E09 (keypoints incl. Med
 | Keypoints | 3,685 / 3,685 videos and 11 demos; **3.06 M frames** (E03–E09 2.35 M). Reused by copy: the pilot's 941 E01/E02 files and the Step 0 sample's 355 E03–E09 files (same extractor settings, checked per file). 2,432 new extractions incl. MediaPipe Hands for all 354 E06 videos and the E06 demo | 2.1 h (12 processes, ~265 frames/s) |
 | Preprocessing | 3,655 files; **41 videos excluded** for pose in < 50% of frames (P7): the pilot's 8 + 33 new, all left-view LL/HJ takes except one non-expert front clip (`E08_P27_AF_VLL`). The 936 E01/E02 files (933 videos + 3 demos) are **byte-identical** to the pilot's | minutes |
 | Sync | audio for 2,431 E03–E09 videos (E01/E02 lags reused from the pilot's cache), creation time, start time (S8), motion with the extended candidates (S9), controls | 23 min (disk-bound) |
-| Reps | 26,629 training reps in 3,644 videos | 7 s |
-| Packs | `reps_coco17_T64` (26,629) and `videos_coco17_T300` (3,644), no NaN | 73 s |
+| Reps | 26,560 training reps in 3,644 videos (after the tenth-review signal change, §5b.10) | 9 s |
+| Packs | `reps_coco17_T64` (26,560) and `videos_coco17_T300` (3,644), no NaN; CVDC pairs (§5b.11) | 75 s + 2 min |
 | KTPFormer lift | 2,719 new videos (2.27 M frames, 854 frames/s); the pilot's 936 E01/E02 lifts reused (inputs identical); lifted packs, no NaN | 44 min (GPU) |
 | Checks | 149 skeleton-only PNGs (`outputs/full/checks/`), report tables (`outputs/full/phase1/`) | 1 min |
 
@@ -542,7 +549,7 @@ The Step 0 estimates (§3.7.10: extraction 2.1–2.6 h + 0.3 h Hands, audio 0.4 
   | **Pose wrist height (E06's rep signal)** | **0.88** | – |
 
   Comparing the front view with the side view that sees the same hand (the L camera sees the right hand, the R camera the left): 3D unsigned 0.23–0.29, signed 0.17–0.18, 2D 0.10–0.20 against 0.73–0.82 for the wrist height. Rep counts from the Hands angle agree within ±1 across views in 13.5% of groups (Pose-point angle 36%, the pipeline's wrist height 62%). **Why:** in E06 the arms point forward, toward the front camera, so the wrist bends mostly in depth for that view (`hands_E06_median_E06_P17_VO.png`); the signed angle needs the palm normal, which flips with MediaPipe's per-hand depth (a group's front view reads −50 to −100°, its side views +30 to +50°, during the same reps); and the far hand is occluded in each side view. Within a single view the angle does show the reps (`E06_P05_AF_VFL`: clean peaks of +50–75°). **Crops from full-resolution frames did not help** (test on 25 groups / 75 videos, `--hands-full-res`: detection unchanged, 2D Spearman 0.24 vs 0.22 on the same groups).
-- Rep segmentation of E06 does not use the hands (Pose wrist height, M16), so Phase 1 is complete; **E06's Module III angle is an open question** (§8).
+- Rep segmentation of E06 does not use the hands (Pose wrist height, M16), so Phase 1 is complete. **Decision (tenth review): the E06 wrist angle is assessed in the side views only**, on the hand that camera sees (L → the body's right hand, R → the left), as the unsigned angle in the image plane; **front-view E06 is assessed without the wrist angle**, stated as a limitation (`configs/exercises/E06.yaml`, implemented in Phase 4).
 
 ### 5b.4 Preprocessing
 Upper-body joint-frames interpolated: mean 4.2% (median 0.6%); low-visibility joint-frames kept with MediaPipe's estimate: mean 13% (lying exercises ~25%: the far arm). Rep length at 30 fps: p5 / p50 / p95 = 38 / 68 / 123 frames, so T_rep = 64 stays (pilot median 64).
@@ -574,12 +581,13 @@ Upper-body joint-frames interpolated: mean 4.2% (median 0.6%); low-visibility jo
   |---|---|---|---|---|---|---|---|
   | Step 0 sample (9–12 groups) | 90% | 64% | 82% | 75% | 70% | 92% | 78% |
   | All groups, Step 0 rule (first-second rest) | 61% | 79% | 82% | 65% | 71% | 74% | 56% |
-  | **All groups, final (P6c)** (groups) | **55%** (114) | **77%** (119) | **78%** (112) | **62%** (112) | **72%** (79) | **71%** (77) | **63%** (72) |
+  | All groups, P6c (groups) | 55% (114) | 77% (119) | 78% (112) | 62% (112) | 72% (79) | 71% (77) | 63% (72) |
+  | **All groups, final: P6c + the re-chosen E03 / E09 signals (§5b.10)** | **57%** | **77%** | **78%** | **62%** | **72%** | **71%** | **78%** |
 
   **The Step 0 samples were optimistic for E03, E08 and E09 and pessimistic for E04**: on Step 0's own groups the pipeline gives Step 0's numbers, so the drop is sampling, not the port. Synced groups share the best view's reps (P6b), so their training reps are identical across views by construction (100%); the per-view agreement still matters for the non-expert clips (segmented on their own) and as a signal-quality measure. Remaining failures in the renders: double counts in noisy left views (e.g. `E03_P20_AL_VML`, 18 reps), E06 videos where the arms stay up (no wrist-height reps: 11 E06 videos with 0 reps), high-jitter takes.
-- **Counts:** median set rep count 9–10 per expert video in every exercise (EAAQ "≥ 10"); non-expert clips 1 (E08 0–1). Training reps: E03 3,184 + 183 non-expert, E04 3,042, E05 3,318 + 205, E06 2,733, E07 2,016, E08 2,270 + 122, E09 2,376 + 86; E01 3,578 and E02 3,516 as in the pilot. Videos with 0 reps: 78 (non-expert clips 67, E06 experts 11).
-- **Set rep count vs PF4** (experts, Spearman): E08 0.41, E07 0.25, E05 0.17, E06 0.16, E09 0.13, E03 0.00, E04 0.01 (pilot E01 0.37, E02 −0.02). When PF4 = 1, the set has ≥ 10 reps in 92% (E08), 84% (E05), 80% (E07), 79% (E09) of videos, but only 67% (E03), 38% (E06) and 31% (E04): PF4 is not a rep count there either (D11).
-- **Timing** (median rep, experts): E03 2.1 s, E04 1.9, E05 1.8, E06 2.5, E07 3.1, E08 3.5, E09 3.1 (`table_rep_timing*.csv`; speed reference from the 832 videos scoring ≥ 95).
+- **Counts** (final, after §5b.10): median set rep count 9–10 per expert video in every exercise (EAAQ "≥ 10"); non-expert clips 1 (E08 0–1). Training reps: E03 3,284 + 178 non-expert, E04 3,042, E05 3,318 + 205, E06 2,733, E07 2,016, E08 2,270 + 122, E09 2,230 + 68; E01 3,578 and E02 3,516 as in the pilot (26,560 in all). Videos with 0 reps: 92 (non-expert clips 81, of them 34 E09 clips, most barely moving: hip range < 15°, the E09 non-experts score a median of 0; E06 experts 11).
+- **Set rep count vs PF4** (experts, Spearman, final signals): E08 0.41, E07 0.25, E09 0.20, E05 0.17, E06 0.16, E03 0.01, E04 0.01 (pilot E01 0.37, E02 −0.02). When PF4 = 1, the set has ≥ 10 reps in 92% (E08), 84% (E05), 81% (E03), 80% (E07), 77% (E09) of videos, but only 38% (E06) and 31% (E04): PF4 is not a rep count there either (D11).
+- **Timing** (median rep, experts): E03 2.1 s, E04 1.9, E05 1.8, E06 2.5, E07 3.1, E08 3.5, E09 3.4 (`table_rep_timing*.csv`; speed reference from the videos scoring ≥ 95).
 - Moving side: left in 12–29% of upper-limb expert videos (E04 29%); E06 left 64% (both wrists move; the side with the larger wrist-height range). PT demos: E03 V3 2 reps, E04 1, E05 4, E06 2, E07 2 (Step 0: 1; the demo starts mid-flexion, which the first-second rule mistook for rest), E08 2, E09 2.
 
 ### 5b.7 E05 PF1 check (user answer 5)
@@ -599,8 +607,41 @@ The six E05 non-experts with mean PF1 < 0.5 (P30, P34, P57, P58, P59: PF1 = 0; P
 ### 5b.8 E01/E02: consistency with the pilot (`scripts/phase1_full/compare_pilot.py`)
 Keypoints and preprocessed files identical (936 / 936). Sync: only the two start-time groups changed. In every other group the per-video counts are identical (set count 100%, per-view count 100%, training count 99.4% of 927 videos); 716 of 7,088 rep boundaries moved (707 in transferred views, 9 in best views where an edge rep dropped and the reps were re-indexed), a median 1 frame: the device offsets were re-estimated on all nine exercises (F→L +97 vs +93 ms, F→R +50 vs +57 ms). The pilot's results stay as they are; the full-scope E01/E02 data differ from them only by these shifts and the two groups.
 
+### 5b.10 Rep signals of E03 / E06 / E09 re-chosen by cross-view agreement (tenth review, item 3; P6d)
+`scripts/phase1_full/rep_signal_compare.py` (`rep_signal_compare.csv`). **Criterion, fixed before the run (no score or label used):** all synced expert F+L+R groups with keypoints in all three views, leaving out only the subject excluded from the exercise labels for a wrong exercise (E03 P02, D8); per view, the candidate's rep count segmented on its own with the pipeline's settings (adaptive thresholds, rep phase P6c: each candidate oriented per side to rise with the movement: E03 the forearm going up, E06 the 2D wrist height, E09 the trunk–thigh angle); the share of groups whose three counts lie within ±1; ties by exact agreement, then the current signal. Candidates: Step 0's per region.
+
+| Exercise (groups) | Candidates: within ±1 / exact (current in bold) | Winner |
+|---|---|---|
+| E03 (114) | forearm elevation 57.0 / 21.9; **wrist-path PC1 55.3 / 18.4**; all-joint PC1 52.6; elbow flexion 48.2; 2D wrist height 47.4; forearm azimuth 36.8; shoulder elevation 31.6 | **forearm elevation (3D)** |
+| E06 (112) | **2D wrist height 61.6 / 24.1**; all-joint PC1 58.0; forearm elevation 55.4; elbow flexion 41.1; Pose-point wrist deviation 2D 28.6, 3D 23.2 | **2D wrist height (unchanged)** |
+| E09 (78) | 2D trunk inclination 76.9 / 35.9; 2D shoulder height 67.9; all-joint PC1 67.9; **hip flexion 61.5 / 24.4**; trunk–thigh angle 55.1; summed hip flexion 52.6; knee flexion 11.5 | **2D trunk inclination** |
+
+- The comparison reproduces the pipeline's numbers for the current signals (E03 55.3%, E06 61.6%), so it measures the same thing. **Applied:** E03 now segments on the forearm elevation, which is also its Module III main angle (no longer a segmentation-only signal); E09 on the 2D trunk inclination (`trunk_inclination_2d`, segmentation only; the moving side named by the hip-flexion range). The E03 margin is small (2 of 114 groups).
+- **After the re-run** the pipeline's own per-view agreement equals the comparison (E03 57.0%, E09 76.9%; with E09 P21 left out as in §5b.6: 77.8%). Renders (`reps_E03_expert.png`, `reps_E09_expert.png`): E03 reps are the forearm-up phases, E09 reps the trunk-raised plateaus; two noisy left views of E03 still double-count. Effects: E03 training reps 3,184 → 3,284 (experts), 183 → 178 (non-experts); E09 2,376 → 2,230 and 86 → 68 (more E09 non-expert clips without a rep: most of them barely move).
+
+### 5b.11 CVDC pairs with per-exercise DTW angles (tenth review, item 4; A5)
+`python -m cvdc.data.pairs --config configs/data_full.yaml` (Phase 2's pair builder, data only; nothing trained). Rep-matched pairs (not-synced and unknown groups) are paired by index and time-aligned by DTW on 3D angles; each exercise now has its own angles (`pairs.dtw_angles` in its YAML): E03 / E04 forearm elevation + shoulder elevation, E05 / E06 shoulder elevation + elbow (as the pilot), **E07 / E08 hip + knee flexion, E09 trunk–thigh angle + knee flexion**, both sides; E01 / E02 keep the pilot's default.
+
+| | Reps | Rep sets (3 / 2 / 1 views) | sync pairs | audio pairs | rep pairs |
+|---|---|---|---|---|---|
+| All nine exercises | 26,560 | 9,435 (8,225 / 675 / 535) | 14,503 | 10,445 | 402 (281 DTW-aligned members) |
+
+Per exercise: `outputs/full/phase2/table_pair_counts.csv`. Rep pairs: E01 99, E02 27, E03 48, E04 2, E05 117, E06 0, E07 30, E08 45, E09 34 (mostly non-expert clips; 535 single-view sets get positives only from synthetic views, as the pilot's E01 non-experts, D12).
+
+**Check of the DTW angles** (`scripts/phase1_full/dtw_angle_check.py`; 40 synced groups per exercise, where the matching rep is known): (1) the pilot's known-warp test (A5): the other view's rep replayed slow-then-fast (t^1.5) and re-aligned by DTW; median error in frames:
+
+| Exercise | Per-exercise angles | Pilot's upper-limb angles | Without DTW |
+|---|---|---|---|
+| E03 | **3.1** | 6.0 | 6.2 |
+| E04 | **2.6** | 5.1 | 5.3 |
+| E07 | **4.1** | 5.8 | 9.1 |
+| E08 | **4.4** | 5.5 | 10.4 |
+| E09 | 7.6 | **4.9** | 10.5 |
+
+(2) Whether the same rep in the other view is cheaper than the neighbouring rep: 44–64% with the per-exercise angles vs 38–53% with the upper-limb ones, near chance as in the pilot (3D angles are view-biased, A5), which is why pairs are made by index and the DTW cost is not used to pick them. **E09 is the exception:** every trunk / lower-body set tested recovers the warp worse than the arm angles (a separate run on 327 rep pairs, `dtw_angle_check_E09.csv`: trunk–thigh + knees 7.4 frames, hips + knees 7.5, trunk + hips 7.8, hips 8.1, trunk alone 10.8, i.e. worse than no DTW at 9.8, vs 4.8 for the arm angles): during back extension the trunk holds still on a plateau while the arms keep moving. As instructed, E09 uses the best trunk / lower-body set (trunk–thigh + knees); it affects 34 rep pairs (§8).
+
 ### 5b.9 Tests
-`python -m pytest -q tests`: **185 tests, all passing** (20 new in `tests/test_full_scope.py`): config inheritance and that no full-scope path points into a pilot folder; S8a and S8b with their pair sources; adaptive segmentation (scale-free, polarity); `orient_by`; hip / knee / trunk-thigh / forearm-elevation angles, 2D wrist height and all-joint PC1 on known geometry; the signed wrist-extension angle (sign and size for both hands, frame independence); the hand-crop geometry and mapping back; `side_from`.
+`python -m pytest -q tests`: **187 tests, all passing** (22 new in `tests/test_full_scope.py`; + the 2D trunk inclination and the per-exercise DTW angles in the tenth-review update): config inheritance and that no full-scope path points into a pilot folder; S8a and S8b with their pair sources; adaptive segmentation (scale-free, polarity); `orient_by`; hip / knee / trunk-thigh / forearm-elevation angles, 2D wrist height and all-joint PC1 on known geometry; the signed wrist-extension angle (sign and size for both hands, frame independence); the hand-crop geometry and mapping back; `side_from`.
 
 ## 6. Phase 2 results (2026-10-17)
 How to run: `python -m cvdc.data.pairs`, then `python scripts/phase2/smoke.py` (README). Config: `configs/model.yaml`. Decisions A1–A9 and the updated C1, C3, C4, C6 in `DESIGN_DECISIONS.md`. Outputs: `outputs/phase2/` (pair counts, smoke log and tables), `outputs/checks/phase2_*.png` (skeleton only).
@@ -1095,7 +1136,8 @@ The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase
 
 - [x] **Step 0:** environment, inventory, labels, sync census, references (E01, E02, E03-partial)
 - [x] **Step 0 on the full dataset (E03–E09)** (2026-10-20; §3.7): inventory and CSV join, decode and copy checks, sync classes for all groups, 355-video pose sample (detection, posture, rep signals, motion sync with controls), PT-demo comparison, label structure, EAAQ search, verdicts, full-scope runtime estimates. Answers: ninth review (§4).
-- [x] **Phase 1 on the full scope (E01–E09)** (2026-10-20; §5b): video root and new folders (`configs/data_full.yaml`); Pose for 3,685 videos + Hands for E06 (on wrist crops); sync with S8 and the extended motion candidates; reps with the approved signals, adaptive thresholds and the rep-phase fix (P6c); packs; KTPFormer lift; renders and report; E05 PF1 motion check; E06 Hands check; E01/E02 vs the pilot and E03–E09 vs Step 0; 20 new tests. **Not started:** Phase 2 data (CVDC pairs) and everything after it for the full scope (stopped before training, as asked).
+- [x] **Phase 1 on the full scope (E01–E09)** (2026-10-20; §5b): video root and new folders (`configs/data_full.yaml`); Pose for 3,685 videos + Hands for E06 (on wrist crops); sync with S8 and the extended motion candidates; reps with the approved signals, adaptive thresholds and the rep-phase fix (P6c); packs; KTPFormer lift; renders and report; E05 PF1 motion check; E06 Hands check; E01/E02 vs the pilot and E03–E09 vs Step 0; 20 new tests.
+- [x] **Tenth-review changes** (2026-10-20; §5b.3, §5b.10, §5b.11): E06 wrist angle in side views only (Phase 4); rep-phase fix accepted; E03 / E09 rep signals re-chosen by cross-view agreement; per-exercise DTW angles; CVDC pairs built for the full scope; 2 more tests (187). **Not started:** any training on the full scope (waits for the user's confirmation of the final evaluation scheme).
 - [x] **Phase 1, keypoints and preprocessing** (2026-10-17; results in §5)
   - [x] `cvdc/data/`:
     - filename parser (runtime discovery of `E\d{2}(...)` folders, filtered by `data.include_exercises` = [E01, E02]; skip `__*` folders);
@@ -1165,13 +1207,13 @@ The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase
   - `demo/app.py`.
 
 ## 8. Open items and questions
-**Questions after Phase 1 on the full scope (2026-10-20; nothing trained):**
-1. **E06 wrist angle (Module III).** The MediaPipe Hands wrist-extension angle is not view-consistent here (§5b.3: Spearman across synced views 0.01–0.29 for every variant vs 0.88 for the Pose wrist height; full-resolution crops do not help), because the arms point at the front camera and the wrist bends in depth. Options for Phase 4: (a) assess E06 with the side views only (the near hand, unsigned 2D angle in the image plane, where the bend is visible) and say the front view cannot measure it; (b) keep the 3D unsigned angle with the per-view bias and bands (M8) and report its low view stability; (c) assess E06 without the wrist angle (wrist-height timing, elbow, forearm position) and state the limitation; (d) try another hand model (e.g. a whole-body keypoint model with hand points; needs approval to download). My proposal: (a) + (c) for the front view. Rep segmentation and the networks are not affected (Pose only).
-2. **Rep phase (P6c), a post-hoc fix.** Step 0's rule (rest = the first second) segmented 33–72% of videos half a cycle off; I fixed the polarity for signals with a physical direction and oriented the PC signals by the main angle (§5b.6). Counts barely change; the rep content does. OK to keep?
-3. **Cross-view agreement on all groups is lower than the Step 0 samples suggested** for E03 (55%), E06 (62%), E09 (63%) and E08 (71%) (§5b.6; the samples were 9–12 groups). Synced groups are unaffected (one segmentation per group); the non-expert clips and unsynced groups are segmented on their own. Keep the approved signals, or compare the Step 0 alternatives on all groups before Phase 2 (e.g. E03 2D wrist height, E09 2D trunk inclination; a few minutes, no training)?
-4. **Before Phase 2 on the full scope:** the CVDC pair builder aligns rep-matched pairs by DTW on upper-limb angles (`cvdc.pairs.dtw_angles`: shoulder elevation and elbow), which says nothing for E07–E09; proposal: per-exercise DTW angles (the exercise's rep signal and main angle). Also the GroupKFold-10 folds (E1), the exercise-label exclusions (E03 P02 only, D8, D14), and `eval.noise_floor` for E03–E09 (E3).
-5. **EAAQs for E02–E09** (§3.7.8): still pending (the user is looking for the appendix).
-6. **LOSO**: the supervisor's decision (E1); not started.
+**Open after the tenth-review update (2026-10-20; nothing trained):**
+1. **Final evaluation scheme** (the user confirms before any training): GroupKFold-10 as the final table is the current plan (E1); LOSO is the supervisor's decision.
+2. **E09 DTW angles:** the instructed trunk / lower-body set recovers a known time warp worse than the arm angles (7.6 vs 4.9 frames, §5b.11); only 34 E09 rep pairs are affected. Keep the trunk set, or add the arm angles for E09?
+3. **EAAQs for E02–E09** (§3.7.8): still pending.
+4. Still to define before Phase 3 on the full scope: the GroupKFold-10 folds (stratified by expert / non-expert, as GroupKFold-5), `eval.noise_floor` for E03–E09 (E3), the exercise-label exclusion (E03 P02 only).
+
+**Answered in the tenth review (2026-10-20):** the four questions after Phase 1 on the full scope (§4; applied in §5b.3, §5b.10, §5b.11): E06 wrist angle in the side views only; the rep-phase fix accepted; E03 / E06 / E09 rep signals compared and re-chosen by cross-view agreement; per-exercise DTW angles.
 
 **Answered in the ninth review (2026-10-20):** the eight questions after the full-data Step 0 (§4; applied in §5b): all seven exercises in; Hands for E06; video root and new folders; both sync rules (start-time groups get `w_sync` only with motion confirmation); PF1 = 0 is no exclusion reason (E05 check: none excluded); GroupKFold-10 planned, LOSO pending; the angles and rep signals accepted as starting definitions; the EAAQ appendix pending.
 

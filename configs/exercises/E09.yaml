@@ -6,10 +6,11 @@ status: in_scope_full
 references:
   primary: "Back Extension.mp4"  # side view, prone
   backup: []
-primary_angle:                   # P6 / M16: a joint angle (3D; unsigned, so trunk extension reads > 0)
-  name: hip_flexion              # cross-view agreement 78% (Step 0; tied with the 2D trunk inclination)
-  source: world
-  side: auto
+primary_angle:                   # P6 / M16 / P6d: segmentation only (not a joint angle)
+  name: trunk_inclination_2d     # trunk above the image horizontal (2D); chosen by cross-view rep agreement (P6d): 76.9%
+  source: image                  # of 78 synced groups within +-1 vs 61.5% for the earlier 3D hip flexion
+  side_from: {name: hip_flexion, source: world}   # 'side' names the hip with the larger range (both move)
+  orient_by: {name: trunk_thigh_angle, source: world, sign: 1}   # P6c: rises as the trunk is raised
 reps:                            # P6c: per-video adaptive thresholds, the Step 0 method (PROGRESS §3.7.5)
   adaptive: true
   prominence_frac: 0.4           # x the video's p5-p95 signal range
@@ -17,6 +18,9 @@ reps:                            # P6c: per-video adaptive thresholds, the Step 
   polarity: peak                 # P6c: rep = the trunk rising (lying flat = rest)
   max_rep_s: 20.0
   quality_joints: [knee]
+pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (user, 2026-10-20: trunk / lower-body angles)
+  dtw_angles: [trunk_thigh, knee_flexion_left, knee_flexion_right]   # best trunk / lower-body set in the known-warp test:
+                                 # 7.4 frames vs 7.8 trunk + hips, 10.8 trunk only (upper-limb angles 4.8; dtw_angle_check)
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
 assess:

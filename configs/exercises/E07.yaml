@@ -18,6 +18,8 @@ reps:                            # P6c: per-video adaptive thresholds, the Step 
   polarity: peak                 # P6c: rep = the moving hip flexing (signal oriented by orient_by)
   max_rep_s: 20.0
   quality_joints: [knee, ankle]  # best view of a synced group: trunk + the moving leg visible
+pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (user, 2026-10-20: lower-body angles)
+  dtw_angles: [hip_flexion_left, hip_flexion_right, knee_flexion_left, knee_flexion_right]
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
 assess:

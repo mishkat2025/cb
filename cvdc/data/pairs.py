@@ -7,7 +7,8 @@ Edges between two items of different views of one (exercise, subject, variation)
                 ``sync`` (audio-proven, or motion-confirmed lags) or ``audio`` (device-corrected audio lag only).
   rep           view pairs whose source is ``rep`` (not-synced or unknown groups): rep i of one view is paired
                 with rep i of the other (``cvdc.pairs.rep_pairing: index``) and time-aligned by DTW on 3D joint
-                angles (``cvdc.pairs.dtw_angles``, world landmarks).
+                angles (world landmarks): the exercise's ``pairs.dtw_angles`` (exercise YAML; e.g. hip and knee
+                flexion for E07/E08), else the default ``cvdc.pairs.dtw_angles`` (upper limb, the pilot's).
 A rep *set* is a connected component of these edges: one repetition with all its views. Sets of one item
 (single-view videos, edge reps of unpaired views) still get positives from synthetic views (``synthetic``,
 generated on the fly, cvdc/data/synthetic.py). Pair weights are read from ``sync.pair_weights`` when a batch is
@@ -27,9 +28,9 @@ import itertools
 import numpy as np
 import pandas as pd
 
-from ..assess.angles import joint_angle, shoulder_elevation
+from ..assess.angles import forearm_elevation, hip_flexion, joint_angle, knee_flexion, shoulder_elevation, trunk_thigh_angle
 from ..assess.dtw import dtw, sample_at, warp_positions
-from ..config import data_path, load_config, resolve
+from ..config import data_path, exercise_cfg, load_config, resolve
 from .preprocess import resample_fixed
 from .reps import fill_nan
 from .skeleton import JOINT_SETS
@@ -39,7 +40,19 @@ ANGLES = {
     "shoulder_elevation_right": lambda P: shoulder_elevation(P, "right"),
     "elbow_left": lambda P: joint_angle(P, "left_shoulder", "left_elbow", "left_wrist"),
     "elbow_right": lambda P: joint_angle(P, "right_shoulder", "right_elbow", "right_wrist"),
+    "forearm_elevation_left": lambda P: forearm_elevation(P, "left"),
+    "forearm_elevation_right": lambda P: forearm_elevation(P, "right"),
+    "hip_flexion_left": lambda P: hip_flexion(P, "left"),
+    "hip_flexion_right": lambda P: hip_flexion(P, "right"),
+    "knee_flexion_left": lambda P: knee_flexion(P, "left"),
+    "knee_flexion_right": lambda P: knee_flexion(P, "right"),
+    "trunk_thigh": lambda P: trunk_thigh_angle(P),
 }
+
+
+def dtw_angle_names(cfg, exercise):
+    """DTW angles of an exercise: its YAML ``pairs.dtw_angles``, else the default ``cvdc.pairs.dtw_angles``."""
+    return (exercise_cfg(cfg, exercise).get("pairs") or {}).get("dtw_angles") or cfg["cvdc"]["pairs"]["dtw_angles"]
 REAL_SOURCES = ("sync", "audio", "rep")
 
 
@@ -122,7 +135,7 @@ def build(cfg, verbose=True):
     E["set_id"] = reps.set_id.values[E.item_a]
 
     # reference member and DTW alignment of sets without a shared rep_uid
-    names = cc["dtw_angles"]
+    names = {ex: dtw_angle_names(cfg, ex) for ex in reps.exercise.unique()}
     pre_cache = {}
 
     def segment(item):
@@ -134,7 +147,7 @@ def build(cfg, verbose=True):
         return {k: v[r.start:r.end + 1] for k, v in d.items()}
 
     def feats(item):
-        return angle_features(segment(item)["world"], names)
+        return angle_features(segment(item)["world"], names[reps.iloc[item].exercise])
 
     reps["is_ref"], reps["aligned"], reps["dtw_cost_deg"] = False, "none", np.nan
     al_items, al = [], {"xy": [], "vis": [], "world": []}

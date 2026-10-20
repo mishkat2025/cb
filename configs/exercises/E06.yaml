@@ -17,11 +17,19 @@ reps:                            # P6c: per-video adaptive thresholds, the Step 
   min_amplitude_frac: 0.3
   polarity: peak                 # P6c: rep = the arm raised to the extension position (arm down = rest)
   max_rep_s: 20.0
+pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (user, 2026-10-20: per exercise)
+  dtw_angles: [shoulder_elevation_left, shoulder_elevation_right, elbow_left, elbow_right]
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
 assess:
   # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
-  angle: wrist_extension         # forearm (Pose elbow -> wrist) vs hand (Hands wrist -> middle MCP), signed, both wrists
+  angle: wrist_extension         # forearm (Pose elbow -> wrist) vs hand (Hands wrist -> middle MCP)
   angle_source: hands
+  # user answer 1 (2026-10-20; P1c): the Hands angle is not view-consistent (PROGRESS §5b.3), so the wrist angle is
+  # assessed in the SIDE views only, on the hand that camera sees, as the unsigned angle in the image plane (where the
+  # bend is visible); front-view E06 is assessed without the wrist angle, stated as a limitation
+  angle_variant: 2d_unsigned
+  angle_views: [L, R]
+  near_hand: {L: right, R: left} # the L camera faces the subject's right side (P5 visibility), the R camera the left
   posture_channels: [elbow_extension, shoulder_elevation]   # elbow flexion, forearm position
   both_sides: true

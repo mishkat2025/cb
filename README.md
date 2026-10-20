@@ -7,7 +7,7 @@ Cross-View Depth-Consistency Learning" on the MobiPhysio dataset (doi 10.7910/DV
   `data/full/`, `outputs/full/`, `runs/full/`). The E01/E02 **pilot** (`configs/data.yaml`, the default config) and
   all its results stay as they are. Exercises are discovered at runtime, so adding one is a config change.
 - **Full scope status:** Phase 1 (keypoints incl. MediaPipe Hands for E06, sync, reps, packs, KTPFormer lifting) is
-  done for all nine exercises (`PROGRESS.md` §5b); nothing is trained on the full scope yet.
+  done for all nine exercises, with the tenth-review changes and the CVDC pairs (`PROGRESS.md` §5b); nothing is trained on the full scope yet (waits for the final evaluation scheme).
 - **Status:** Step 0, Phase 1 (keypoints and preprocessing), Phase 2 (models, CVDC loss, pair builder),
   Phase 3 steps (a) (GroupKFold-5 for the 4 main methods) and (a2) (score-setup diagnosis and fixes, Proposed
   variants) and Phase 4 (Module III: PT-demo reference templates, DTW deviations, rule-based errors, the reference
@@ -51,6 +51,9 @@ python scripts/run_phase1.py --config configs/data_full.yaml --from lift    # KT
 python scripts/phase1_full/hands_check.py                                    # E06: MediaPipe Hands wrist angle
 python scripts/phase1_full/pf1_motion_check.py --exercise E05                # E05 PF1 = 0 non-experts: wrong exercise?
 python scripts/phase1_full/compare_pilot.py                                  # E01/E02 vs the pilot, E03-E09 vs Step 0
+python scripts/phase1_full/rep_signal_compare.py                             # E03/E06/E09 rep signals by cross-view agreement
+python -m cvdc.data.pairs --config configs/data_full.yaml                    # CVDC pairs (per-exercise DTW angles)
+python scripts/phase1_full/dtw_angle_check.py                                # known-warp test of the DTW angles
 ```
 
 ## Phase 1: keypoints and preprocessing
