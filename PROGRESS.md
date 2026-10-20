@@ -1224,7 +1224,7 @@ Per exercise (1–2): 0.6 h (E07) to 1.0 h (E01). The cross-view figure by set c
 
 - **E03:** the range rule no longer flags the best videos (38% → 7%) but is still not more frequent in the lower-scoring ones (6%); the mean expert set score rises 74.7 → 81.0, the view stability of the rep score improves (ICC 0.33 → 0.51; without speed 0.07 → 0.26), agreement changes within noise.
 - **E08 knee rule:** its target was already the experts' curve (E08's knee is a posture channel under M14), so nothing new was applied; the demo-centred version fires more (16% vs 11%). Its 0% in the experts' videos < 80 comes from 17 videos, so the rule's specificity cannot be judged in E08 (56% of its expert videos score 100).
-- **E08 non-experts (ρ −0.33): the speed group carries the sign.** Without it the set score agrees positively (+0.22 [−0.05, 0.41]); without any other group it stays negative. The better non-experts (P27, P45–P50; physiotherapists 45–60) do 1.2–2 reps per clip at ~2 s per rep and are flagged `too_fast` in 42–100% of their reps; the lowest (P29, P38, P41: PF1 ≈ 0, scores 0–8) do one slow ~3–4 s rep, close to the experts' tempo, with normal end ranges, so Module III rates them higher. The rep count per clip (ρ +0.60) and the speed ratio (+0.54) are what tracks the physiotherapists here; the knee deviation goes the right way (ρ −0.46). The speed centre was not changed (M5a, M15).
+- **E08 non-experts (ρ −0.33): the speed group carries the sign.** Without it the set score agrees positively (+0.22 [−0.05, 0.41]); without any other group it stays negative. The better non-experts (P27, P45–P50; physiotherapists 45–60) do 1.2–2 reps per clip at ~2 s per rep and are flagged `too_fast` in 42–100% of their reps; the lowest (P29, P38, P41: PF1 ≈ 0, scores 0–8) do one slow ~3–4 s rep, close to the experts' tempo, with normal end ranges, so Module III rates them higher. The rep count per clip (ρ +0.60) and the speed ratio (+0.54) are what tracks the physiotherapists here; the knee deviation goes the right way (ρ −0.46). **Decision (user, 2026-10-20): the speed reference stays expert-centred (M5a, M15; no post-hoc change), and this explanation is reported as a finding**: for the E08 non-experts the expert tempo reference rates the slow single reps of the lowest-scoring clips as close and the quicker, more numerous reps of the better clips as too fast.
 
 ### 6h.9 Step 1 results: one model per exercise, GroupKFold-5 (2026-10-20)
 180 runs (9 exercises × 4 methods × 5 folds) in **6.7 h** (estimate 7.7 h, 5.7–10.0 h). Then `scripts/phase3_full/embedding_distance_perex.py` (225 encoder-folds, 4 min, GPU), `group_probe.py` (4.5 min) and `report_perex.py` → **`outputs/full/results/perex_gkf5/summary.md`** (+ CSVs). Video level, within groups, 95% CIs from the subject bootstrap (2,000 draws, paired). ⚠ = < 15 subjects: E07, E08, E09 experts (14), E09 non-experts (11). Every exercise's models saw only its own videos (T17).
@@ -1376,6 +1376,8 @@ The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase
   - `demo/app.py`.
 
 ## 8. Open items and questions
+**Answered (user, 2026-10-20, after M18):** the E08 speed reference stays expert-centred; the speed-group explanation of the E08 non-experts' negative agreement is a reported finding (§6h.8, M18).
+
 **Open after the twelfth review (2026-10-20):**
 1. **LOSO per exercise:** the supervisor's (or cloud) decision; estimated 37.5 h with the shortcut (§6h.4); not started.
 2. **EAAQs for E02–E09** (§3.7.8): still pending.
