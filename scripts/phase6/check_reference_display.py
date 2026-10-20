@@ -104,8 +104,9 @@ def main():
             compared=round(n_cmp / max(n_rep, 1), 3),
             align_err_pct=round(100 * float(np.median(err)), 1) if err else np.nan,
             target_gap_deg=round(float(np.nanmedian(derr)), 1) if derr else np.nan,
-            pt_window=f"{pl.frames[0]}-{pl.frames[1]} (rep {pl.rep[0]}-{pl.rep[2]}, peak {pl.rep[1]})",
-            pt_arm2d_rest_peak_end=f"{arm2d(pl.xy[0], side):.0f}/{arm2d(pl.xy[pl.peak], side):.0f}/"
+            pt_frames=f"{pl.seq[0]}..{pl.seq[-1]} rest {pl.seq[pl.rest_k]} (rep {pl.rep[0]}-{pl.rep[2]}, "
+                      f"peak {pl.rep[1]})",
+            pt_arm2d_rest_peak_end=f"{arm2d(pl.xy[pl.rest_k], side):.0f}/{arm2d(pl.xy[pl.peak], side):.0f}/"
                                    f"{arm2d(pl.xy[-1], side):.0f}"))
         print(rows[-1], flush=True)
     print(pd.DataFrame(rows).to_string(index=False))

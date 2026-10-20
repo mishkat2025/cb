@@ -168,13 +168,19 @@ def reference_panel(H, PW, ref_xy, k, player, mirrored, patient_view, diffs, sta
     text(panel, "PT reference (its own rep, time-aligned)", (8, 22), 0.5)
     text(panel, f"{player.file} | {player.view} view" + (" | mirrored" if mirrored else ""), (8, 42), 0.45, GREY)
     j = player.template_frame(k) if j is None else j
+    label = None
     if state == "rep":
         line = (f"patient in a rep | PT frame {k + 1}/{player.n}, template {j + 1}/{player.n_template}" if j >= 0
                 else f"patient in a rep | PT frame {k + 1}/{player.n} (rest lead-in / return: not compared)")
         text(panel, line, (8, 62), 0.42, YELLOW)
+        label = player.return_label if k >= player.tail[0] else None
     else:
         text(panel, "patient at rest | PT at rest | not compared", (8, 62), 0.42, GREY)
+        label = player.rest_label
     y = 84
+    for part in (label.replace(" (", "\n(").split("\n") if label else []):  # X8: E03's rest pose / return
+        text(panel, part, (8, y), 0.42, CYAN)
+        y += 18
     if patient_view != "F" or player.view != "front":
         for line in (f"patient view {patient_view}, reference {player.view} view:",
                      "compare the 3D-angle differences, not the picture"):

@@ -13,7 +13,7 @@ call the venv's Python directly (`.venv\Scripts\python.exe`), so nothing needs a
 - Expected numbers were checked on 2026-10-20 (21:20–21:40) with the code of that day's commit. "Module III / model"
   = the set scores printed on the last console line; "PT" = the physiotherapists' score of that video. The scores are
   single examples of the within-group results (PROGRESS §6h.9: no model beats the within-group mean), not a validation.
-- Decisions: X1–X7 in `cvdc-physio\DESIGN_DECISIONS.md`; the reference display is X7.
+- Decisions: X1–X8 in `cvdc-physio\DESIGN_DECISIONS.md`; the reference display is X7 (E03's rest pose: X8).
 
 ## 1. One held-out video per exercise (front view, with the ghost)
 
@@ -21,7 +21,7 @@ call the venv's Python directly (`.venv\Scripts\python.exe`), so nothing needs a
 |---|---|---|
 | E01 abduction | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --ghost` | fold 0; 9 reps (`too_few_reps`, mild); Module III 84.7 / model 80.2 (PT 60.5) |
 | E02 adduction | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E02 P07 F ML --ghost` | fold 2; 14 reps; 73.3 / 95.5 (PT 47.6); reps 3, 8, 11 and 13 are half reps (`adduction_range_insufficient`, severe) |
-| E03 lateral rotation | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E03 P05 F FL --ghost` | fold 1; 10 reps; 85.5 / 61.4 (PT 69.0) |
+| E03 lateral rotation | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E03 P05 F FL --ghost` | fold 1; 10 reps; 85.5 / 61.4 (PT 69.0); at rest the panel shows the demo's 90/90 hold (labelled) |
 | E04 medial rotation | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 F FL --ghost` | fold 1; 10 reps; 81.1 / 87.3 (PT 81.9); the patient uses the left arm, so the panel says `mirrored` |
 
 ## 2. What to look at in the window
@@ -29,16 +29,16 @@ call the venv's Python directly (`.venv\Scripts\python.exe`), so nothing needs a
 **At rest** (before the first rep, between reps, after the last):
 - top left: `reps: N | at rest`;
 - right panel: the PT's own skeleton in its **rest pose** (E01, E02: arm hanging nearly straight; E04: the start
-  position, forearm forward) and the line `patient at rest | PT at rest | not compared`;
+  position, forearm forward; E03: the demo's **90/90 hold**, forearm forward, with the cyan label `PT rest pose: its
+  90/90 hold (the demo rests with the arm down)`) and the line `patient at rest | PT at rest | not compared`;
 - **no** angle labels on the patient, **no** `channel: patient / target` list, **no** ghost.
-- E03: the PT panel rests with the **arm at the side** (the V3 demo lowers the arm between reps) while the patient holds
-  90/90. This is what the demo video shows; whether E03 should instead show the demo's 90/90 hold at rest is an open
-  question (PROGRESS §6h.7, X7 item 4).
 
 **During a rep:**
 - top left: `in a rep`;
 - panel: the PT moves through its real rep with the patient, **rest → peak → rest**; the line
-  `patient in a rep | PT frame k/n, template j/m` (during the PT's rest lead-in and return: `not compared`);
+  `patient in a rep | PT frame k/n, template j/m` (during the PT's rest lead-in and return: `not compared`). E03: the
+  demo lowers the arm from the top instead of rotating back, so its return to 90/90 is the demo's rotation played back,
+  labelled `PT return: its rotation played back (the demo lowers the arm)`; it is short (the patients rotate back fast);
 - labels at the joints (`elev +3`, `elbow -8`, ...: patient − target in degrees at that template frame; **green inside
   the band, red outside**) and the same list at the bottom of the panel (`patient / target (diff)`);
 - `--ghost` on a front-view video: the PT as a faint cyan skeleton **on** the patient, centred on the mid-hip and
@@ -101,8 +101,9 @@ cd ..
 
 - `verify_pt_keypoints.py` (~1 min): the PT demo keypoints re-detected on the PT videos in memory at the rest, peak and
   end of every demo rep. Expected: median error 0–1.8% of the torso in E01 (≤ 6.5% in the oblique E04), and the
-  display window from rest to rest (E01 2D arm angle 10° / 178° / 11°).
+  display window from rest to rest (E01 2D arm angle 10° / 178° / 11°; E03 rest pose = frame 232, shoulder 81°,
+  forearm 81°, "PT rest pose: its 90/90 hold ...").
 - `check_reference_display.py` (~1 min): the live loop replayed on the cached keypoints of the four videos of §1.
   Expected: one rep episode per rep (E02: 14 of 14, one half rep missed and one extra), 91–99.5% of the between-rep
   frames shown at rest.
-- `pytest` must run inside `cvdc-physio` (the tests use repo-relative paths). Expected: 15 passed.
+- `pytest` must run inside `cvdc-physio` (the tests use repo-relative paths). Expected: 16 passed.

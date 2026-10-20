@@ -17,7 +17,7 @@
   (Git Bash: `../.venv/Scripts/python.exe -m cvdc.eval.cross_view --config configs/per_exercise.yaml --exercises E01 E02 E03 E04 >> runs/full/perex_crossview/train.log 2>&1`).
 - **Afterwards:** the per-exercise cross-view tables. `scripts/phase5/crossview_distance.py` and `report_crossview.py` know only the pilot layout (`runs/<tag>/heldout_<V>/...`, `--tag phase5_crossview`), so they need a per-exercise mode for `runs/full/perex_crossview/<EX>/heldout_<V>/...` first.
 
-**Done in the 21:00 session (CPU only):** the demo's PT reference display (X7, §6h.7): verified the PT keypoints on the PT videos, display = the PT's own rep from rest to rest, rest / rep state, ghost only during a rep; example videos and screenshots in `outputs/full/demo/examples_x7/`; test sheet `demo/TEST_SHEET.md`.
+**Done in the 21:00 session (CPU only):** the demo's PT reference display (X7, X8, §6h.7): verified the PT keypoints on the PT videos, display = the PT's own rep from rest to rest (E03: rest at the demo's 90/90 hold), rest / rep state, ghost only during a rep; example videos and screenshots in `outputs/full/demo/examples_x7/`; test sheet `demo/TEST_SHEET.md`.
 
 ---
 
@@ -1342,7 +1342,7 @@ Per exercise (1–2): 0.6 h (E07) to 1.0 h (E01). The cross-view figure by set c
      |---|---|---|---|---|---|
      | E01 Abduction | 9° | 20° (rep 1: 16°) | 178° | 22° (19°) | frames 4–148: 10° / 178° / 11° |
      | E02 Aduction | 12° | 11° | 30° | 15° | 2–72: 12° / 30° / 15° |
-     | E03 Later Rotation V3 | 7° (arm down) | 52° (raising) | 82° (90/90, forearm up) | 22° (lowering) | 183–335: 12° / 80° / 12° |
+     | E03 Later Rotation V3 | 7° (arm down) | 52° (raising) | 82° (90/90, forearm up) | 22° (lowering) | X8: frames 201–311 + the rotation played back (240 → 232); rest at its 90/90 hold (frame 232): 83° / 80° / 83° |
      | E04 Medial Rotation (oblique) | 60° | 71° | 7° (arm at the side) | 71° | 63–190: 71° / 7° / 71° |
 
   2. **Display = the PT's own keypoints of one real rep** (the rep closest to the template), extended back and forward to the nearest frames where the moving arm is still, scaled to the patient's torso and centred on the mid-hip in the panel; the averaged template stays for scoring. **At rest** (before, between, after reps) the panel shows the PT's rest pose and says "patient at rest | PT at rest | not compared"; no labels, no ghost. **During a rep** the PT frame follows the patient through Module III's template (live DTW on the template axis, padded with the PT's rest lead-in and return), and the angle differences use that template frame. **Ghost** only during a rep, mid-hip + shoulder width (torso length for E04's oblique demo). Details and thresholds: X7.
@@ -1351,16 +1351,16 @@ Per exercise (1–2): 0.6 h (E07) to 1.0 h (E01). The cross-view figure by set c
      | Video | reps | rep episodes | rep frames shown in a rep | between-rep frames shown at rest | missed / extra | live vs batch template frame (main-angle target gap) |
      |---|---|---|---|---|---|---|
      | E01 P03 F FL | 9 | 9 | 79% | 99.5% | 0 / 0 | 1.8% (5.0°) |
-     | E02 P07 F ML | 14 | 14 | 74% | 91% | 1 / 1 | 4.4% (1.9°) |
-     | E03 P05 F FL | 10 | 10 | 85% | 96% | 0 / 0 | 11.8% (2.6°) |
-     | E04 P10 F FL | 10 | 10 | 81% | 98% | 0 / 0 | 23.4% (9.9°) |
+     | E02 P07 F ML | 14 | 14 | 74% | 91% | 1 / 1 | 4.4% (2.4°) |
+     | E03 P05 F FL | 10 | 10 | 85% | 96% | 0 / 0 | 11.8% (2.8°) |
+     | E04 P10 F FL | 10 | 10 | 81% | 98% | 0 / 0 | 36.9% (9.5°) |
      | E03 P30 F FL (one-rep clip) | 1 | 2 | 77% | 51% | 0 / 1 | 5.0% (5.9°) |
      | E01 P03 L FL | 9 | 11 | 76% | 100% | 0 / 0 | 6.2% (5.9°) |
-     | E04 P10 L FL | 9 | 13 | 79% | 83% | 0 / 1 | 21.8% (11.0°) |
-     | E02 P07 R ML | 16 | 18 | 66% | 75% | 0 / 1 | 61.8% (52.3°) |
+     | E04 P10 L FL | 9 | 13 | 79% | 83% | 0 / 1 | 21.8% (11.8°) |
+     | E02 P07 R ML | 16 | 18 | 66% | 75% | 0 / 1 | 67.6% (54.2°) |
 
-     The rep frames not shown "in a rep" are the first and last ~10–20% of each batch rep (the batch window starts at 10% of the amplitude, the live state at 25% of the way to the template's peak). Online alignment cannot see the rest of the rep: during a hold at the top it stays at the start of the template's peak plateau and catches up on the way down. **E04's demo brings the arm down to the side at its peak** (2D 7°), which the patients do not do, so the live alignment cannot follow their return; **side views** read the movement differently in 3D (E02 R reaches only ~43% of the template's peak in feature space), so their live alignment is weak; the ghost is off there by default. The scores are unchanged (display only): E01 84.7 / 80.2, E02 73.3 / 95.5, E03 85.5 / 61.4, E04 81.1 / 87.3 (Module III / model set score).
-  4. **E03 needs a decision:** the V3 demo (and the backup) raises the arm, rotates up, then lowers the arm, and rests with the arm at the side; the E03 patients hold 90/90 between reps (P05, P01, P30: shoulder elevation 66–86° between reps). So between reps the E03 panel shows the PT with the arm down while the patient holds 90/90, which is faithful to the demo but looks like a mismatch. The alternative is to use the demo's 90/90 hold (frames ~216–231) as E03's displayed rest.
+     (Numbers after X8, item 4: E03 rests at the demo's 90/90 hold, and a late-reported rep no longer restarts the alignment of a rep that began after a rest.) The rep frames not shown "in a rep" are the first and last ~10–20% of each batch rep (the batch window starts at 10% of the amplitude, the live state at 25% of the way to the template's peak). Online alignment cannot see the rest of the rep: during a hold at the top it stays at the start of the template's peak plateau and catches up on the way down. **E04's demo brings the arm down to the side at its peak** (2D 7°), which the patients do not do, so the live alignment cannot follow their return; **side views** read the movement differently in 3D (E02 R reaches only ~43% of the template's peak in feature space), so their live alignment is weak; the ghost is off there by default. The scores are unchanged (display only): E01 84.7 / 80.2, E02 73.3 / 95.5, E03 85.5 / 61.4, E04 81.1 / 87.3 (Module III / model set score).
+  4. **E03 rest pose = the demo's 90/90 hold (user decision, X8).** The V3 demo (and the backup) raises the arm, holds 90/90, rotates up, then lowers the arm from the top and rests with the arm at the side; the E03 patients hold 90/90 between reps (P05, P01, P30: shoulder elevation 66–86°). The E03 panel now rests at the demo's hold (V3 frame 232: shoulder 81°, forearm 81°, forward), labelled "PT rest pose: its 90/90 hold (the demo rests with the arm down)"; the return to it is the demo's own rotation played back (frames 240 → 232), labelled "PT return: its rotation played back (the demo lowers the arm)" and never compared. Scores unchanged (E03 P05: 85.5 / 61.4). In passing, for all exercises: a rep reported late no longer restarts the alignment of a rep that began after a rest (it dragged the shown PT frame backwards).
   5. **Example videos** (faces blurred, gitignored): `outputs/full/demo/examples_x7/E01_P03_F_FL_reference.mp4`, `E02_P07_F_ML_…`, `E03_P05_F_FL_…`, `E04_P10_F_FL_…`, and rest | peak screenshots `…_rest_<t>s_peak_<t>s.png`; the earlier X6 versions stay in `outputs/full/demo/examples/` for comparison. Also fixed: OpenCV 5 drew the text outline wider than the text (doubled letters); the outline is now drawn as offset copies. `demo/live.py` finds its config from any folder, so the test sheet runs from `D:\cb`. Tests: `tests/test_demo.py` (15), full suite 224 passed (GPU hidden).
 
 ## 7. Phase checklist
@@ -1371,7 +1371,7 @@ The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase
 - [x] **Phase 1 on the full scope (E01–E09)** (2026-10-20; §5b): video root and new folders (`configs/data_full.yaml`); Pose for 3,685 videos + Hands for E06 (on wrist crops); sync with S8 and the extended motion candidates; reps with the approved signals, adaptive thresholds and the rep-phase fix (P6c); packs; KTPFormer lift; renders and report; E05 PF1 motion check; E06 Hands check; E01/E02 vs the pilot and E03–E09 vs Step 0; 20 new tests.
 - [x] **E09 DTW angles by the warp test** (eleventh review; §6h.1): arm angles, pairs rebuilt.
 - [x] ~~Shared all-exercise GroupKFold-10 run~~ (eleventh review): started, **stopped** (twelfth review: one model per exercise); partial outputs archived (§6h.2).
-- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [x] (6.7 h); per-exercise report [x] (§6h.9); Module III E03–E09 [x] (§6h.6; rule calibration M18, §6h.8); Phase 6 demo [x] (§6h.7; PT reference display X7 [x], E03 rest pose: user decision); (6) cross-view per exercise [running, counted for E01–E04 only (D18); E05 stop not armed, see the handoff note; smoke test passed]; (7) LOSO per exercise: not started (supervisor / cloud).
+- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [x] (6.7 h); per-exercise report [x] (§6h.9); Module III E03–E09 [x] (§6h.6; rule calibration M18, §6h.8); Phase 6 demo [x] (§6h.7; PT reference display X7 [x], E03 rest pose at the demo's 90/90 hold X8 [x]); (6) cross-view per exercise [running, counted for E01–E04 only (D18); E05 stop not armed, see the handoff note; smoke test passed]; (7) LOSO per exercise: not started (supervisor / cloud).
 - [x] **Tenth-review changes** (2026-10-20; §5b.3, §5b.10, §5b.11): E06 wrist angle in side views only (Phase 4); rep-phase fix accepted; E03 / E09 rep signals re-chosen by cross-view agreement; per-exercise DTW angles; CVDC pairs built for the full scope; 2 more tests (187). **Not started:** any training on the full scope (waits for the user's confirmation of the final evaluation scheme).
 - [x] **Phase 1, keypoints and preprocessing** (2026-10-17; results in §5)
   - [x] `cvdc/data/`:

@@ -9,6 +9,12 @@ references:                      # M3: V3 (90/90) is the closest demo (Chamfer 1
   primary_view: front             # apparent camera view of the demo (PROGRESS §3.6, §3.7.7; demo X6)
   backup: ["Lateral Rotation.mp4"]
   notes: both arms (left mirrored), working phase only (shoulder abduction >= 70 deg)   # M3, applied in Phase 4
+  display:                        # X8 (user, 2026-10-20): the demo panel / ghost only; scoring (template) unchanged
+    rest: hold                    # rest pose = the demo's 90/90 hold before the rotation (the patients hold 90/90
+                                  # between reps; the demo itself rests with the arm at the side)
+    rest_label: "PT rest pose: its 90/90 hold (the demo rests with the arm down)"
+    return: reversed              # the demo lowers the arm from the top; the return to 90/90 is its rotation played back
+    return_label: "PT return: its rotation played back (the demo lowers the arm)"
 primary_angle:                   # P6 / M16 / P6d: rep signal = the Module III main angle
   name: forearm_elevation        # forearm vs the trunk's up axis (3D); chosen by cross-view rep agreement (P6d): 57.0% of
   source: world                  # 114 synced groups within +-1 vs 55.3% for the earlier wrist-path PC1

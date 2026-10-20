@@ -91,10 +91,12 @@ def main():
         pl = ReferencePlayer(cfg, ex, ref, ac)
         print(f"  template (scoring): {ref['n']} frames, main {ref['main']} first / last "
               f"{ref['curves'][ref['main']][0]:.1f} / {ref['curves'][ref['main']][-1]:.1f}")
-        print(f"  display (X7): PT frames {pl.frames[0]}-{pl.frames[1]} (rep {pl.rep[0]}-{pl.rep[2]}, peak {pl.rep[1]})"
-              f"; arm 2D at rest / peak / end {arm2d(pl.xy[0], side):.1f} / {arm2d(pl.xy[pl.peak], side):.1f} / "
-              f"{arm2d(pl.xy[-1], side):.1f}; 3D elevation {elev[pl.frames[0]]:.1f} / {elev[pl.rep[1]]:.1f} / "
-              f"{elev[pl.frames[1]]:.1f}")
+        s, kr = pl.seq, pl.rest_k
+        print(f"  display (X7, X8): PT frames {s[0]}..{s[-1]}, rest pose {s[kr]} (rep {pl.rep[0]}-{pl.rep[2]}, peak "
+              f"{pl.rep[1]}); arm 2D at rest / peak / end {arm2d(pl.xy[kr], side):.1f} / "
+              f"{arm2d(pl.xy[pl.peak], side):.1f} / {arm2d(pl.xy[-1], side):.1f}; 3D shoulder elevation "
+              f"{elev[s[kr]]:.1f} / {elev[s[pl.peak]]:.1f} / {elev[s[-1]]:.1f}; forearm {fore[s[kr]]:.1f} / "
+              f"{fore[s[pl.peak]]:.1f} / {fore[s[-1]]:.1f}" + (f"; {pl.rest_label}" if pl.rest_label else ""))
     det.close()
 
 

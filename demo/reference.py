@@ -8,7 +8,9 @@
                    nearest frame where the moving arm is still. The averaged 3D template stays for scoring; ``tmap``
                    gives, per displayed frame, the template frame it matches (DTW of the frames the template covers:
                    the rep, E03 its 90/90 working phase, M3), -1 in the rest lead-in and return. ``frame(k, side)``
-                   mirrors it (x -> -x, left <-> right) when the patient moves the other side (P8)
+                   mirrors it (x -> -x, left <-> right) when the patient moves the other side (P8). E03 (X8,
+                   ``references.display``): the rest pose is the demo's 90/90 hold and the return its rotation played
+                   back, since the demo rests with the arm at the side while the patients hold 90/90
   RepTracker       the patient's state: at rest or in a rep, from the distance of the live alignment feature (Module
                    III's, M8 / M17) to the patient's own rest feature, with hysteresis; during a rep the displayed PT
                    frame by DTW of the frames since the patient left rest against the PT rep (open begin before the PT's
@@ -74,6 +76,19 @@ def rest_window(still, start, end, lo, hi):
     return a, b
 
 
+def hold_frame(still, signal, lo, hi):
+    """X8: the last frame of the still run in lo..hi-1 at the lowest rep-signal level (the hold at the movement's
+    rest, e.g. E03's 90/90 hold before the rotation; a hold at the top has a high signal)."""
+    s = np.asarray(signal, float)
+    idx = np.arange(int(lo), int(hi))
+    runs = [g for g in np.split(idx, np.flatnonzero(~still[idx])) if len(g)]
+    runs = [g[1:] if not still[g[0]] else g for g in runs]   # each split starts at a moving frame
+    runs = [g for g in runs if len(g) >= 5] or [g for g in runs if len(g)]
+    if not runs:
+        return int(lo)
+    return int(min(runs, key=lambda g: np.nanmean(s[g]))[-1])
+
+
 def unit_blocks(f, ac):
     """Direction features back to unit vectors per 3-d segment block (a mean of unit vectors is shorter)."""
     f = np.asarray(f, float)
@@ -104,15 +119,20 @@ def live_feature(world_frames, side, ac, k=3):
 class ReferencePlayer:
     def __init__(self, cfg, exercise, ref, ac, still_thr=0.01):
         from cvdc.assess.run import working_phase
+        from cvdc.data.reps import video_info
         ref_idx = pd.read_csv(resolve(cfg["data"]["ref_index_csv"]))
         rr = pd.read_csv(data_path(cfg, "reps_ref_csv"))
         row = ref_idx[(ref_idx.exercise == exercise) & (ref_idx.role == "primary")].iloc[0]
         with np.load(resolve(row.pre_path)) as z:
-            xy, world = z["xy"].astype(float), z["world"].astype(float)
+            pre = {k: z[k] for k in z.files}
+        xy, world = pre["xy"].astype(float), pre["world"].astype(float)
         reps = rr[(rr.ref_id == row.ref_id) & (rr.exercise == exercise)].sort_values("start")
         self.side = side = reps.side.iloc[0]
         self.file = row.file
-        self.view = (exercise_cfg(cfg, exercise).get("references") or {}).get("primary_view", "front")
+        refs = exercise_cfg(cfg, exercise).get("references") or {}
+        self.view = refs.get("primary_view", "front")
+        disp = refs.get("display") or {}                # X8: per-exercise display choices (E03)
+        self.rest_label, self.return_label = disp.get("rest_label"), disp.get("return_label")
         self.fps = float(cfg["preprocess"]["fps"])
         best = None
         for r in reps.itertuples():  # the demo rep whose alignment to the template is cheapest
@@ -120,29 +140,45 @@ class ReferencePlayer:
             if best is None or cost / len(path) < best[0]:
                 best = (cost / len(path), r)
         r = best[1]
-        i = list(reps.start).index(r.start)
-        lo = int(reps.end.iloc[i - 1]) + 1 if i > 0 else 0
-        hi = int(reps.start.iloc[i + 1]) - 1 if i + 1 < len(reps) else len(xy) - 1
-        k0, k1 = rest_window(still_frames(xy, side, still_thr), r.start, r.end, lo, hi)
-        self.frames, self.rep = (k0, k1), (int(r.start), int(r.peak), int(r.end))
-        self.xy = xy[k0:k1 + 1]                        # (m, 33, 2): the PT's own keypoints, rest -> peak -> rest
-        self.feat = features(world[k0:k1 + 1], side, ac)
-        self.n, self.n_template = len(self.xy), int(ref["n"])
-        self.peak = int(r.peak) - k0
-        # the frames the template covers (the rep; E03 its 90/90 working phase, M3) -> template frame by DTW
+        self.rep = (int(r.start), int(r.peak), int(r.end))
+        # the frames the template covers (the rep; E03 its 90/90 working phase, M3)
         ws, we = r.start, r.end
         if ac.get("template_working_phase"):
             ws, we = working_phase(world, r.start, r.end, side, ac["template_working_phase"]) or (ws, we)
+        still = still_frames(xy, side, still_thr)
+        if disp.get("rest") == "hold":
+            # X8: rest pose = the demo's still hold at the movement's rest level inside the covered frames (E03: the
+            # 90/90 hold before the rotation); the return to it = the rotation played back from the frame that
+            # matches the template's end (the demo itself lowers the arm from the top)
+            ang, _ = video_info(pre, exercise_cfg(cfg, exercise))
+            h = hold_frame(still, ang[side], ws, int(r.peak))
+            up = np.arange(h, int(r.peak) + 1)
+            f_ret = int(up[np.argmin(np.linalg.norm(features(world[up], side, ac) - ref["feat"][-1], axis=1))])
+            back = np.arange(f_ret, h - 1, -1) if disp.get("return") == "reversed" else np.arange(0)
+            self.seq = np.r_[np.arange(ws, we + 1), back].astype(int)
+            self.covered, self.rest_k = (0, we - ws), h - ws
+        else:
+            i = list(reps.start).index(r.start)
+            lo = int(reps.end.iloc[i - 1]) + 1 if i > 0 else 0
+            hi = int(reps.start.iloc[i + 1]) - 1 if i + 1 < len(reps) else len(xy) - 1
+            k0, k1 = rest_window(still, r.start, r.end, lo, hi)
+            self.seq = np.arange(k0, k1 + 1)
+            self.covered, self.rest_k = (ws - k0, we - k0), 0
+        self.xy = xy[self.seq]                         # (m, 33, 2): the PT's own keypoints, rest -> peak -> rest
+        self.feat = features(world[self.seq], side, ac)
+        self.n, self.n_template = len(self.xy), int(ref["n"])
+        self.peak = int(np.flatnonzero(self.seq == r.peak)[0])
+        self.tail = (self.covered[1] + 1, self.n)      # display frames of the return (not compared)
+        # covered frames -> template frame by DTW
         _, path = dtw(features(world[ws:we + 1], side, ac), ref["feat"])
         self.tmap = np.full(self.n, -1, int)
         for f in range(we - ws + 1):
-            self.tmap[ws - k0 + f] = int(np.median(path[path[:, 0] == f, 1]))
-        self.covered = (ws - k0, we - k0)
+            self.tmap[self.covered[0] + f] = int(np.median(path[path[:, 0] == f, 1]))
         sw = np.linalg.norm(self.xy[:, J["left_shoulder"]] - self.xy[:, J["right_shoulder"]], axis=1)
         self.shoulder_w = float(np.median(sw))           # torso units (the ghost's scale, X7)
         # the live time axis: the PT's rest lead-in, Module III's template (so the live phase is the scoring
         # alignment, M8), the PT's return to rest; per axis frame the displayed PT frame and the template frame
-        L, tail = self.covered[0], np.arange(self.covered[1] + 1, self.n)
+        L, tail = self.covered[0], np.arange(*self.tail)
         self.axis_feat = np.concatenate([self.feat[:L], np.asarray(ref["feat"], float), self.feat[tail]])
         self.axis_display = np.r_[np.arange(L), [self.frame_at_template(j) for j in range(self.n_template)],
                                   tail].astype(int)
@@ -281,8 +317,9 @@ class RepTracker:
         return True, self.k
 
     def restart(self, from_idx):
-        """A rep has just been reported while the patient is in a rep: realign from the frame after its end."""
-        if self.in_rep:
+        """A rep has just been reported while the patient is in a rep: realign from the frame after its end (only if
+        the patient went straight on into this rep; a rep started after a rest is already aligned from that rest)."""
+        if self.in_rep and self.last_rest + 1 < int(from_idx):
             self._dtw_reset()
             for g in self.hist[max(int(from_idx), len(self.hist) - self.replay):]:
                 self._dtw_step(g)
@@ -378,7 +415,7 @@ class LiveReference:
             self.tracker.restart(int(np.searchsorted(np.asarray(pose.t[:-1]), t_end, side="right")))
 
     def frame(self, pose):
-        rest = {"in_rep": False, "k": 0, "j": -1, "diffs": {}, "side": self.side}
+        rest = {"in_rep": False, "k": self.player.rest_k, "j": -1, "diffs": {}, "side": self.side}
         if not self.locked:
             side = self._provisional_side(pose)
             if side is None:

@@ -128,9 +128,10 @@ def test_reference_player_shows_the_pt_rep_from_rest_to_rest(ex):
     from demo.reference import ReferencePlayer
     ref, lib, _ = load_library(LIB / ex)
     pl = ReferencePlayer(CFG, ex, ref, assess_config(CFG, ex))
-    k0, k1 = pl.frames
     s, p, e = pl.rep
-    assert k0 <= s < p < e <= k1 and pl.xy.shape == (k1 - k0 + 1, 33, 2) and np.isfinite(pl.xy).all()
+    assert pl.xy.shape == (len(pl.seq), 33, 2) and np.isfinite(pl.xy).all() and pl.seq[pl.peak] == p
+    if ex != "E03":  # E01, E02, E04: one contiguous stretch of the demo, rest -> rep -> rest (X7)
+        assert (np.diff(pl.seq) == 1).all() and pl.seq[0] <= s and e <= pl.seq[-1] and pl.rest_k == 0
     assert (pl.tmap[:pl.covered[0]] == -1).all() and (pl.tmap[pl.covered[1] + 1:] == -1).all()
     t = pl.tmap[pl.tmap >= 0]
     assert t[0] == 0 and t[-1] == ref["n"] - 1 and (np.diff(t) >= 0).all()
@@ -157,3 +158,25 @@ def test_e01_reference_rest_pose_has_the_arm_down():
         u = xy[J[f"{pl.side}_elbow"]] - xy[J[f"{pl.side}_shoulder"]]
         return np.degrees(np.arccos(u @ down / np.linalg.norm(u) / np.linalg.norm(down)))
     assert arm(pl.xy[0]) < 13 and arm(pl.xy[-1]) < 13 and arm(pl.xy[pl.peak]) > 160
+
+
+@pytest.mark.skipif(not HAVE, reason="needs the full-scope caches and the Module III library")
+def test_e03_reference_rests_at_the_90_90_hold():
+    """X8 (user, 2026-10-20): E03's displayed rest pose is the demo's 90/90 hold (the patients hold 90/90 between
+    reps; the demo rests with the arm at the side), and the return ends there (the rotation played back)."""
+    from cvdc.assess.angles import ASSESS_ANGLES
+    from cvdc.assess.module3 import assess_config
+    from cvdc.assess.template import load_library
+    from demo.reference import ReferencePlayer
+    ref, _, _ = load_library(LIB / "E03")
+    pl = ReferencePlayer(CFG, "E03", ref, assess_config(CFG, "E03"))
+    idx = pd.read_csv(resolve(CFG["data"]["ref_index_csv"]))
+    row = idx[(idx.exercise == "E03") & (idx.role == "primary")].iloc[0]
+    with np.load(resolve(row.pre_path)) as z:
+        w = z["world"].astype(float)
+    el, fo = ASSESS_ANGLES["shoulder_elevation"](w, pl.side), ASSESS_ANGLES["forearm_elevation"](w, pl.side)
+    rest = pl.seq[pl.rest_k]
+    assert el[rest] > 70 and 60 < fo[rest] < 110                    # arm at 90/90, forearm forward
+    assert fo[pl.seq[pl.peak]] < 30                                  # forearm up at the peak
+    assert pl.seq[-1] == rest and (np.diff(pl.seq[pl.tail[0]:]) == -1).all()  # the return ends at the hold
+    assert (pl.tmap[pl.tail[0]:] == -1).all() and pl.rest_label and pl.return_label
