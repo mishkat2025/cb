@@ -78,28 +78,82 @@ def test_mirror33_swaps_sides_and_is_an_involution():
     assert np.allclose(Y[:, J["nose"]], X[:, J["nose"]] * [-1, 1])
 
 
-def test_online_aligner_tracks_the_template_and_waits_at_rest():
-    from demo.reference import OnlineAligner
-    t = np.linspace(0, np.pi, 60)
-    F = np.stack([np.cos(t), np.sin(t), np.zeros_like(t)], 1)  # a rest -> peak -> back movement on the unit circle
-    a = OnlineAligner({"feat": F}, {"align": "arm"}, max_step=5)
-    assert [a.step(F[0]) for _ in range(20)] == [0] * 20       # at rest: anchored at the template's start
-    slow = np.repeat(F, 2, axis=0)                              # the same movement at half speed
-    js = [a.step(f) for f in slow]
-    assert all(b >= c for b, c in zip(js[1:], js[:-1]))          # monotonic
-    err = np.abs(np.array(js) - np.repeat(np.arange(60), 2))
-    assert np.median(err) <= 2 and js[-1] >= 55
+def _arc_tracker(n_lead=8, n_tmpl=60, n_tail=8):
+    """A RepTracker on a synthetic live axis: rest lead-in, a rest -> peak -> rest arc on the unit circle, rest tail."""
+    from demo.reference import RepTracker
+    t = np.r_[np.zeros(n_lead), np.sin(np.linspace(0, np.pi, n_tmpl)) * np.pi / 2, np.zeros(n_tail)]
+    F = np.stack([np.cos(t), np.sin(t), np.zeros_like(t)], 1)
+    tm = F[n_lead:n_lead + n_tmpl]
+    player = types.SimpleNamespace(axis_feat=F, axis_begin=n_lead + 25, template_peak=np.arange(25, 35))
+    return RepTracker(player, tm, ac={"align": "arm"}), F, n_lead
+
+
+def test_rep_tracker_rest_and_rep_phase():
+    tr, F, L = _arc_tracker()
+    rest = F[0]
+    assert [tr.push(rest) for _ in range(30)] == [(False, 0)] * 30   # at rest: rest pose, no rep
+    rep = np.repeat(F[L:L + 60], 2, axis=0)                          # one rep at half the template's speed
+    out = [tr.push(f) for f in rep]
+    ks = [k for inr, k in out if inr]
+    assert out[16][0] and all(b >= c for b, c in zip(ks[1:], ks[:-1]))  # in a rep after a few frames; monotonic
+    mid = [k for (inr, k), j in zip(out, np.repeat(np.arange(60), 2)) if inr and 15 <= j <= 45]
+    assert abs(np.median(mid) - (L + 30)) <= 6                      # the peak matched to the template's peak
+    after = [tr.push(rest) for _ in range(12)]
+    assert after[-1] == (False, 0)                                  # back at rest
+
+
+def test_rep_tracker_ignores_moving_away_from_the_peak():
+    tr, F, L = _arc_tracker()
+    for _ in range(30):
+        tr.push(F[0])
+    away = np.array([np.cos(-0.5), np.sin(-0.5), 0.0])               # the other way from the rest (arm below rest)
+    assert all(not tr.push(away)[0] for _ in range(20))
+
+
+def test_rep_tracker_open_begin_from_another_rest():
+    tr, F, L = _arc_tracker()
+    tr.set_rest(F[L + 12])                                          # the patient rests part-way (E03's 90/90 hold)
+    for _ in range(20):
+        tr.push(F[L + 12])
+    out = [tr.push(f) for f in np.repeat(F[L + 12:L + 30], 2, axis=0)]
+    first = next(k for inr, k in out if inr)
+    assert L + 10 <= first <= L + 25                                # starts near its own pose, not at the PT's rest
 
 
 @pytest.mark.skipif(not HAVE, reason="needs the full-scope caches and the Module III library")
 @pytest.mark.parametrize("ex", ["E01", "E02", "E03", "E04"])
-def test_reference_player_follows_the_template(ex):
+def test_reference_player_shows_the_pt_rep_from_rest_to_rest(ex):
     from cvdc.assess.module3 import assess_config
     from cvdc.assess.template import load_library
     from demo.reference import ReferencePlayer
     ref, lib, _ = load_library(LIB / ex)
     pl = ReferencePlayer(CFG, ex, ref, assess_config(CFG, ex))
-    assert pl.xy.shape == (ref["n"], 33, 2) and np.isfinite(pl.xy).all()
+    k0, k1 = pl.frames
+    s, p, e = pl.rep
+    assert k0 <= s < p < e <= k1 and pl.xy.shape == (k1 - k0 + 1, 33, 2) and np.isfinite(pl.xy).all()
+    assert (pl.tmap[:pl.covered[0]] == -1).all() and (pl.tmap[pl.covered[1] + 1:] == -1).all()
+    t = pl.tmap[pl.tmap >= 0]
+    assert t[0] == 0 and t[-1] == ref["n"] - 1 and (np.diff(t) >= 0).all()
+    assert len(pl.axis_feat) == len(pl.axis_display) == len(pl.axis_template) == pl.covered[0] + ref["n"] + (
+        pl.n - 1 - pl.covered[1])
     xy, mir = pl.frame(0, "left" if pl.side == "right" else "right")
     assert mir and np.allclose(xy[:, 0].mean(), -pl.xy[0][:, 0].mean())
     assert pl.view in ("front", "oblique")
+
+
+@pytest.mark.skipif(not HAVE, reason="needs the full-scope caches and the Module III library")
+def test_e01_reference_rest_pose_has_the_arm_down():
+    """The user's report (2026-10-20): at rest the reference showed the arm ~20-30 deg out (the segmented rep's first
+    frame); the PT's arm hangs at ~9 deg (2D) at rest in the video. The display window now starts and ends at rest."""
+    from cvdc.assess.module3 import assess_config
+    from cvdc.assess.template import load_library
+    from cvdc.data.skeleton import J
+    from demo.reference import ReferencePlayer
+    ref, _, _ = load_library(LIB / "E01")
+    pl = ReferencePlayer(CFG, "E01", ref, assess_config(CFG, "E01"))
+
+    def arm(xy):
+        down = (xy[J["left_hip"]] + xy[J["right_hip"]]) / 2 - (xy[J["left_shoulder"]] + xy[J["right_shoulder"]]) / 2
+        u = xy[J[f"{pl.side}_elbow"]] - xy[J[f"{pl.side}_shoulder"]]
+        return np.degrees(np.arccos(u @ down / np.linalg.norm(u) / np.linalg.norm(down)))
+    assert arm(pl.xy[0]) < 13 and arm(pl.xy[-1]) < 13 and arm(pl.xy[pl.peak]) > 160

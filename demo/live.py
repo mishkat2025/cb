@@ -5,7 +5,10 @@ The window shows the frame with the skeleton overlay (hand landmarks for E06; jo
 red), the exercise and camera view, the rep counter, after each rep its Module III score, quality and raw errors
 (type · joint · deviation · frames), the model's rep score and the distance to the PT reference when a checkpoint is
 loaded, the set score at the end (the model's video head if loaded, else Module III), a live plot of the main angle
-and the last rep against its template band, FPS and the loaded checkpoint. No coaching text (spec scope).
+and the last rep against its template band, FPS and the loaded checkpoint. No coaching text (spec scope). The side
+panel shows the PT reference (X6, X7): the PT's own rep from rest to rest, at rest while the patient rests (nothing
+compared), phase-aligned during a rep with the live angle differences per joint; ``--ghost`` draws it on the patient
+during reps.
 
 Keys: q quit, r reset the set, s save the session report (JSON + CSV) to <outputs>/demo/.
 
@@ -108,18 +111,6 @@ def joint_px(lm, name, W, H):
     return None if not np.isfinite(p).all() else np.array([p[0] * W, p[1] * H])
 
 
-def angle_diffs(live, targets, sigma, j, band_k):
-    """{channel: (patient - target at template frame j, within the band?)} for the channels with values (X6)."""
-    out = {}
-    for c, v in live.items():
-        if c not in targets or not np.isfinite(v):
-            continue
-        t, s = targets[c][j], sigma[c][j] * band_k
-        if np.isfinite(t) and np.isfinite(s):
-            out[c] = (v - t, abs(v - t) <= s, v, t)
-    return out
-
-
 def draw_angle_labels(img, lm, diffs, side):
     """The live angle difference (deg, patient - reference target) at each channel's joint; green inside the band,
     red outside (X6)."""
@@ -134,13 +125,22 @@ def draw_angle_labels(img, lm, diffs, side):
         text(img, f"{SHORTC.get(c, c)} {d:+.0f}", (int(p[0]) + 10, int(p[1]) - 6 + 18 * row), 0.5, GREEN if ok else RED)
 
 
-def draw_ghost(img, lm, ref_xy, torso_px, label):
-    """The reference skeleton as a faint ghost scaled (torso length) and centred (mid-hip) on the patient (X6)."""
-    H, W = img.shape[:2]
+def body_geometry(lm, W, H):
+    """(mid-hip px, torso length px, shoulder width px) of one frame's landmarks, or None."""
     mh = joint_px(lm, "mid_hip", W, H)
-    if mh is None or not np.isfinite(torso_px):
-        return
-    p = mh + ref_xy * torso_px
+    if mh is None:
+        return None
+    ls, rs = joint_px(lm, "left_shoulder", W, H), joint_px(lm, "right_shoulder", W, H)
+    if ls is None or rs is None:
+        return None
+    return mh, float(np.linalg.norm((ls + rs) / 2 - mh)), float(np.linalg.norm(ls - rs))
+
+
+def draw_ghost(img, mid_hip, ref_xy, scale, label):
+    """The PT reference skeleton as a faint ghost on the patient: centred on the mid-hip and scaled so that its
+    shoulder width matches the patient's (X7; the caller falls back to the torso length in side-on poses)."""
+    H = img.shape[0]
+    p = mid_hip + ref_xy * scale
     layer = img.copy()
     for a, b in MP_DRAW_EDGES:
         if np.isfinite(p[[a, b]]).all():
@@ -149,35 +149,52 @@ def draw_ghost(img, lm, ref_xy, torso_px, label):
     text(img, label, (10, H - 34), 0.5, CYAN)
 
 
-def reference_panel(H, PW, ref_xy, j, n, player, mirrored, patient_view, diffs):
-    """Side panel: the PT reference skeleton at the aligned template frame, its source and view, and the per-channel
-    live angles (patient / target / difference) (X6)."""
+def reference_panel(H, PW, ref_xy, k, player, mirrored, patient_view, diffs, state, torso_px=None, hip_y=None,
+                    j=None):
+    """Side panel (X6, X7): the PT's own keypoints at displayed frame k of its rest -> peak -> rest rep, scaled to the
+    patient by torso length and centred on the mid-hip (shrunk if the rep would leave the panel), its source and view,
+    the patient's state and, during a rep, the per-channel live angles (patient / target / difference)."""
     panel = np.full((H, PW, 3), 22, np.uint8)
-    s = 0.17 * H
-    c = np.array([PW / 2, 0.55 * H])
-    p = c + ref_xy * s
+    X = player.xy
+    reach_x = float(np.abs(X[..., 0]).max()) + 0.15
+    up, down = float(-X[..., 1].min()) + 0.15, float(X[..., 1].max()) + 0.1
+    top, bottom = 150, H - 10  # the rep must fit between the header and the panel's bottom
+    s = min(torso_px or 0.17 * H, (PW / 2 - 6) / reach_x, (bottom - top) / (up + down))
+    y0 = float(np.clip(hip_y if hip_y is not None else 0.55 * H, top + up * s, bottom - down * s))
+    p = np.array([PW / 2, y0]) + ref_xy * s
     for a, b in MP_DRAW_EDGES:
         if np.isfinite(p[[a, b]]).all():
             cv2.line(panel, tuple(int(v) for v in p[a]), tuple(int(v) for v in p[b]), CYAN, 3, cv2.LINE_AA)
-    text(panel, "PT reference (time-aligned)", (8, 22), 0.55)
-    text(panel, f"{player.file} | {player.view} view" + (" | mirrored" if mirrored else ""), (8, 44), 0.45, GREY)
-    text(panel, f"template frame {j + 1}/{n}", (8, 64), 0.45, GREY)
-    y = 86
+    text(panel, "PT reference (its own rep, time-aligned)", (8, 22), 0.5)
+    text(panel, f"{player.file} | {player.view} view" + (" | mirrored" if mirrored else ""), (8, 42), 0.45, GREY)
+    j = player.template_frame(k) if j is None else j
+    if state == "rep":
+        line = (f"patient in a rep | PT frame {k + 1}/{player.n}, template {j + 1}/{player.n_template}" if j >= 0
+                else f"patient in a rep | PT frame {k + 1}/{player.n} (rest lead-in / return: not compared)")
+        text(panel, line, (8, 62), 0.42, YELLOW)
+    else:
+        text(panel, "patient at rest | PT at rest | not compared", (8, 62), 0.42, GREY)
+    y = 84
     if patient_view != "F" or player.view != "front":
         for line in (f"patient view {patient_view}, reference {player.view} view:",
                      "compare the 3D-angle differences, not the picture"):
             text(panel, line, (8, y), 0.42, YELLOW)
             y += 18
-    y = int(0.80 * H) - 18 * max(0, len(diffs) - 6)
-    text(panel, "channel: patient / target  (diff)", (8, y), 0.42, GREY)
-    for ch, (d, ok, v, t) in diffs.items():
-        y += 18
-        text(panel, f"{SHORTC.get(ch, ch)}: {v:.0f} / {t:.0f}  ({d:+.0f})", (8, y), 0.45, GREEN if ok else RED)
+    if diffs:
+        y = int(0.80 * H) - 18 * max(0, len(diffs) - 6)
+        text(panel, "channel: patient / target  (diff)", (8, y), 0.42, GREY)
+        for ch, (d, ok, v, t) in diffs.items():
+            y += 18
+            text(panel, f"{SHORTC.get(ch, ch)}: {v:.0f} / {t:.0f}  ({d:+.0f})", (8, y), 0.45, GREEN if ok else RED)
     return panel
 
 
 def text(img, s, org, scale=0.6, color=WHITE, thick=1):
-    cv2.putText(img, s, org, cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), thick + 3, cv2.LINE_AA)
+    """Text with a dark outline drawn as offset copies of the same stroke (OpenCV 5's text renderer spaces a thicker
+    stroke wider, so a thick black copy no longer sits under the text)."""
+    x, y = org
+    for dx, dy in ((-1, -1), (1, -1), (-1, 1), (1, 1), (-2, 0), (2, 0), (0, -2), (0, 2)):
+        cv2.putText(img, s, (x + dx, y + dy), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), thick, cv2.LINE_AA)
     cv2.putText(img, s, org, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thick, cv2.LINE_AA)
 
 
@@ -266,7 +283,7 @@ def main():
     ap.add_argument("--ghost-any-view", action="store_true",
                     help="allow the ghost on side-view videos too (labelled: the reference is a front-view clip)")
     a = ap.parse_args()
-    cfg = load_config(a.config)
+    cfg = load_config(a.config if Path(a.config).exists() else REPO / a.config)  # runs from any folder
     if a.list:
         idx = pd.read_csv(resolve(cfg["data"]["index_csv"]))
         d = idx[idx.exercise == a.list][["video_id", "subject", "group", "view", "variation", "score"]]
@@ -303,17 +320,17 @@ def main():
     win = f"CVDC demo {ex} ({view})"
     t_wall0, n_frames, fps_t, fps = time.time(), 0, time.time(), 0.0
     last_entry, last_update, trace = None, 0.0, []
-    # X6: the PT reference, time-aligned to the current rep by open-end DTW on Module III's alignment feature
-    player = aligner = None
+    # X6, X7: the PT reference (its own rest -> peak -> rest rep), at rest while the patient rests, phase-aligned
+    # to the patient during a rep (demo/reference.py LiveReference)
+    live_ref = player = None
     if not a.no_reference:
-        from cvdc.assess.module3 import channel_targets
-        from demo.reference import OnlineAligner, ReferencePlayer, live_channels
-        player, aligner = ReferencePlayer(cfg, ex, sess.ref, sess.ac), OnlineAligner(sess.ref, sess.ac)
-        targets, sigma = channel_targets(sess.ref, sess.lib[view], sess.ac), sess.lib[view]["sigma"]
+        from demo.reference import LiveReference
+        live_ref = LiveReference(cfg, sess, view)
+        player = live_ref.player
         ghost_on = a.ghost and (view == "F" or a.ghost_any_view)
         if a.ghost and not ghost_on:
             print(f"ghost off: the {view} view is not the reference's {player.view} view (--ghost-any-view to force)")
-    align_side, n_seen, torso_hist, blur_state = None, 0, [], {}
+    geo_hist, blur_state = [], {}
     try:
         for t, rgb, geom in frames_from(src, cfg["pose"]["max_side"]):
             if a.max_seconds and t > a.max_seconds:
@@ -322,21 +339,9 @@ def main():
             hand = pose.hand2d[-1] if hands else None
             w = pose.world[-1]
             trace.append(sess.live_angle(w))
-            j, diffs = 0, {}
-            if aligner is not None and sess.side:
-                if sess.side != align_side or len(sess.entries) != n_seen:  # new side or a new finished rep:
-                    align_side, n_seen = sess.side, len(sess.entries)   # restart after the last rep's end
-                    aligner.reset()
-                    t_end = sess.entries[-1]["time_s"][1] if sess.entries else -1.0
-                    for k in np.flatnonzero(np.asarray(pose.t[:-1]) > t_end):
-                        aligner.step(aligner.feature(pose.world[k], align_side))
-                j = aligner.step(aligner.feature(w, align_side))
-                diffs = angle_diffs(live_channels(pose.world, align_side, sess.ac), targets, sigma, j,
-                                    sess.ac["band_k"])
-            if lm is not None:
-                sh = (lm[J["left_shoulder"], :2] + lm[J["right_shoulder"], :2]) / 2
-                hp = (lm[J["left_hip"], :2] + lm[J["right_hip"], :2]) / 2
-                torso_hist = (torso_hist + [float(np.hypot(*((sh - hp) * rgb.shape[1::-1])))])[-90:]
+            g = body_geometry(lm, rgb.shape[1], rgb.shape[0]) if lm is not None else None
+            if g is not None:
+                geo_hist = (geo_hist + [(g[1], g[2], g[0][1])])[-90:]  # torso, shoulder width, mid-hip y (px)
             if t - last_update >= 0.5:
                 last_update = t
                 for e in sess.update(pose):
@@ -345,6 +350,9 @@ def main():
                           f"({e['quality']})" + (f", model {e['model_score']}" if "model_score" in e else "")
                           + (f", distance {e['embedding_distance']['cosine_centred']}" if e.get("embedding_distance") else "")
                           + "".join(f"\n    {x}" for x in error_lines(e, 9)))
+                if live_ref is not None:
+                    live_ref.after_update(sess, pose)
+            rs = live_ref.frame(pose) if live_ref is not None else {"in_rep": False, "k": 0, "diffs": {}, "side": None}
             # ---------------- drawing
             bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
             canvas = np.zeros_like(bgr) if (a.save_mode == "skeleton" and a.save_mp4) else bgr.copy()
@@ -355,8 +363,9 @@ def main():
                 fps, n_frames, fps_t = n_frames / (time.time() - fps_t), 0, time.time()
             y = 24
             for s in (f"{ex} {cfg['exercises'][ex]['name']} | view {view} | t {t:5.1f} s | {fps:4.1f} FPS",
-                      f"reps: {len(sess.entries)}" + (f" | model: {model.method} fold {model.fold}" if model else
-                                                      " | Module III only (no checkpoint)")):
+                      f"reps: {len(sess.entries)}" + (" | in a rep" if rs["in_rep"] else " | at rest")
+                      + (f" | model: {model.method} fold {model.fold}" if model else
+                         " | Module III only (no checkpoint)")):
                 text(canvas, s, (10, y))
                 y += 24
             if last_entry:
@@ -384,13 +393,21 @@ def main():
                             (d["aligned"]["curves"][main], YELLOW, 2)], "last rep vs template (band)")
             panel = None
             if player is not None:
-                ref_xy, mirrored = player.frame(j, align_side)
-                if ghost_on and torso_hist:
-                    draw_ghost(canvas, lm, ref_xy, float(np.median(torso_hist)),
+                ref_xy, mirrored = player.frame(rs["k"], rs["side"])
+                gm = np.median(geo_hist, 0) if geo_hist else None
+                if ghost_on and rs["in_rep"] and g is not None and gm is not None:  # X7: only during a rep
+                    # mid-hip + shoulder width (within 25% of the torso scale); the torso length when either
+                    # skeleton's shoulders are foreshortened (side-on patient, E04's oblique demo)
+                    scale = (float(np.clip(gm[1] / player.shoulder_w, 0.8 * gm[0], 1.25 * gm[0]))
+                             if player.view == "front" and gm[1] >= 0.35 * gm[0] else gm[0])
+                    draw_ghost(canvas, g[0], ref_xy, scale,
                                f"ghost: PT reference ({player.view} view)" + (" - not this camera's view" if
                                                                              view != "F" else ""))
-                draw_angle_labels(canvas, lm, diffs, align_side or "right")
-                panel = reference_panel(H, max(260, int(0.55 * H)), ref_xy, j, player.n, player, mirrored, view, diffs)
+                draw_angle_labels(canvas, lm, rs["diffs"], rs["side"] or "right")
+                panel = reference_panel(H, max(260, int(0.55 * H)), ref_xy, rs["k"], player, mirrored, view,
+                                        rs["diffs"], "rep" if rs["in_rep"] else "rest",
+                                        gm[0] if gm is not None else None, gm[2] if gm is not None else None,
+                                        rs.get("j"))
             saved = blur_faces(canvas.copy(), lm, blur_state) if (writer is not None or a.save_mp4) and \
                 a.save_mode == "blur" else canvas
             if panel is not None:
@@ -408,9 +425,9 @@ def main():
                 if k == ord("r"):
                     pose.reset()
                     sess.reset()
-                    last_entry, trace, torso_hist, align_side, n_seen = None, [], [], None, 0
-                    if aligner is not None:
-                        aligner.reset()
+                    last_entry, trace, geo_hist = None, [], []
+                    if live_ref is not None:
+                        live_ref.reset()
                 if k == ord("s"):
                     print("saved", save_report(sess.set_report(video_id or ""), out_dir, f"{ex}_{video_id}"))
             if not a.no_realtime:  # real-time playback: wait until the frame's own time

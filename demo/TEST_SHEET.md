@@ -1,65 +1,108 @@
-# Demo test sheet (final scope E01–E04)
+# Demo test sheet (final scope E01–E04, held-out subjects)
 
-Commands to check the demo by hand (`demo/live.py`, `demo/app.py`). Run from the repo root with the venv
-(`D:\cb\.venv\Scripts\python.exe`). One model per exercise (T17): `--select` loads the GroupKFold-5 fold that held the
-subject out, so these subjects are **held out** of the model they are scored with (no leakage warning). Videos play at
-real-time speed unless `--no-realtime`; `--headless` runs without a window. Saved `.mp4` files blur faces (D10);
-`--save-mode skeleton` draws on a black frame instead. Outputs (reports, videos) go to `outputs/full/demo/`
-(gitignored). Decisions: X1–X6 in `DESIGN_DECISIONS.md`.
+Commands to check the demo by hand. **Open PowerShell (or cmd) in `D:\cb`** and paste the commands as they are; they
+call the venv's Python directly (`.venv\Scripts\python.exe`), so nothing needs activating. The demo runs on the **CPU**
+(`--device cpu` is the default), so it can run while a training job uses the GPU.
 
-## 1. Live demo, one held-out video per exercise
+- **Held out:** one model per exercise (T17). `--select` loads the GroupKFold-5 fold whose test split holds the
+  subject, so every subject below is **held out** of the model that scores it (the console prints the checkpoint and
+  no `WARNING: LEAKAGE` line).
+- Videos play at real-time speed in a window. Keys: `q` quit, `r` reset the set, `s` save the report (JSON + CSV to
+  `cvdc-physio\outputs\full\demo\`). `--headless --no-realtime` runs without a window as fast as possible.
+- Saved `.mp4` files have faces blurred (D10). Outputs are gitignored.
+- Expected numbers were checked on 2026-10-20 (21:20–21:40) with the code of that day's commit. "Module III / model"
+  = the set scores printed on the last console line; "PT" = the physiotherapists' score of that video. The scores are
+  single examples of the within-group results (PROGRESS §6h.9: no model beats the within-group mean), not a validation.
+- Decisions: X1–X7 in `cvdc-physio\DESIGN_DECISIONS.md`; the reference display is X7.
 
-| Exercise | Command | Expected (checked 2026-10-20) |
+## 1. One held-out video per exercise (front view, with the ghost)
+
+| Exercise | Command (from `D:\cb`) | Expected (console) |
 |---|---|---|
-| E01 abduction | `python -m demo.live --select E01 P03 F FL --ghost` | model fold 0; 9 reps; Module III set 84.7, model 80.2 (physiotherapists 60.5) |
-| E02 adduction | `python -m demo.live --select E02 P07 F ML --ghost` | fold 2; 14 reps; 73.3 / 95.5 (47.6) |
-| E03 lateral rotation | `python -m demo.live --select E03 P05 F FL --ghost` | fold 1; 10 reps; 85.5 / 61.4 (69.0) |
-| E04 medial rotation | `python -m demo.live --select E04 P10 F FL --ghost` | fold 1; 10 reps; 81.1 / 87.3 (81.9) |
-| E04, side view | `python -m demo.live --select E04 P10 L FL --ghost` | ghost stays off ("the L view is not the reference's oblique view"); the panel says to compare the 3D-angle differences |
-| E03 non-expert clip | `python -m demo.live --select E03 P30 F FL` | fold 4; 1 rep; `too_few_reps` severe |
-| Module III only | `python -m demo.live --select E01 P03 F FL --no-model` | no checkpoint needed (X3) |
-| Leakage warning | `python -m demo.live --select E01 P11 F FL --fold 0` | prints `WARNING: LEAKAGE ...` (P11 trained fold 0) |
+| E01 abduction | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --ghost` | fold 0; 9 reps (`too_few_reps`, mild); Module III 84.7 / model 80.2 (PT 60.5) |
+| E02 adduction | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E02 P07 F ML --ghost` | fold 2; 14 reps; 73.3 / 95.5 (PT 47.6); reps 3, 8, 11 and 13 are half reps (`adduction_range_insufficient`, severe) |
+| E03 lateral rotation | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E03 P05 F FL --ghost` | fold 1; 10 reps; 85.5 / 61.4 (PT 69.0) |
+| E04 medial rotation | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 F FL --ghost` | fold 1; 10 reps; 81.1 / 87.3 (PT 81.9); the patient uses the left arm, so the panel says `mirrored` |
 
-What to look at in the window:
-- **Left (the video):** the skeleton (joints of the last rep's errors in red); the live angle difference at each
-  channel's joint (`elev -7`, `elbow +12`, ...: patient − Module III target at the aligned template frame, **green
-  inside the band, red outside**); with `--ghost` the PT reference as a faint cyan skeleton, scaled to the patient's
-  torso and centred on the mid-hip (front-view videos only unless `--ghost-any-view`); top: rep counter, rep score,
-  errors (`type . joint . deviation . frames (severity)`), the model's rep score and distance to the PT reference,
-  the live main angle and the last rep against its band.
-- **Right (side panel):** the PT reference skeleton **time-aligned to the current rep** (open-end DTW on Module III's
-  alignment feature), its file and camera view, `mirrored` when the patient uses the other side, the template frame,
-  and per channel `patient / target (diff)`. For a side-view video (or a non-front demo, E04 oblique) it says that
-  the picture comes from another view and only the angle differences (view-corrected, M8) compare.
-- Keys: `q` quit, `r` reset, `s` save the report (JSON + CSV).
+## 2. What to look at in the window
 
-## 2. Example videos (saved 2026-10-20, faces blurred)
+**At rest** (before the first rep, between reps, after the last):
+- top left: `reps: N | at rest`;
+- right panel: the PT's own skeleton in its **rest pose** (E01, E02: arm hanging nearly straight; E04: the start
+  position, forearm forward) and the line `patient at rest | PT at rest | not compared`;
+- **no** angle labels on the patient, **no** `channel: patient / target` list, **no** ghost.
+- E03: the PT panel rests with the **arm at the side** (the V3 demo lowers the arm between reps) while the patient holds
+  90/90. This is what the demo video shows; whether E03 should instead show the demo's 90/90 hold at rest is an open
+  question (PROGRESS §6h.7, X7 item 4).
 
-```bash
-python -m demo.live --select E01 P03 F FL --headless --no-realtime --ghost --save-mp4 outputs/full/demo/examples/E01_P03_F_FL_reference.mp4
-python -m demo.live --select E02 P07 F ML --headless --no-realtime --ghost --save-mp4 outputs/full/demo/examples/E02_P07_F_ML_reference.mp4
-python -m demo.live --select E03 P05 F FL --headless --no-realtime --ghost --save-mp4 outputs/full/demo/examples/E03_P05_F_FL_reference.mp4
-python -m demo.live --select E04 P10 F FL --headless --no-realtime --ghost --save-mp4 outputs/full/demo/examples/E04_P10_F_FL_reference.mp4
+**During a rep:**
+- top left: `in a rep`;
+- panel: the PT moves through its real rep with the patient, **rest → peak → rest**; the line
+  `patient in a rep | PT frame k/n, template j/m` (during the PT's rest lead-in and return: `not compared`);
+- labels at the joints (`elev +3`, `elbow -8`, ...: patient − target in degrees at that template frame; **green inside
+  the band, red outside**) and the same list at the bottom of the panel (`patient / target (diff)`);
+- `--ghost` on a front-view video: the PT as a faint cyan skeleton **on** the patient, centred on the mid-hip and
+  scaled to the patient's shoulder width (E04: torso length, because its demo is filmed obliquely; labelled
+  `ghost: PT reference (oblique view)`).
+
+The first ~10–20% of each rep and its last ~10–20% count as rest (the rep starts once the patient is 25% of the way to
+the PT's peak). During a hold at the top, the PT stays at the start of its own hold and catches up on the way down.
+
+## 3. More held-out checks
+
+| Check | Command (from `D:\cb`) | Expected |
+|---|---|---|
+| E01 non-expert | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P30 F FL --ghost` | fold 4; 2 reps (`too_few_reps`, severe); Module III 67.6 / model 14.2 (PT 64.3) |
+| E03 non-expert, one-rep clip | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E03 P30 F FL --ghost` | fold 4; 1 rep (`too_few_reps`, severe); 89.6 / 52.5 (PT 50.0) |
+| E01 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 L FL --ghost` | fold 0; prints `ghost off: the L view is not the reference's front view`; 9 reps; 90.0 / 60.9 (PT 59.0); panel says to compare the 3D-angle differences, not the picture |
+| E02 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E02 P07 R ML --ghost` | fold 2; ghost off; 16 reps; 76.8 / 82.6 (PT 47.6). Side views follow the PT poorly (X7 check) |
+| E04 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 L FL --ghost` | fold 1; ghost off (`not the reference's oblique view`); 9 reps; 76.1 / 79.6 (PT 81.9) |
+| Module III only | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --no-model` | no checkpoint needed (X3); 9 reps; Module III 84.7; no model scores |
+| Leakage warning | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P11 F FL --fold 0` | prints `WARNING: LEAKAGE: subject P11 was in the training split of E01 proposed_j1 fold 0 ...` (red line in the window) |
+| A video file | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --source "D:\cb\mobiphysio\E01(Abduction)\E01_P03_AF_VFL_GM.mp4" --exercise E01 --view F --ghost` | the same as the first E01 row (the subject is looked up, so the held-out fold is used) |
+
+`--list E03` lists an exercise's dataset videos (subject, group, view, variation, score).
+
+## 4. Example videos and screenshots (saved 2026-10-20, faces blurred)
+
+```
+.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --ghost --headless --no-realtime --save-mp4 cvdc-physio\outputs\full\demo\examples_x7\E01_P03_F_FL_reference.mp4
+.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E02 P07 F ML --ghost --headless --no-realtime --save-mp4 cvdc-physio\outputs\full\demo\examples_x7\E02_P07_F_ML_reference.mp4
+.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E03 P05 F FL --ghost --headless --no-realtime --save-mp4 cvdc-physio\outputs\full\demo\examples_x7\E03_P05_F_FL_reference.mp4
+.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 F FL --ghost --headless --no-realtime --save-mp4 cvdc-physio\outputs\full\demo\examples_x7\E04_P10_F_FL_reference.mp4
 ```
 
-## 3. Streamlit app
+Each takes ~35 s. Rest | peak screenshots of these videos are in the same folder:
+`E01_P03_AF_VFL_GM_rest_15.0s_peak_5.7s.png`, `E02_P07_AF_VML_GM_rest_21.8s_peak_4.0s.png`,
+`E03_P05_AF_VFL_GM_rest_3.2s_peak_3.9s.png`, `E04_P10_AF_VFL_GF_rest_5.0s_peak_3.5s.png`. The earlier version (X6,
+arm ~25° out at rest) is kept in `cvdc-physio\outputs\full\demo\examples\` for comparison.
 
-```bash
-streamlit run demo/app.py
+## 5. Streamlit app
+
+```
+.venv\Scripts\python.exe -m streamlit run cvdc-physio\demo\app.py
 ```
 
 Sidebar: **dataset video** → E01 / P15 / F / FL (held out by fold 0) → **assess**. Expected: 10 reps, Module III set
-score 88.0, model set score 82.8 (MQ 85.9; physiotherapists 76.67); per-rep table; for the chosen rep the patient
-against the PT reference at 5 template phases (ghost in cyan, per-joint differences green / red), the angle-vs-template
-curves and the embedding plot; **download JSON**. Moving the rep slider keeps the result.
+score 88.0, model set score 82.8 (MQ 85.9; PT 76.67); the per-rep table; for the chosen rep, the patient against the
+PT reference at 5 template phases (the PT's own keypoints at the matching frame of its rep, in cyan; per-joint
+differences green / red), the angle-vs-template curves and the embedding plot; **download JSON**. Moving the rep slider
+keeps the result.
 
-## 4. Automated checks
+## 6. Automated checks
 
-```bash
-python -m pytest -q tests/test_demo.py
+```
+.venv\Scripts\python.exe cvdc-physio\scripts\phase6\verify_pt_keypoints.py
+.venv\Scripts\python.exe cvdc-physio\scripts\phase6\check_reference_display.py
+cd cvdc-physio
+..\.venv\Scripts\python.exe -m pytest -q tests\test_demo.py
+cd ..
 ```
 
-The online session reproduces the batch own-view reps (E03, E05, E07, E09 videos); the reference player follows the
-template for E01–E04; the online aligner tracks a slowed-down template and waits at rest; mirroring; the face blur
-(including frames without landmarks). Agreement of the live alignment with Module III's batch DTW on held-out reps
-(median |online − batch| template frame): E01 1%, E02 3%, E03 8%, E04 6% of the template.
+- `verify_pt_keypoints.py` (~1 min): the PT demo keypoints re-detected on the PT videos in memory at the rest, peak and
+  end of every demo rep. Expected: median error 0–1.8% of the torso in E01 (≤ 6.5% in the oblique E04), and the
+  display window from rest to rest (E01 2D arm angle 10° / 178° / 11°).
+- `check_reference_display.py` (~1 min): the live loop replayed on the cached keypoints of the four videos of §1.
+  Expected: one rep episode per rep (E02: 14 of 14, one half rep missed and one extra), 91–99.5% of the between-rep
+  frames shown at rest.
+- `pytest` must run inside `cvdc-physio` (the tests use repo-relative paths). Expected: 15 passed.

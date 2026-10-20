@@ -231,7 +231,7 @@ class OnlineSession:
 
     def reset(self):
         self.reps, self.entries, self.debug, self.zs = [], [], [], []
-        self.side, self.pre, self.signal, self.frame_hw = None, None, None, None
+        self.side, self.pre, self.signal, self.frame_hw, self.polarity = None, None, None, None, "peak"
         self._cache, self._seen = {}, set()
 
     def _extra(self, pose_arrays, n, side):
@@ -265,7 +265,7 @@ class OnlineSession:
         pre = preprocess_arrays(lm, world, t, det, pose.frame_hw, self.cfg["preprocess"])
         ang, info = video_info(pre, self.ex_cfg)
         side = info["side"]
-        reps, _ = segment_signal(ang[side], self.fps, self.ex_cfg["reps"])
+        reps, self.polarity = segment_signal(ang[side], self.fps, self.ex_cfg["reps"])
         n = len(pre["t"])
         horizon = n - 1 if final else n - 1 - int(round(self.margin_s * self.fps))
         done = [r for r in reps if r["end"] <= horizon]

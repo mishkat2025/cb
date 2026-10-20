@@ -83,7 +83,10 @@ streamlit run demo/app.py                                        # upload a vide
 python -m demo.live --select E03 P05 F FL --ghost                # + the PT reference as a ghost (front views)
 ```
 
-The side panel shows the PT reference skeleton time-aligned to the current rep and the live angle differences per joint (X6). Hand-test commands and expected results: `demo/TEST_SHEET.md`.
+The side panel shows the PT's own skeleton from one real demo rep, rest → peak → rest: at its rest pose while the
+patient rests (nothing compared), and following the patient through Module III's template during a rep, with the live
+angle differences per joint (X6, X7); the ghost is drawn only during a rep. Hand-test commands (Windows, from `D:\cb`)
+and expected results: `demo/TEST_SHEET.md`.
 
 ## Phase 1: keypoints and preprocessing
 
