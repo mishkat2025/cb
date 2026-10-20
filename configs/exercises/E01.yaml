@@ -5,6 +5,7 @@ body_region: shoulder
 status: in_scope
 references:                      # M4: PT demos in data.reference_dir
   primary: "Abduction .mp4"
+  primary_view: front             # apparent camera view of the demo (PROGRESS §3.6, §3.7.7; demo X6)
   backup: ["Abduction Adduction.mp4"]
 primary_angle:                   # drives rep segmentation (P6)
   name: shoulder_elevation       # angle between upper arm and trunk line (0 = arm at side, 180 = overhead)

@@ -73,21 +73,107 @@ def draw_pose(img, lm, hands, bad):
             cv2.line(img, tuple(int(v) for v in q[a]), tuple(int(v) for v in q[b]), YELLOW, 1, cv2.LINE_AA)
 
 
-def blur_faces(img, lm):
-    """Gaussian blur over the head box from the face landmarks (nose, eyes, ears) for saved output (D10)."""
-    if lm is None:
-        return img
+def blur_faces(img, lm, state=None):
+    """Gaussian blur over the head box from the face landmarks (nose, eyes, ears) for saved output (D10). A frame
+    without face landmarks reuses the last head box (``state``); with no box yet the whole frame is blurred, so a
+    saved frame never shows an unblurred face."""
     H, W = img.shape[:2]
-    pts = np.array([[lm[j, 0] * W, lm[j, 1] * H] for j in range(11) if np.isfinite(lm[j, :2]).all()])
-    if len(pts) < 2:
-        return img
-    c, r = pts.mean(0), max(np.ptp(pts, 0).max() * 1.4, 0.06 * max(H, W))
-    x0, y0 = max(0, int(c[0] - r)), max(0, int(c[1] - r * 1.3))
-    x1, y1 = min(W, int(c[0] + r)), min(H, int(c[1] + r))
+    state = {} if state is None else state
+    pts = np.empty((0, 2))
+    if lm is not None:
+        pts = np.array([[lm[j, 0] * W, lm[j, 1] * H] for j in range(11) if np.isfinite(lm[j, :2]).all()])
+    if len(pts) >= 2:
+        c, r = pts.mean(0), max(np.ptp(pts, 0).max() * 1.4, 0.06 * max(H, W))
+        state["box"] = (max(0, int(c[0] - r)), max(0, int(c[1] - r * 1.3)), min(W, int(c[0] + r)), min(H, int(c[1] + r)),
+                        max(31, (int(r) // 2) * 2 + 1))
+    if "box" not in state:
+        return cv2.GaussianBlur(img, (61, 61), 0)
+    x0, y0, x1, y1, k = state["box"]
     if x1 > x0 and y1 > y0:
-        k = max(31, (int(r) // 2) * 2 + 1)
         img[y0:y1, x0:x1] = cv2.GaussianBlur(img[y0:y1, x0:x1], (k, k), 0)
     return img
+
+
+CYAN = (230, 200, 60)
+from demo.reference import SHORTC  # noqa: E402  (short channel names for the labels, X6)
+
+
+def joint_px(lm, name, W, H):
+    if lm is None:
+        return None
+    if name == "mid_hip":
+        p = (lm[J["left_hip"], :2] + lm[J["right_hip"], :2]) / 2
+    else:
+        p = lm[J[name], :2]
+    return None if not np.isfinite(p).all() else np.array([p[0] * W, p[1] * H])
+
+
+def angle_diffs(live, targets, sigma, j, band_k):
+    """{channel: (patient - target at template frame j, within the band?)} for the channels with values (X6)."""
+    out = {}
+    for c, v in live.items():
+        if c not in targets or not np.isfinite(v):
+            continue
+        t, s = targets[c][j], sigma[c][j] * band_k
+        if np.isfinite(t) and np.isfinite(s):
+            out[c] = (v - t, abs(v - t) <= s, v, t)
+    return out
+
+
+def draw_angle_labels(img, lm, diffs, side):
+    """The live angle difference (deg, patient - reference target) at each channel's joint; green inside the band,
+    red outside (X6)."""
+    from demo.reference import CHANNEL_JOINT
+    H, W = img.shape[:2]
+    o = "left" if side == "right" else "right"
+    for c, (d, ok, _, _) in diffs.items():
+        jn, row = CHANNEL_JOINT.get(c, (None, 0))
+        p = joint_px(lm, jn.format(s=side, o=o), W, H) if jn else None
+        if p is None:
+            continue
+        text(img, f"{SHORTC.get(c, c)} {d:+.0f}", (int(p[0]) + 10, int(p[1]) - 6 + 18 * row), 0.5, GREEN if ok else RED)
+
+
+def draw_ghost(img, lm, ref_xy, torso_px, label):
+    """The reference skeleton as a faint ghost scaled (torso length) and centred (mid-hip) on the patient (X6)."""
+    H, W = img.shape[:2]
+    mh = joint_px(lm, "mid_hip", W, H)
+    if mh is None or not np.isfinite(torso_px):
+        return
+    p = mh + ref_xy * torso_px
+    layer = img.copy()
+    for a, b in MP_DRAW_EDGES:
+        if np.isfinite(p[[a, b]]).all():
+            cv2.line(layer, tuple(int(v) for v in p[a]), tuple(int(v) for v in p[b]), CYAN, 5, cv2.LINE_AA)
+    cv2.addWeighted(layer, 0.45, img, 0.55, 0, img)
+    text(img, label, (10, H - 34), 0.5, CYAN)
+
+
+def reference_panel(H, PW, ref_xy, j, n, player, mirrored, patient_view, diffs):
+    """Side panel: the PT reference skeleton at the aligned template frame, its source and view, and the per-channel
+    live angles (patient / target / difference) (X6)."""
+    panel = np.full((H, PW, 3), 22, np.uint8)
+    s = 0.17 * H
+    c = np.array([PW / 2, 0.55 * H])
+    p = c + ref_xy * s
+    for a, b in MP_DRAW_EDGES:
+        if np.isfinite(p[[a, b]]).all():
+            cv2.line(panel, tuple(int(v) for v in p[a]), tuple(int(v) for v in p[b]), CYAN, 3, cv2.LINE_AA)
+    text(panel, "PT reference (time-aligned)", (8, 22), 0.55)
+    text(panel, f"{player.file} | {player.view} view" + (" | mirrored" if mirrored else ""), (8, 44), 0.45, GREY)
+    text(panel, f"template frame {j + 1}/{n}", (8, 64), 0.45, GREY)
+    y = 86
+    if patient_view != "F" or player.view != "front":
+        for line in (f"patient view {patient_view}, reference {player.view} view:",
+                     "compare the 3D-angle differences, not the picture"):
+            text(panel, line, (8, y), 0.42, YELLOW)
+            y += 18
+    y = int(0.80 * H) - 18 * max(0, len(diffs) - 6)
+    text(panel, "channel: patient / target  (diff)", (8, y), 0.42, GREY)
+    for ch, (d, ok, v, t) in diffs.items():
+        y += 18
+        text(panel, f"{SHORTC.get(ch, ch)}: {v:.0f} / {t:.0f}  ({d:+.0f})", (8, y), 0.45, GREEN if ok else RED)
+    return panel
 
 
 def text(img, s, org, scale=0.6, color=WHITE, thick=1):
@@ -175,6 +261,10 @@ def main():
     ap.add_argument("--headless", action="store_true", help="no window (testing); with --save-mp4 for the output")
     ap.add_argument("--max-seconds", type=float)
     ap.add_argument("--no-realtime", action="store_true", help="process as fast as possible")
+    ap.add_argument("--no-reference", action="store_true", help="no reference side panel / angle labels (X6)")
+    ap.add_argument("--ghost", action="store_true", help="draw the PT reference as a faint ghost on the patient (X6)")
+    ap.add_argument("--ghost-any-view", action="store_true",
+                    help="allow the ghost on side-view videos too (labelled: the reference is a front-view clip)")
     a = ap.parse_args()
     cfg = load_config(a.config)
     if a.list:
@@ -213,6 +303,17 @@ def main():
     win = f"CVDC demo {ex} ({view})"
     t_wall0, n_frames, fps_t, fps = time.time(), 0, time.time(), 0.0
     last_entry, last_update, trace = None, 0.0, []
+    # X6: the PT reference, time-aligned to the current rep by open-end DTW on Module III's alignment feature
+    player = aligner = None
+    if not a.no_reference:
+        from cvdc.assess.module3 import channel_targets
+        from demo.reference import OnlineAligner, ReferencePlayer, live_channels
+        player, aligner = ReferencePlayer(cfg, ex, sess.ref, sess.ac), OnlineAligner(sess.ref, sess.ac)
+        targets, sigma = channel_targets(sess.ref, sess.lib[view], sess.ac), sess.lib[view]["sigma"]
+        ghost_on = a.ghost and (view == "F" or a.ghost_any_view)
+        if a.ghost and not ghost_on:
+            print(f"ghost off: the {view} view is not the reference's {player.view} view (--ghost-any-view to force)")
+    align_side, n_seen, torso_hist, blur_state = None, 0, [], {}
     try:
         for t, rgb, geom in frames_from(src, cfg["pose"]["max_side"]):
             if a.max_seconds and t > a.max_seconds:
@@ -221,6 +322,21 @@ def main():
             hand = pose.hand2d[-1] if hands else None
             w = pose.world[-1]
             trace.append(sess.live_angle(w))
+            j, diffs = 0, {}
+            if aligner is not None and sess.side:
+                if sess.side != align_side or len(sess.entries) != n_seen:  # new side or a new finished rep:
+                    align_side, n_seen = sess.side, len(sess.entries)   # restart after the last rep's end
+                    aligner.reset()
+                    t_end = sess.entries[-1]["time_s"][1] if sess.entries else -1.0
+                    for k in np.flatnonzero(np.asarray(pose.t[:-1]) > t_end):
+                        aligner.step(aligner.feature(pose.world[k], align_side))
+                j = aligner.step(aligner.feature(w, align_side))
+                diffs = angle_diffs(live_channels(pose.world, align_side, sess.ac), targets, sigma, j,
+                                    sess.ac["band_k"])
+            if lm is not None:
+                sh = (lm[J["left_shoulder"], :2] + lm[J["right_shoulder"], :2]) / 2
+                hp = (lm[J["left_hip"], :2] + lm[J["right_hip"], :2]) / 2
+                torso_hist = (torso_hist + [float(np.hypot(*((sh - hp) * rgb.shape[1::-1])))])[-90:]
             if t - last_update >= 0.5:
                 last_update = t
                 for e in sess.update(pose):
@@ -266,10 +382,24 @@ def main():
                 plot_inset(canvas, W - pw - 10, 20 + ph, pw, ph,
                            [(tgt - sd, GREY, 1), (tgt + sd, GREY, 1), (tgt, WHITE, 2),
                             (d["aligned"]["curves"][main], YELLOW, 2)], "last rep vs template (band)")
+            panel = None
+            if player is not None:
+                ref_xy, mirrored = player.frame(j, align_side)
+                if ghost_on and torso_hist:
+                    draw_ghost(canvas, lm, ref_xy, float(np.median(torso_hist)),
+                               f"ghost: PT reference ({player.view} view)" + (" - not this camera's view" if
+                                                                             view != "F" else ""))
+                draw_angle_labels(canvas, lm, diffs, align_side or "right")
+                panel = reference_panel(H, max(260, int(0.55 * H)), ref_xy, j, player.n, player, mirrored, view, diffs)
+            saved = blur_faces(canvas.copy(), lm, blur_state) if (writer is not None or a.save_mp4) and \
+                a.save_mode == "blur" else canvas
+            if panel is not None:
+                canvas, saved = np.hstack([canvas, panel]), np.hstack([saved, panel])
             if writer is None and a.save_mp4:
-                writer = cv2.VideoWriter(str(a.save_mp4), cv2.VideoWriter_fourcc(*"mp4v"), 30, (W, H))
+                writer = cv2.VideoWriter(str(a.save_mp4), cv2.VideoWriter_fourcc(*"mp4v"), 30,
+                                         (canvas.shape[1], canvas.shape[0]))
             if writer is not None:
-                writer.write(blur_faces(canvas.copy(), lm) if a.save_mode == "blur" else canvas)
+                writer.write(saved)
             if not a.headless:
                 cv2.imshow(win, canvas)
                 k = cv2.waitKey(1) & 0xFF
@@ -278,7 +408,9 @@ def main():
                 if k == ord("r"):
                     pose.reset()
                     sess.reset()
-                    last_entry, trace = None, []
+                    last_entry, trace, torso_hist, align_side, n_seen = None, [], [], None, 0
+                    if aligner is not None:
+                        aligner.reset()
                 if k == ord("s"):
                     print("saved", save_report(sess.set_report(video_id or ""), out_dir, f"{ex}_{video_id}"))
             if not a.no_realtime:  # real-time playback: wait until the frame's own time

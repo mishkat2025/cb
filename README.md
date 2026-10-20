@@ -80,7 +80,10 @@ python -m demo.live --list E03                                   # dataset video
 python -m demo.live --select E07 P05 F FL                        # a dataset video (exercise, subject, view, variation)
 python -m demo.live --source my_video.mp4 --exercise E01 --view F --save-mp4 out.mp4   # faces blurred in the file
 streamlit run demo/app.py                                        # upload a video -> per-rep report, plots, JSON
+python -m demo.live --select E03 P05 F FL --ghost                # + the PT reference as a ghost (front views)
 ```
+
+The side panel shows the PT reference skeleton time-aligned to the current rep and the live angle differences per joint (X6). Hand-test commands and expected results: `demo/TEST_SHEET.md`.
 
 ## Phase 1: keypoints and preprocessing
 

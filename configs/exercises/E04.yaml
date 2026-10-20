@@ -6,6 +6,7 @@ body_region: shoulder
 status: in_scope_full
 references:
   primary: "Medial Rotation.mp4"   # oblique view, arm lower than the dataset (elevation 40 vs 69 deg): per-view bias (M8)
+  primary_view: oblique             # apparent camera view of the demo (PROGRESS §3.6, §3.7.7; demo X6)
   backup: []
 primary_angle:                   # P6 / M16: segmentation only
   name: all_joint_pc1            # PC1 of all coco17 joints (2D); cross-view agreement 64% (Step 0; tied with the wrist PC1)

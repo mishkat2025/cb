@@ -6,6 +6,7 @@ body_region: shoulder
 status: in_scope_full            # configs/data_full.yaml; the pilot config (data.yaml) includes E01/E02 only
 references:                      # M3: V3 (90/90) is the closest demo (Chamfer 13.5 deg vs 19.1 v1, 55.3 V2)
   primary: "Later Rotation V3.mp4"
+  primary_view: front             # apparent camera view of the demo (PROGRESS §3.6, §3.7.7; demo X6)
   backup: ["Lateral Rotation.mp4"]
   notes: both arms (left mirrored), working phase only (shoulder abduction >= 70 deg)   # M3, applied in Phase 4
 primary_angle:                   # P6 / M16 / P6d: rep signal = the Module III main angle

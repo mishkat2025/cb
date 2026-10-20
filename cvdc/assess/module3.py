@@ -52,27 +52,36 @@ def joint_name(joint, side):
             "other_hip": f"{other(side)}_hip", "other_knee": f"{other(side)}_knee", "trunk": "trunk"}.get(joint, joint)
 
 
-def compare(sig, al, ref, lib_v, ac):
-    """Deviation curves and measures of one rep (signals ``sig``, aligned ``al``) against the template in its view's
-    library entry."""
-    dev, u, tgt = {}, {}, {}
-    m = {}
-    min_def = ac["min_defined_frac"]
+def channel_targets(ref, lib_v, ac):
+    """{channel: (n_ref,) target curve in this view}: the PT demo + the view bias (M8), or the >= 95 experts' mean
+    curve of this view for the posture channels (M14), E06's main channel (M17) and per-channel overrides (M18)."""
     centre = ac.get("posture_centre", "pt_demo")
     if centre not in ("pt_demo", "experts"):
         raise ValueError(f"assess.posture_centre {centre!r}: pt_demo | experts")
     posture = set(ac.get("posture_channels") or []) - {ref["main"]}
     main_experts = ac.get("main_centre", "pt_demo") == "experts"  # M17: E06's Hands wrist angle (side views only)
     per_channel = ac.get("channel_centre") or {}  # M18: per-channel override, experts | pt_demo
+    out = {}
     for c in ref["channels"]:
         cc = per_channel.get(c) or ("experts" if (centre == "experts" and c in posture) or
                                     (main_experts and c == ref["main"]) else "pt_demo")
         if cc not in ("pt_demo", "experts"):
             raise ValueError(f"assess.channel_centre[{c!r}] = {cc!r}: pt_demo | experts")
-        if cc == "experts":
-            t = lib_v["mean"][c]  # M14: posture checks centred on the high-scoring experts of this view
-        else:
-            t = ref["curves"][c] + lib_v["bias"][c]
+        # M14: posture checks centred on the high-scoring experts of this view
+        out[c] = lib_v["mean"][c] if cc == "experts" else ref["curves"][c] + lib_v["bias"][c]
+    return out
+
+
+def compare(sig, al, ref, lib_v, ac):
+    """Deviation curves and measures of one rep (signals ``sig``, aligned ``al``) against the template in its view's
+    library entry."""
+    dev, u, tgt = {}, {}, {}
+    m = {}
+    min_def = ac["min_defined_frac"]
+    main_experts = ac.get("main_centre", "pt_demo") == "experts"
+    targets = channel_targets(ref, lib_v, ac)
+    for c in ref["channels"]:
+        t = targets[c]
         d = al["curves"][c] - t
         s = lib_v["sigma"][c]
         ok = np.isfinite(d) & np.isfinite(s)

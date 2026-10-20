@@ -60,4 +60,46 @@ def test_blur_faces_only_changes_the_head_box():
     lm[:11, 1] = 0.1 + rng.normal(0, 0.01, 11)
     out = blur_faces(img.copy(), lm)
     assert (out[150:] == img[150:]).all() and not (out[:30, 40:60] == img[:30, 40:60]).all()
-    assert (blur_faces(img.copy(), None) == img).all()
+    state = {}
+    blur_faces(img.copy(), lm, state)
+    keep = blur_faces(img.copy(), None, state)  # a frame without landmarks reuses the last head box
+    assert (keep[150:] == img[150:]).all() and not (keep[:30, 40:60] == img[:30, 40:60]).all()
+    assert not (blur_faces(img.copy(), None)[150:] == img[150:]).all()  # no box yet: the whole frame is blurred
+
+
+def test_mirror33_swaps_sides_and_is_an_involution():
+    from cvdc.data.skeleton import J
+    from demo.reference import mirror33
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(4, 33, 2))
+    Y = mirror33(X)
+    assert np.allclose(mirror33(Y), X)
+    assert np.allclose(Y[:, J["left_elbow"], 0], -X[:, J["right_elbow"], 0])
+    assert np.allclose(Y[:, J["nose"]], X[:, J["nose"]] * [-1, 1])
+
+
+def test_online_aligner_tracks_the_template_and_waits_at_rest():
+    from demo.reference import OnlineAligner
+    t = np.linspace(0, np.pi, 60)
+    F = np.stack([np.cos(t), np.sin(t), np.zeros_like(t)], 1)  # a rest -> peak -> back movement on the unit circle
+    a = OnlineAligner({"feat": F}, {"align": "arm"}, max_step=5)
+    assert [a.step(F[0]) for _ in range(20)] == [0] * 20       # at rest: anchored at the template's start
+    slow = np.repeat(F, 2, axis=0)                              # the same movement at half speed
+    js = [a.step(f) for f in slow]
+    assert all(b >= c for b, c in zip(js[1:], js[:-1]))          # monotonic
+    err = np.abs(np.array(js) - np.repeat(np.arange(60), 2))
+    assert np.median(err) <= 2 and js[-1] >= 55
+
+
+@pytest.mark.skipif(not HAVE, reason="needs the full-scope caches and the Module III library")
+@pytest.mark.parametrize("ex", ["E01", "E02", "E03", "E04"])
+def test_reference_player_follows_the_template(ex):
+    from cvdc.assess.module3 import assess_config
+    from cvdc.assess.template import load_library
+    from demo.reference import ReferencePlayer
+    ref, lib, _ = load_library(LIB / ex)
+    pl = ReferencePlayer(CFG, ex, ref, assess_config(CFG, ex))
+    assert pl.xy.shape == (ref["n"], 33, 2) and np.isfinite(pl.xy).all()
+    xy, mir = pl.frame(0, "left" if pl.side == "right" else "right")
+    assert mir and np.allclose(xy[:, 0].mean(), -pl.xy[0][:, 0].mean())
+    assert pl.view in ("front", "oblique")

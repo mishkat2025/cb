@@ -5,6 +5,7 @@ body_region: shoulder
 status: in_scope
 references:
   primary: "Aduction.mp4"
+  primary_view: front             # apparent camera view of the demo (PROGRESS §3.6, §3.7.7; demo X6)
   backup: ["Abduction Adduction.mp4"]
 primary_angle:                   # P6: rep signal. E02 is cross-body adduction with the arm low (elevation
   name: wrist_path_pc1           # ~10-45 deg); its direction changes with the view, so no single angle segments

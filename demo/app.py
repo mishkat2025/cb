@@ -176,6 +176,8 @@ def main():
     if rep["reps"]:
         k = st.slider("rep", 1, len(rep["reps"]), 1) - 1
         st.json(rep["reps"][k]["errors"], expanded=False)
+        from demo.reference import ReferencePlayer, compare_figure
+        st.pyplot(compare_figure(sess, ReferencePlayer(cfg, sess.ex, sess.ref, sess.ac), k, view))
         st.pyplot(template_plot(sess, k, view))
     if model is not None:
         st.pyplot(embedding_plot(cfg, model, sess))

@@ -5,6 +5,7 @@ body_region: trunk
 status: in_scope_full
 references:
   primary: "Back Extension.mp4"  # side view, prone
+  primary_view: side             # apparent camera view of the demo (PROGRESS §3.6, §3.7.7; demo X6)
   backup: []
 primary_angle:                   # P6 / M16 / P6d: segmentation only (not a joint angle)
   name: trunk_inclination_2d     # trunk above the image horizontal (2D); chosen by cross-view rep agreement (P6d): 76.9%

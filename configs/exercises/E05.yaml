@@ -5,6 +5,7 @@ body_region: shoulder
 status: in_scope_full
 references:
   primary: "Circumduction.mp4"   # side view, right arm
+  primary_view: side             # apparent camera view of the demo (PROGRESS §3.6, §3.7.7; demo X6)
   backup: []
 primary_angle:                   # P6 / M16: segmentation only
   name: wrist_height_2d          # wrist height above mid-shoulder (2D); cross-view agreement 82% (Step 0)

@@ -6,6 +6,7 @@ body_region: trunk
 status: in_scope_full
 references:
   primary: "Both Leg Flection.mp4"   # side view, supine
+  primary_view: side             # apparent camera view of the demo (PROGRESS §3.6, §3.7.7; demo X6)
   backup: []
 primary_angle:                   # P6 / M16: a joint angle (3D)
   name: hip_flexion              # cross-view agreement 92% (Step 0)

@@ -6,6 +6,7 @@ body_region: wrist
 status: in_scope_full
 references:
   primary: "Wrist Extension.mp4" # front-oblique, both wrists; holds each extension (~7x slower than the experts)
+  primary_view: front-oblique             # apparent camera view of the demo (PROGRESS §3.6, §3.7.7; demo X6)
   backup: []
 primary_angle:                   # P6 / M16: segmentation only (Pose); the Hands wrist angle is checked in Phase 1
   name: wrist_height_2d          # wrist height above mid-shoulder (2D); cross-view agreement 75% (Step 0)

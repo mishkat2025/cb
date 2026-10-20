@@ -5,6 +5,7 @@ body_region: hip
 status: in_scope_full
 references:
   primary: "Hip Joint Flection.mp4"   # side view, supine, right leg
+  primary_view: side             # apparent camera view of the demo (PROGRESS §3.6, §3.7.7; demo X6)
   backup: []
 primary_angle:                   # P6 / M16: segmentation only
   name: all_joint_pc1            # PC1 of all coco17 joints (2D); cross-view agreement 70% (Step 0)
