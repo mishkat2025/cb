@@ -1301,6 +1301,17 @@ Per exercise (1–2): 0.6 h (E07) to 1.0 h (E01). The cross-view figure by set c
 - **Check:** on `E07_P05_AF_VFL_GM` (headless, Module III only, 34 s for a 38 s video including MediaPipe) the final reps equal the batch own-view segmentation exactly (11 reps); set score 78.7. A first version locked the moving side at the first rep and picked the wrong leg (the subject moves the left leg in the first 6–8 s), which gave scores of 11–24 with `other_hip_flexed` errors; fixed by re-deriving side and reps from the whole buffer every 0.5 s (X5).
 - Tests (`tests/test_demo.py`): the online session fed the cached Phase 1 keypoints of E03 / E05 / E07 / E09 videos (in partial buffers, then final) reproduces the batch own-view reps and side; the error-joint mapping; the face blur touches only the head box.
 - **With a trained model** (E01 Proposed λ 1.0, fold 0): `--select E01 P11 F FL --fold 0` loads the checkpoint, prints rep scores (Module III and model), the distance to the PT reference and the model's set score (89.8, MQ 94.5; Module III 72.5), and shows the **leakage warning** (P11 was in fold 0's training split; without `--fold` the fold that held P11 out is chosen). Reps whose boundaries move as more video arrives are re-reported as "updated".
+- **Final-scope check (E01–E04, D18; held-out subjects, headless, CPU):** `--select` without `--fold`, so each run loaded the fold whose test split holds the subject (no leakage warning in any):
+
+  | Video (group, physiotherapists) | model fold | reps | Module III set score | model set score / MQ |
+  |---|---|---|---|---|
+  | E01 P03 F FL (expert, 60.5) | 0 | 9 (`too_few_reps`, mild) | 84.7 | 80.2 / 90.7 |
+  | E02 P07 F ML (expert, 47.6) | 2 | 14 | 73.3 | 95.5 / 88.4 |
+  | E03 P05 F FL (expert, 69.0) | 1 | 10 | 85.5 | 61.4 / 81.1 |
+  | E04 P10 L FL (expert, 81.9; side view) | 1 | 9 (`too_few_reps`, mild) | 76.1 | 79.6 / 96.9 |
+  | E03 P30 F FL (non-expert, 50.0; one-rep clip) | 4 | 1 (`too_few_reps`, severe) | 89.6 | 52.5 / 80.4 |
+
+  Every run completes with skeleton, reps, Module III errors, the model's rep / set scores and the distance to the PT reference. The scores themselves are single examples of the within-group results (§6h.9: no model beats the within-group mean), not a validation.
 - **Streamlit app** checked in the browser: dataset video E01 P15 F FL (held out by fold 0; physiotherapists 76.67): 10 reps, Module III set score 88.0, model set score 82.8 (MQ 85.9), per-rep table, template plots, the embedding plot; results survive widget reruns; no server errors.
 
 ## 7. Phase checklist
