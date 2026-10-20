@@ -1,6 +1,6 @@
 # Progress
 
-Last updated 2026-10-20 (full scope, one model per exercise (T17): step 1 done and reported (§6h.9); Module III E03–E09 with the M18 calibration; demo; step 6, the per-exercise cross-view protocol, running).
+Last updated 2026-10-20 (**final scope E01–E04**, D18: step 1 done for all nine and reported (§6h.9), Module III with the M18 calibration, demo; step 6 (cross-view) running for E01–E04 only; E05–E09 are a supplementary appendix).
 
 **State (2026-10-20):** the scope is now **all nine exercises** (user, ninth review, §4). The full-data Step 0 check (§3.7) found E03–E09 usable with caveats; the user brought all seven in. **Phase 1 is done for the full scope (§5b):** keypoints for all 3,685 videos (MediaPipe Hands for E06), sync, reps, packs and the KTPFormer lift, verified with the pilot's checks plus a comparison with the pilot and with Step 0. The E05 PF1 check (user answer 5) found no wrong exercise (§5b.7). **Tenth review (§4) applied:** E06's wrist angle is assessed in the side views only (§5b.3); the rep-phase fix is accepted (P6c); the rep signals of E03 and E09 were re-chosen by cross-view agreement (now forearm elevation and the 2D trunk inclination, §5b.10); the CVDC pairs are built with per-exercise DTW angles (§5b.11). **Work stops here, as asked: nothing is trained on the full scope until the user confirms the final evaluation scheme**, and no LOSO is started (the final table is planned as GroupKFold-10 until the supervisor decides, E1). **All E01/E02 results stay as the pilot**, unchanged; the full scope runs from `configs/data_full.yaml` into new folders (`data/full/`, `outputs/full/`, `runs/full/`; D15).
 
@@ -390,6 +390,12 @@ The base plan is the Step 0 proposal: subject = P-number; GroupKFold (k = 5, bal
 4. Keep rep-level training as the default so clip length cannot be a cue (T1, E12); the remaining cues (rep duration, rep count per set, view mix) are listed in E12.
 
 **Scope change (user, 2026-10-20): full dataset.** The full MobiPhysio dataset (all 9 exercises) is downloaded. Expand from E01/E02 to all usable exercises; do not start LOSO. Step 1: the Step 0 check of every new exercise (E03–E09) with the same method (parse rate, counts, CSV join, duplicates and bad files, F/L/R groups and sync classes, rep-segmentation feasibility, match to the PT demos and the Module III angles, the known issues E03 P02 / E06 Hands / E07–E09 lying, and whether the other EAAQs exist in the dataset), a verdict per exercise, and runtime estimates for Phase 1 extraction, the main GroupKFold runs, the cross-view protocol and LOSO; then stop. Keep every E01/E02 result as the pilot and write new results to new folders. Done: §3.7 (D0, D14–D17, S8, M16, E27).
+
+**Thirteenth review (supervisor decision, user 2026-10-20): final scope = E01–E04** (`DESIGN_DECISIONS.md` D18):
+1. Cross-view (step 6) for E01–E04 only. The running job goes exercise by exercise from E01, so it is left to finish E04 and stopped automatically when the first E05 run starts (a watcher on the log); expected finish ~01:00 on 2026-10-21 (started 18:49; ~1.6 h per exercise).
+2. Final report: main results for E01–E04 only (within-group scores vs the baselines, MQ, VCI, view stability of the distance to the PT reference, cross-view, group probe, Module III incl. the E03 calibration); the E05–E09 step-1 and Module III results become a clearly labelled supplementary appendix; nothing more is run for them.
+3. Demo checked for E01–E04 on held-out subjects.
+4. LOSO: not now; if requested, estimated for E01–E04 only.
 
 **Twelfth review (user, 2026-10-20): one model per exercise (supervisor decision; final plan)** (`DESIGN_DECISIONS.md` T17, E1, E14, E28; applied in §6h):
 0. **Stop the shared-model run**; keep its partial outputs in their own folder, labelled as aborted. Keep the code changes (E09 arm angles, set-feature angles, group probe, D8).
@@ -1305,7 +1311,7 @@ The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase
 - [x] **Phase 1 on the full scope (E01–E09)** (2026-10-20; §5b): video root and new folders (`configs/data_full.yaml`); Pose for 3,685 videos + Hands for E06 (on wrist crops); sync with S8 and the extended motion candidates; reps with the approved signals, adaptive thresholds and the rep-phase fix (P6c); packs; KTPFormer lift; renders and report; E05 PF1 motion check; E06 Hands check; E01/E02 vs the pilot and E03–E09 vs Step 0; 20 new tests.
 - [x] **E09 DTW angles by the warp test** (eleventh review; §6h.1): arm angles, pairs rebuilt.
 - [x] ~~Shared all-exercise GroupKFold-10 run~~ (eleventh review): started, **stopped** (twelfth review: one model per exercise); partial outputs archived (§6h.2).
-- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [x] (6.7 h); per-exercise report [x] (§6h.9); Module III E03–E09 [x] (§6h.6; rule calibration M18, §6h.8); Phase 6 demo [x] (§6h.7); (6) cross-view per exercise [running; smoke test passed]; (7) LOSO per exercise: not started (supervisor / cloud).
+- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [x] (6.7 h); per-exercise report [x] (§6h.9); Module III E03–E09 [x] (§6h.6; rule calibration M18, §6h.8); Phase 6 demo [x] (§6h.7); (6) cross-view per exercise [running for E01–E04 only (D18); smoke test passed]; (7) LOSO per exercise: not started (supervisor / cloud).
 - [x] **Tenth-review changes** (2026-10-20; §5b.3, §5b.10, §5b.11): E06 wrist angle in side views only (Phase 4); rep-phase fix accepted; E03 / E09 rep signals re-chosen by cross-view agreement; per-exercise DTW angles; CVDC pairs built for the full scope; 2 more tests (187). **Not started:** any training on the full scope (waits for the user's confirmation of the final evaluation scheme).
 - [x] **Phase 1, keypoints and preprocessing** (2026-10-17; results in §5)
   - [x] `cvdc/data/`:
@@ -1378,8 +1384,10 @@ The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase
 ## 8. Open items and questions
 **Answered (user, 2026-10-20, after M18):** the E08 speed reference stays expert-centred; the speed-group explanation of the E08 non-experts' negative agreement is a reported finding (§6h.8, M18).
 
+**Final scope (thirteenth review, 2026-10-20): E01–E04; E05–E09 are a supplementary appendix (D18).**
+
 **Open after the twelfth review (2026-10-20):**
-1. **LOSO per exercise:** the supervisor's (or cloud) decision; estimated 37.5 h with the shortcut (§6h.4); not started.
+1. **LOSO per exercise:** the supervisor's (or cloud) decision; not started. For the final scope E01–E04 only: 21.5 h central with the per-fold-encoder shortcut (E28 per-exercise figures: E01 7.69, E02 3.51, E03 7.28, E04 3.06 h).
 2. **EAAQs for E02–E09** (§3.7.8): still pending.
 
 **Answered in the eleventh and twelfth reviews (2026-10-20):** the evaluation scheme (one model per exercise, GroupKFold-5 per exercise; T17), the E09 DTW angles (by the warp test: arm angles), the GroupKFold folds, the noise floors for E03–E09 (E3, `eval.noise_floor`), the exercise-label exclusion (E03 P02; no exercise head in the per-exercise models).
