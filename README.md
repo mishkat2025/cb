@@ -69,6 +69,19 @@ python -m cvdc.train.run_per_exercise                                 # B1, B2-K
 python -m cvdc.train.run_per_exercise --exercises E07 --methods b1    # a subset
 ```
 
+## Demo (Phase 6)
+
+No webcam on this machine: video files play at real-time speed (`--source 0` opens a webcam where one exists). One
+model per exercise (T17): give the exercise, or pick a dataset video by its fields (the model fold that held its
+subject out is loaded; otherwise a leakage warning is shown). Without a checkpoint it runs Module III only.
+
+```bash
+python -m demo.live --list E03                                   # dataset videos of an exercise
+python -m demo.live --select E07 P05 F FL                        # a dataset video (exercise, subject, view, variation)
+python -m demo.live --source my_video.mp4 --exercise E01 --view F --save-mp4 out.mp4   # faces blurred in the file
+streamlit run demo/app.py                                        # upload a video -> per-rep report, plots, JSON
+```
+
 ## Phase 1: keypoints and preprocessing
 
 One command (resumable; cached keypoints are skipped):

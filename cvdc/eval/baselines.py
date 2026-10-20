@@ -58,12 +58,20 @@ def hand_angle_2d(kp_path, hand_path, side, n, fps=30, max_gap_s=0.5, median_fra
     the preprocessed file (frames without a detected hand interpolated over gaps <= max_gap_s, otherwise NaN), with
     a running median of ``median_frames`` against single-frame hand glitches."""
     with np.load(resolve(kp_path)) as z:
-        t, lm, (H, W) = z["t"], z["lm2d"].astype(float), z["frame_hw"]
+        t, lm, hw = z["t"], z["lm2d"].astype(float), z["frame_hw"]
     with np.load(resolve(hand_path)) as z:
         h2 = z["hand2d"][:, 0 if side == "left" else 1].astype(float)
-    P2, Q2 = lm[..., :2] * (W, H), h2[..., :2] * (W, H)
+    return hand_angle_2d_arrays(t, lm, hw, h2, side, n, fps, max_gap_s, median_frames)
+
+
+def hand_angle_2d_arrays(t, lm, frame_hw, h2, side, n, fps=30, max_gap_s=0.5, median_frames=9):
+    """hand_angle_2d on arrays: t (T,) s, lm (T, 33, >= 2) Pose landmarks normalised to the frame, frame_hw (H, W),
+    h2 (T, 21, >= 2) the ``side`` hand's landmarks normalised like lm (the live demo calls this directly)."""
+    H, W = frame_hw
+    P2, Q2 = np.asarray(lm, float)[..., :2] * (W, H), np.asarray(h2, float)[..., :2] * (W, H)
     fa = P2[:, J[f"{side}_wrist"]] - P2[:, J[f"{side}_elbow"]]
     a = angle_between(fa, Q2[:, H_MIDDLE_MCP] - Q2[:, H_WRIST])
+    t = np.asarray(t, float)
     ok = np.isfinite(a)
     g = np.arange(n) / fps
     out = np.full(n, np.nan)

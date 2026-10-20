@@ -284,8 +284,8 @@ class Assessor:
         self.ref, self.lib, self.ac = ref, lib, ac
         self._sig, self._align = rep_signals, aligned_rep
 
-    def rep(self, world, start, end, side, view="F", index=0, embedding=None):
-        sig = self._sig(world, start, end, side, self.ac, self.ac["fps"])
+    def rep(self, world, start, end, side, view="F", index=0, embedding=None, extra=None):
+        sig = self._sig(world, start, end, side, self.ac, self.ac["fps"], extra)
         al = self._align(sig, self.ref)
         s, X, meas, errs, cmp = evaluate(sig, al, self.ref, self.lib[view], self.ac)
         return rep_entry(index, sig, s, meas, X, errs, self.ac, embedding), {"sig": sig, "aligned": al, "cmp": cmp}
