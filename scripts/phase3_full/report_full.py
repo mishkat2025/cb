@@ -454,6 +454,8 @@ def cell(S, sname, m, src, t, d=2, ci=True, rho=True, centred=False):
     if r is None:
         return "–"
     c = fci(r.rmse, r.rmse_lo, r.rmse_hi, d) if ci else fmt(r.rmse, d)
+    if m in ("base_group", "base_mean"):  # constant within a stratum and fold: a rank correlation is meaningless
+        rho, centred = False, False
     if centred and "spearman_centred" in r and np.isfinite(r.spearman_centred):
         return c + f" / {fmt(r.spearman)} / {fci(r.spearman_centred, r.spearman_centred_lo, r.spearman_centred_hi)}"
     return c + (f" / {fmt(r.spearman)}" if rho else "")

@@ -1,10 +1,10 @@
 # Progress
 
-Last updated 2026-10-20 (full scope: E09 DTW angles chosen by the warp test; one model per exercise (T17): runner smoke-tested, runtimes estimated, step 1 launched).
+Last updated 2026-10-20 (full scope, one model per exercise (T17): step 1 done and reported (§6h.9); Module III E03–E09 with the M18 calibration; demo; step 6, the per-exercise cross-view protocol, running).
 
 **State (2026-10-20):** the scope is now **all nine exercises** (user, ninth review, §4). The full-data Step 0 check (§3.7) found E03–E09 usable with caveats; the user brought all seven in. **Phase 1 is done for the full scope (§5b):** keypoints for all 3,685 videos (MediaPipe Hands for E06), sync, reps, packs and the KTPFormer lift, verified with the pilot's checks plus a comparison with the pilot and with Step 0. The E05 PF1 check (user answer 5) found no wrong exercise (§5b.7). **Tenth review (§4) applied:** E06's wrist angle is assessed in the side views only (§5b.3); the rep-phase fix is accepted (P6c); the rep signals of E03 and E09 were re-chosen by cross-view agreement (now forearm elevation and the 2D trunk inclination, §5b.10); the CVDC pairs are built with per-exercise DTW angles (§5b.11). **Work stops here, as asked: nothing is trained on the full scope until the user confirms the final evaluation scheme**, and no LOSO is started (the final table is planned as GroupKFold-10 until the supervisor decides, E1). **All E01/E02 results stay as the pilot**, unchanged; the full scope runs from `configs/data_full.yaml` into new folders (`data/full/`, `outputs/full/`, `runs/full/`; D15).
 
-**Update (2026-10-20, eleventh and twelfth reviews, §4, §6h):** E09's rep-matched pairs now use the arm angles, the set with the lowest known-warp error (§6h.1). A GroupKFold-10 run of one model shared by all nine exercises was started and then **stopped by the user** (supervisor decision: **one model per exercise**, T17); its partial outputs are kept, labelled as aborted (§6h.2). The per-exercise runner (`python -m cvdc.train.run_per_exercise`) is smoke-tested on all nine exercises, the runtimes are estimated (§6h.4: main runs ~7.7 h, cross-view ~14–17 h, LOSO per exercise ~38 h with the shortcut), and **step 1, GroupKFold-5 per exercise for B1, B2-KTPFormer, Proposed (λ 1.0) and the frozen Proposed, is running**. No full-scope result exists yet.
+**Update (2026-10-20, eleventh and twelfth reviews, §4, §6h):** E09's rep-matched pairs now use the arm angles, the set with the lowest known-warp error (§6h.1). A GroupKFold-10 run of one model shared by all nine exercises was started and then **stopped by the user** (supervisor decision: **one model per exercise**, T17); its partial outputs are kept, labelled as aborted (§6h.2). The per-exercise runner (`python -m cvdc.train.run_per_exercise`) is smoke-tested on all nine exercises, the runtimes are estimated (§6h.4: main runs ~7.7 h, cross-view ~14–17 h, LOSO per exercise ~38 h with the shortcut), **step 1, GroupKFold-5 per exercise for B1, B2-KTPFormer, Proposed (λ 1.0) and the frozen Proposed, is done** (6.7 h; results §6h.9), Module III runs for E03–E09 (§6h.6, calibration M18 §6h.8), the demo is built (§6h.7), and **step 6, the per-exercise cross-view protocol, is running**.
 
 **Pilot state (E01/E02, unchanged since 2026-10-19):** Step 0 and **Phase 1 (keypoints and preprocessing) are complete for E01 and E02** (§5), including the supervisor's follow-up changes from the third review (§4, §5.6). The supervisor's warning on expert/non-expert confounding is part of the evaluation plan (§4, fourth review; `DESIGN_DECISIONS.md` E9–E12). **Phase 2 (models, CVDC loss, pair builder) is implemented and smoke-tested** (§6), including the fifth-review changes (§6.5). Phase 3 **step (a)** (§6b) and **step (a2)** (§6c) are done; the seventh review's decisions are recorded (§4). **Phase 4 (Module III, embedding-to-reference distance, recording-noise test) is done** (§6d), with the eighth review's changes (§6d.6–6d.7). **Phase 5 has started:** **A, the cross-view protocol** (train on two views, test on the held-out third, 4 main methods, GroupKFold-5) is done (§6e); **B, the CVDC pair-source ablation on the VCI** is done (§6f); the **LOSO runtime is estimated** (§6g: ~16 h for the 4 methods). **Work stops here, as asked: LOSO has not started**, and the other ablations (τ, embedding size, 2 vs 3 views, augmentation) have not run.
 
@@ -1226,6 +1226,69 @@ Per exercise (1–2): 0.6 h (E07) to 1.0 h (E01). The cross-view figure by set c
 - **E08 knee rule:** its target was already the experts' curve (E08's knee is a posture channel under M14), so nothing new was applied; the demo-centred version fires more (16% vs 11%). Its 0% in the experts' videos < 80 comes from 17 videos, so the rule's specificity cannot be judged in E08 (56% of its expert videos score 100).
 - **E08 non-experts (ρ −0.33): the speed group carries the sign.** Without it the set score agrees positively (+0.22 [−0.05, 0.41]); without any other group it stays negative. The better non-experts (P27, P45–P50; physiotherapists 45–60) do 1.2–2 reps per clip at ~2 s per rep and are flagged `too_fast` in 42–100% of their reps; the lowest (P29, P38, P41: PF1 ≈ 0, scores 0–8) do one slow ~3–4 s rep, close to the experts' tempo, with normal end ranges, so Module III rates them higher. The rep count per clip (ρ +0.60) and the speed ratio (+0.54) are what tracks the physiotherapists here; the knee deviation goes the right way (ρ −0.46). The speed centre was not changed (M5a, M15).
 
+### 6h.9 Step 1 results: one model per exercise, GroupKFold-5 (2026-10-20)
+180 runs (9 exercises × 4 methods × 5 folds) in **6.7 h** (estimate 7.7 h, 5.7–10.0 h). Then `scripts/phase3_full/embedding_distance_perex.py` (225 encoder-folds, 4 min, GPU), `group_probe.py` (4.5 min) and `report_perex.py` → **`outputs/full/results/perex_gkf5/summary.md`** (+ CSVs). Video level, within groups, 95% CIs from the subject bootstrap (2,000 draws, paired). ⚠ = < 15 subjects: E07, E08, E09 experts (14), E09 non-experts (11). Every exercise's models saw only its own videos (T17).
+
+**Total score, video head: RMSE / ρ** (rep head and CIs in `score_metrics.csv`):
+
+| Stratum (subjects) | B1 | B2-KTP | Prop λ1 | Prop frozen | group-only | set-feat. | floor |
+|---|---|---|---|---|---|---|---|
+| E01 expert (24) | 13.29 / 0.08 | 14.67 / −0.02 | 13.46 / 0.12 | 14.72 / −0.03 | **12.45** | 12.22 / 0.18 | 5.28 |
+| E01 non-expert (26) | 11.44 / 0.11 | 15.68 / −0.18 | 15.48 / −0.18 | 14.15 / −0.01 | **7.78** | 7.48 / 0.26 | – |
+| E02 expert (24) | 18.89 / 0.13 | 17.52 / 0.16 | 16.78 / 0.27 | 15.77 / 0.21 | **16.01** | 16.96 | 4.38 |
+| E03 expert (24) | 20.08 / 0.03 | 20.88 / 0.03 | 16.52 / 0.27 | 15.76 / 0.24 | **14.71** | 15.26 | 3.38 |
+| E03 non-expert (25) | 16.53 / −0.12 | 14.77 / −0.09 | 17.92 / −0.07 | 16.22 / −0.10 | **9.32** | 9.23 | – |
+| E04 expert (24) | 9.08 / 0.37 | 8.83 / 0.33 | **8.06 / 0.52** | 8.76 / 0.29 | 8.94 | 8.90 | 2.45 |
+| E05 expert (23) | 16.33 / 0.29 | 17.60 / 0.02 | 13.37 / 0.26 | 14.16 / 0.02 | **11.75** | 11.96 | 4.76 |
+| E05 non-expert (21) | 20.41 / 0.31 | 23.13 / 0.07 | 27.86 / 0.25 | 25.63 / 0.38 | **12.45** | 12.06 | – |
+| E06 expert (22) | 9.25 / −0.14 | 8.85 / 0.03 | 9.58 / 0.03 | 8.73 / 0.08 | **8.35** | 9.56 | 3.16 |
+| E07 expert ⚠ (14) | 16.94 / −0.11 | 14.81 / 0.28 | 17.03 / −0.03 | 15.42 / −0.02 | **14.76** | 15.29 | 2.76 |
+| E08 expert ⚠ (14) | 12.38 / 0.25 | 10.94 / 0.15 | 13.64 / 0.30 | 17.23 / 0.05 | 9.57 | **8.75** | 4.04 |
+| E08 non-expert (16) | 25.17 / 0.50 | 33.11 / 0.26 | 29.31 / 0.67 | 32.46 / 0.53 | 20.09 | **16.80** | – |
+| E09 expert ⚠ (14) | 24.97 / 0.06 | 24.28 / 0.17 | 21.59 / 0.02 | 23.80 / 0.07 | 17.38 | **17.16** | 2.68 |
+| E09 non-expert ⚠ (11) | 33.41 / 0.09 | 36.09 / 0.01 | 23.34 / 0.69 | 26.74 / 0.70 | 13.28 | **10.55** | – |
+
+- **No model beats the within-group mean in any of the 14 strata** (paired RMSE CI below 0 in 0 strata for every method; above 0 in 9–10). Closest: E04 Proposed −0.88 [−2.08, 0.39] (ρ 0.52), E02 frozen −0.24 [−2.28, 1.75]. Pooled over the exercises within each group, every model is worse than the group mean (experts +1.7 [1.0, 2.5] for Proposed to +3.3 for B1; non-experts +7.6 to +10.8). **The pilot's negative result (E21) holds for every exercise.**
+- **Proposed vs B1 (experts):** lower RMSE pooled −1.57 [−2.27, −0.86], and in E02 (−2.11), E03 (−3.56), E04 (−1.02), E05 (−2.96) (CIs below 0); better ranking in E02 (ρ +0.14 [0.01, 0.25]) and E03 (+0.25 [0.08, 0.42]); within-exercise ranking pooled over experts (centred ρ) 0.22 [0.14, 0.29] for Proposed vs 0.11 for B1, 0.14 for B2-KTPFormer, 0.14 for the set features. **Non-experts: Proposed is worse than B1** (E01 +4.0, E05 +7.5 RMSE; calibration on few short clips).
+- **MQ** (`summary.md` §2): within experts no model beats the group mean (CIs include 0 or lie above it); in **E08 and E09 non-experts** (⚠ E09) B1 and Proposed do (E08 MQ −6.7 / −7.2, E09 −6.2 Proposed, −8.0 frozen; ρ 0.65–0.78). The E09 non-experts score a median of 0 and most clips barely move, so this mainly separates moving from not moving (the random-init score probe reaches R² 0.56 there too).
+
+**Within-group VCI (centred 256-d, held-out subjects)**:
+
+| Stratum | random init | after CVDC | B1 | B2-KTP | Prop λ1 |
+|---|---|---|---|---|---|
+| E01 / E02 / E03 / E04 / E05 / E06 expert | −0.17 – 0.08 | **0.51–0.62** | 0.06–0.30 | −0.06–0.22 | **0.41–0.57** |
+| E07 / E08 / E09 expert ⚠ | **0.66 / 0.72 / 0.42** | 0.73 / 0.68 / 0.70 | 0.23 / 0.20 / 0.32 | 0.32 / 0.17 / 0.23 | 0.57 / 0.59 / 0.64 |
+| non-expert strata (19–71 rep-matched pairs) | 0.02–0.56 | 0.18–0.43 | 0.09–0.31 | −0.19–0.22 | 0.17–0.37 |
+
+- **Upper-limb exercises: CVDC makes the embedding view-consistent** (after CVDC 0.51–0.62 vs a random-init floor ≤ 0.08), and the λ 1.0 joint loss keeps most of it (0.41–0.57) against 0.06–0.30 for B1 and less for B2-KTPFormer, as in the pilot.
+- **Lying exercises (E07–E09): the random encoder is already view-consistent** (0.42–0.72), and trained B1 / B2 lose it; CVDC stays at about the random level (0.68–0.73). So in E07–E09 the VCI cannot show a CVDC gain over an untrained network; a likely reason is that synced views share rep boundaries (P6b), so the temporal profile of a rep is identical across views, and in the lying exercises the movement's timing dominates an untrained encoder's embedding (not tested).
+
+**View stability of the distance to the PT reference** (synced expert performances, rep level, ICC(1); ΔICC vs B1 [95% CI]):
+
+| Exercise | random init | B1 | B2-KTP | Prop λ1 (Δ vs B1) | Prop frozen (Δ vs B1) |
+|---|---|---|---|---|---|
+| E01 | 0.02 | 0.13 | 0.03 | 0.69 (**+0.56 [0.43, 0.68]**) | 0.74 (**+0.61**) |
+| E02 | −0.09 | 0.45 | 0.19 (−0.26) | 0.73 (**+0.28 [0.15, 0.46]**) | 0.72 (**+0.27**) |
+| E03 | −0.02 | 0.14 | −0.08 (−0.22) | 0.55 (**+0.41 [0.20, 0.63]**) | 0.65 (**+0.51**) |
+| E04 | 0.19 | 0.35 | 0.15 | 0.78 (**+0.42 [0.27, 0.60]**) | 0.84 (**+0.49**) |
+| E05 | 0.14 | 0.30 | 0.15 | 0.34 (+0.04 [−0.18, 0.24]) | 0.47 (+0.17 [−0.02, 0.35]) |
+| E06 | −0.42 | 0.58 | 0.50 | 0.75 (+0.17 [−0.08, 0.58]) | 0.77 (+0.19) |
+| E07 ⚠ | **0.95** | 0.54 | 0.63 | 0.82 (**+0.28 [0.08, 0.52]**) | 0.93 (**+0.39**) |
+| E08 ⚠ | **0.96** | 0.47 | 0.41 | 0.88 (**+0.42 [0.26, 0.59]**) | 0.92 (**+0.46**) |
+| E09 ⚠ | **0.89** | 0.79 | 0.55 (−0.24) | 0.88 (**+0.09 [0.02, 0.16]**) | 0.87 (**+0.07**) |
+
+- **CVDC makes the vector difference view-stable** in 7 of 9 exercises (Proposed vs B1, CIs above 0; not E05 and E06); B2-KTPFormer is less stable than B1 in E02, E03, E09. In E07–E09 the random-init encoder is as stable as Proposed (see the VCI caveat).
+
+**Group probe (E11)** (`summary.md` §5): expert vs non-expert is separable from every encoder's embeddings, **the random-init encoder included** (pooled AUC 0.87 for all five; front-view FL view-matched 0.77 random init to 0.86 frozen CVDC; E01 0.95–1.00, E09 0.90–0.99, E03 0.72–0.81, E05 0.76–0.83, E08 0.76–0.92). The group signal is in the keypoint sequences themselves (clip length, recording set-up), not produced by the training or by CVDC. Within groups the score probes find little: R² ≤ 0 in most expert strata (exceptions E04: B1 0.09, Proposed 0.21, frozen 0.13; E05 B1 0.15), positive for the E08 / E09 non-experts (moving vs not moving).
+
+**Training:** CVDC kept epochs 8–99 (median ~55), fine-tuning 10–60; Proposed λ 1.0 takes 20–39 min per exercise (5 folds incl. CVDC), B1 4–10 min. Peak GPU memory 8.2 GB.
+
+**Conclusions of step 1:**
+1. One model per exercise does not change the main negative result: **no network predicts the score (or MQ, for experts) within a group better than the within-group mean**, in any exercise.
+2. Among the networks, Proposed (λ 1.0) is the most accurate for the experts (pooled RMSE −1.6 vs B1, better in E02–E05) and ranks best within exercises, but still not better than the mean; it is worse than B1 for the non-experts.
+3. **CVDC's measurable effect is view consistency**: within-group VCI and the view stability of the distance to the PT reference are clearly higher than B1 / B2 in the upper-limb exercises and E07–E09 (the distance), but the lying exercises have a high random-encoder floor.
+4. The expert / non-expert groups are separable even from untrained embeddings, so pooled results would mostly measure the group (E9–E11).
+
 ### 6h.7 Phase 6 demo code (CPU, during the training; twelfth review item 5)
 `demo/pipeline.py` (engine), `demo/live.py` (video file at real-time speed, or `--source 0`), `demo/app.py` (Streamlit); decision X5.
 - `python -m demo.live --select E07 P05 F FL` (or `--source file.mp4 --exercise E07 [--view L]`): skeleton overlay (hand landmarks for E06; the joints of the last rep's errors in red), exercise / view / rep counter, each rep's Module III score, quality and raw errors (`type · joint · deviation · frames (severity)`), the model's rep score and distance to the PT reference, a live plot of the main angle and the last rep against its template band, FPS and the checkpoint; the set score at the end (model video head if loaded, else Module III); keys q / r / s; `--save-mp4` with blurred faces; `--no-model` runs Module III only (X3); `--list E03` lists dataset videos.
@@ -1242,7 +1305,7 @@ The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase
 - [x] **Phase 1 on the full scope (E01–E09)** (2026-10-20; §5b): video root and new folders (`configs/data_full.yaml`); Pose for 3,685 videos + Hands for E06 (on wrist crops); sync with S8 and the extended motion candidates; reps with the approved signals, adaptive thresholds and the rep-phase fix (P6c); packs; KTPFormer lift; renders and report; E05 PF1 motion check; E06 Hands check; E01/E02 vs the pilot and E03–E09 vs Step 0; 20 new tests.
 - [x] **E09 DTW angles by the warp test** (eleventh review; §6h.1): arm angles, pairs rebuilt.
 - [x] ~~Shared all-exercise GroupKFold-10 run~~ (eleventh review): started, **stopped** (twelfth review: one model per exercise); partial outputs archived (§6h.2).
-- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [running]; per-exercise report [ ]; Module III E03–E09 [x] (§6h.6; rule calibration M18, §6h.8); Phase 6 demo [x] (§6h.7); (6) cross-view per exercise [ ]; (7) LOSO per exercise: not started (supervisor / cloud).
+- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [x] (6.7 h); per-exercise report [x] (§6h.9); Module III E03–E09 [x] (§6h.6; rule calibration M18, §6h.8); Phase 6 demo [x] (§6h.7); (6) cross-view per exercise [running; smoke test passed]; (7) LOSO per exercise: not started (supervisor / cloud).
 - [x] **Tenth-review changes** (2026-10-20; §5b.3, §5b.10, §5b.11): E06 wrist angle in side views only (Phase 4); rep-phase fix accepted; E03 / E09 rep signals re-chosen by cross-view agreement; per-exercise DTW angles; CVDC pairs built for the full scope; 2 more tests (187). **Not started:** any training on the full scope (waits for the user's confirmation of the final evaluation scheme).
 - [x] **Phase 1, keypoints and preprocessing** (2026-10-17; results in §5)
   - [x] `cvdc/data/`:
