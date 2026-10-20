@@ -19,7 +19,7 @@ Strata and exercises with fewer than ``eval.per_exercise_low_confidence_subjects
 
 usage: python scripts/phase3_full/report_perex.py [--config configs/per_exercise.yaml] [--tag perex_gkf5] [--boot 2000]
        [--exercises E01 ...]
-Writes CSV tables and summary.md to <eval.results_dir>/<tag>/.
+Writes CSV tables and summary.md to <eval.results_dir>/<tag>/ (or --out; the group-probe tables are read from there).
 """
 import argparse
 import json
@@ -140,12 +140,13 @@ def vci_tables(root, done, cfg, n_boot, seed, ci):
     return pd.DataFrame(rows), fv
 
 
-def distance_stability(cfg, out, plans_by_ex, n_boot, seed, ci):
+def distance_stability(cfg, src, plans_by_ex, n_boot, seed, ci):
     """View stability of the standardised distance to the PT reference over synced expert performances (E22)."""
-    path = out / "embedding_distance_reps.csv"
+    path = src / "embedding_distance_reps.csv"
     if not path.exists():
         return None
     E = pd.read_csv(path)
+    E = E[E.exercise.isin(plans_by_ex)]  # the reported exercises only (the file may hold all nine)
     reps = pd.read_csv(data_path(cfg, "reps_csv"))
     index = pd.read_csv(resolve(cfg["data"]["index_csv"]))
     E = E.merge(reps[["video_id", "rep", "rep_uid"]], on=["video_id", "rep"], how="left", validate="many_to_one")
@@ -168,9 +169,7 @@ def distance_stability(cfg, out, plans_by_ex, n_boot, seed, ci):
             b1 = next(x for x in rows if x["exercise"] == ex and x["method"] == "b1")
             row["d_icc_vs_b1"] = row["icc"] - b1["icc"]
             row["d_icc_vs_b1_lo"], row["d_icc_vs_b1_hi"] = interval(dd, ci)
-    VS = pd.DataFrame(rows)
-    VS.to_csv(out / "distance_view_stability.csv", index=False)
-    return VS
+    return pd.DataFrame(rows)
 
 
 def main():
@@ -179,6 +178,7 @@ def main():
     ap.add_argument("--tag", default="perex_gkf5")
     ap.add_argument("--boot", type=int)
     ap.add_argument("--exercises", nargs="+")
+    ap.add_argument("--out", help="output folder (default <results>/<tag>); e.g. the final-scope pools over E01-E04")
     a = ap.parse_args()
     t0 = time.time()
     cfg = load_config(a.config)
@@ -186,7 +186,8 @@ def main():
     n_boot, ci, seed = a.boot or ec["bootstrap"]["n"], ec["bootstrap"]["ci"], ec["bootstrap"]["seed"]
     low = ec.get("per_exercise_low_confidence_subjects", 15)
     root = resolve(cfg["train"]["runs_dir"]) / a.tag
-    out = resolve(ec["results_dir"]) / a.tag
+    src = resolve(ec["results_dir"]) / a.tag  # embedding_distance_reps.csv (per rep, any exercise subset)
+    out = resolve(a.out) if a.out else src
     out.mkdir(parents=True, exist_ok=True)
     smoke = a.tag.endswith("_smoke")
 
@@ -198,6 +199,10 @@ def main():
     act = item_activity(v, ALL_ITEMS, ia["min_subjects_off_mode"], ia["min_sd"])
     active = {(e, g): set(d[d.varies].item) for (e, g), d in act.groupby(["exercise", "group"])}
     exercises = a.exercises or sorted(reps.exercise.unique())
+    if a.exercises:  # pooled strata over the chosen exercises only (e.g. the final scope E01-E04, D18)
+        global POOLED_WITHIN
+        span = f"{exercises[0]}–{exercises[-1]}" if len(exercises) > 1 else exercises[0]
+        POOLED_WITHIN = [(f"experts, {span}", None, "expert"), (f"non-experts, {span}", None, "non-expert")]
     pv, pr, done = load_runs(root, exercises, METHODS)
     methods = [m for m in METHODS if m in set(pv.method)]
     exercises = [e for e in exercises if any(k[0] == e for k in done)]
@@ -249,7 +254,9 @@ def main():
     V, FV = vci_tables(root, {k: d for k, d in done.items() if k[0] in complete}, cfg, n_boot, seed, ci)
     V.to_csv(out / "vci.csv", index=False)
     FV.to_csv(out / "vci_per_fold.csv", index=False)
-    VS = distance_stability(cfg, out, plans_by_ex, n_boot, seed, ci)
+    VS = distance_stability(cfg, src, plans_by_ex, n_boot, seed, ci)
+    if VS is not None:
+        VS.to_csv(out / "distance_view_stability.csv", index=False)
     rows = []
     for (ex, m, f), d in sorted(done.items()):
         for st in ("cvdc_stage", "supervised_stage"):

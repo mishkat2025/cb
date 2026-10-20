@@ -173,6 +173,7 @@ def main():
     ap.add_argument("--exercises", nargs="+")
     ap.add_argument("--boot", type=int)
     ap.add_argument("--device", help="override train.device (e.g. cpu while a training job holds the GPU)")
+    ap.add_argument("--out", help="output folder (default <results>/<tag>)")
     a = ap.parse_args()
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
     t0 = time.time()
@@ -184,7 +185,7 @@ def main():
     ec = cfg["eval"]
     n_boot, ci, bseed = a.boot or ec["bootstrap"]["n"], ec["bootstrap"]["ci"], ec["bootstrap"]["seed"]
     root = resolve(cfg["train"]["runs_dir"]) / a.tag
-    out = resolve(ec["results_dir"]) / a.tag
+    out = resolve(a.out) if a.out else resolve(ec["results_dir"]) / a.tag
     out.mkdir(parents=True, exist_ok=True)
     smoke = a.tag.endswith("_smoke")
     data = PackData(cfg, "rep", get_device(cfg), lift="ktpformer")
