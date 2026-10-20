@@ -1189,6 +1189,29 @@ Per exercise (1–2): 0.6 h (E07) to 1.0 h (E01). The cross-view figure by set c
 ### 6h.5 Step 1 launched
 `python -m cvdc.train.run_per_exercise --tag perex_gkf5` (exercises E01 → E09, per exercise B1 → B2-KTPFormer → Proposed λ 1.0 → frozen; log `runs/full/perex_gkf5/train.log`). Results will be reported per exercise as each finishes (§3 of the twelfth review). Meanwhile on the CPU: Module III for E03–E09 and the Phase 6 demo.
 
+### 6h.6 Module III for E03–E09 (CPU, during the training; twelfth review item 5)
+`python -m cvdc.assess.run --config configs/per_exercise.yaml` (all nine exercises, each with its own GroupKFold-5 folds, 75 s; M17) and `python scripts/phase4_full/report_module3.py` (`outputs/full/phase4/summary.md`). The generalised code reproduces the pilot's E01/E02 Module III output exactly. Templates from the PT demos: E03 V3 both arms over the 90/90 phase (4 reps, end range of the forearm elevation 19.0°), E04 1 rep (147.2°), E05 4 reps (shoulder elevation 154.0°), E06 2 reps (wrist angle 74.3° in the front-oblique demo; the target is the side-view experts'), E07 2 reps (hip flexion 124.7°), E08 2 reps (127.6°), E09 2 reps (trunk–thigh 48.9°); these match the Step 0 descriptions (§3.7.7).
+
+**Agreement of the set score with the physiotherapists, within groups** (Spearman [95% CI]; ⚠ = < 15 subjects):
+
+| Stratum | total score | MQ |
+|---|---|---|
+| E01 expert / non-expert | 0.04 [−0.09, 0.19] / −0.03 | 0.17 [−0.00, 0.33] / −0.03 |
+| E02 expert | 0.16 [−0.04, 0.36] | **0.34 [0.12, 0.52]** |
+| E03 expert / non-expert | **0.19 [0.06, 0.31]** / **0.40 [0.21, 0.56]** | **0.18 [0.02, 0.32]** / **0.40 [0.21, 0.55]** |
+| E04 expert | 0.17 [−0.05, 0.37] | 0.07 |
+| E05 expert / non-expert | 0.10 / **0.38 [0.05, 0.60]** | 0.05 / **0.36 [0.04, 0.59]** |
+| E06 expert | **0.22 [0.04, 0.40]** | **0.23 [0.04, 0.42]** |
+| E07 expert ⚠ | **0.19 [0.04, 0.35]** | 0.13 [−0.03, 0.30] |
+| E08 expert ⚠ / non-expert | −0.04 / **−0.33 [−0.51, −0.06]** | −0.02 / **−0.33** |
+| E09 expert ⚠ / non-expert ⚠ | 0.13 / **0.71 [0.24, 0.83]** | 0.18 / **0.71** |
+
+- **Weak positive agreement in most strata, none strong; one negative** (E08 non-experts: a higher Module III score goes with lower physiotherapist scores). The E09 non-expert value rests on 11 subjects whose clips mostly barely move (median score 0), so it mainly separates moving from not moving.
+- **As a predictor** (out-of-fold within-group line vs the within-group mean): no stratum gains with a CI below 0; the largest gains are the non-experts of E03 (−0.82 [−1.54, 0.11]) and E05 (−0.83 [−2.01, 0.45]); E04 MQ and E08 expert lines are slightly worse than the mean (CIs above 0). As in the pilot (E21), the reference score does not beat the within-group mean.
+- **Expert vs non-expert separation** (context): AUC E01 0.98, E09 0.94, E08 0.73, E05 0.71, E03 0.61. Outside E01/E09 the groups score much closer under Module III than under the physiotherapists (e.g. E03 74.7 vs 70.7; physiotherapists 75.4 vs 44.4).
+- **Rule specificity** (share of reps, experts' videos ≥ 95 vs < 80): specific in E02 (posture rules, as after M14), E07 (`other_hip_flexed` 13% vs 26%, `other_knee_flexed` 13% vs 25%, `too_fast` 1% vs 30%), E06 (`too_fast` 2% vs 22%), E04 (`shoulder_elevation_deviation` 16% vs 26%); **not specific** in E03 (`lateral_rotation_range_insufficient` fires in 38% of the best videos' reps: the V3 demo reaches 19° of forearm elevation while the experts stop at ~27°, so the demo-centred ROM target, M10, is beyond most experts) and E08 (`knee_flexion_deviation` 11% vs 0%). `too_fast` fires in 28–81% of non-expert reps everywhere (short clips, quick reps).
+- **View stability** over synced expert performances (rep level, ICC(1)): the full score 0.33 (E03) – 0.68 (E04), but without its speed group (shared rep timing, P6b) 0.03 (E06) – 0.45 (E04); the end-range angle −0.11 – 0.30. Module III's 3D measures stay view-dependent, as in the pilot.
+
 ## 7. Phase checklist
 The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase 1 (§5b). Code stays exercise-agnostic, with exercises discovered at runtime and filtered by `data.include_exercises`.
 
@@ -1197,7 +1220,7 @@ The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase
 - [x] **Phase 1 on the full scope (E01–E09)** (2026-10-20; §5b): video root and new folders (`configs/data_full.yaml`); Pose for 3,685 videos + Hands for E06 (on wrist crops); sync with S8 and the extended motion candidates; reps with the approved signals, adaptive thresholds and the rep-phase fix (P6c); packs; KTPFormer lift; renders and report; E05 PF1 motion check; E06 Hands check; E01/E02 vs the pilot and E03–E09 vs Step 0; 20 new tests.
 - [x] **E09 DTW angles by the warp test** (eleventh review; §6h.1): arm angles, pairs rebuilt.
 - [x] ~~Shared all-exercise GroupKFold-10 run~~ (eleventh review): started, **stopped** (twelfth review: one model per exercise); partial outputs archived (§6h.2).
-- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [running]; per-exercise report [ ]; Module III E03–E09 [ ]; Phase 6 demo [ ]; (6) cross-view per exercise [ ]; (7) LOSO per exercise: not started (supervisor / cloud).
+- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [running]; per-exercise report [ ]; Module III E03–E09 [x] (§6h.6); Phase 6 demo [ ]; (6) cross-view per exercise [ ]; (7) LOSO per exercise: not started (supervisor / cloud).
 - [x] **Tenth-review changes** (2026-10-20; §5b.3, §5b.10, §5b.11): E06 wrist angle in side views only (Phase 4); rep-phase fix accepted; E03 / E09 rep signals re-chosen by cross-view agreement; per-exercise DTW angles; CVDC pairs built for the full scope; 2 more tests (187). **Not started:** any training on the full scope (waits for the user's confirmation of the final evaluation scheme).
 - [x] **Phase 1, keypoints and preprocessing** (2026-10-17; results in §5)
   - [x] `cvdc/data/`:

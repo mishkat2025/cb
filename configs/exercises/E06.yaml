@@ -21,8 +21,8 @@ pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (
   dtw_angles: [shoulder_elevation_left, shoulder_elevation_right, elbow_left, elbow_right]
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
-assess:
-  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
+assess:                          # Module III (M16 starting definitions, implemented 2026-10-20, M17); rules: TODO verify
+                                 # against this exercise's EAAQ when the appendix is available (M5)
   angle: wrist_extension         # forearm (Pose elbow -> wrist) vs hand (Hands wrist -> middle MCP)
   angle_source: hands
   # user answer 1 (2026-10-20; P1c): the Hands angle is not view-consistent (PROGRESS §5b.3), so the wrist angle is
@@ -31,5 +31,20 @@ assess:
   angle_variant: 2d_unsigned
   angle_views: [L, R]
   near_hand: {L: right, R: left} # the L camera faces the subject's right side (P5 visibility), the R camera the left
-  posture_channels: [elbow_extension, shoulder_elevation]   # elbow flexion, forearm position
+  main_centre: experts           # M17: the demo is front-oblique, so the wrist target is the side-view experts' curve
+  rom_direction: max
+  align: forearm                 # M17
+  mirror_left_arm: true
   both_sides: true
+  speed: {source: expert_data, expert_min_score: 95, eaaq_phase_s: null}
+  channels: [wrist_extension, elbow_extension, shoulder_elevation]
+  posture_channels: [elbow_extension, shoulder_elevation]   # elbow flexion, forearm position (M14)
+  score:
+    angle_channels: [wrist_extension, elbow_extension, shoulder_elevation]
+    symmetry_channel: null
+  rules:
+    - {type: wrist_extension_range_insufficient, measure: rom_shortfall, joint: moving_wrist}
+    - {type: elbow_angle_deviation, channel: elbow_extension, direction: both, joint: moving_elbow}
+    - {type: forearm_position_deviation, channel: shoulder_elevation, direction: both, joint: moving_shoulder}
+    - {type: too_fast, measure: speed, direction: fast, joint: moving_wrist}
+    - {type: too_slow, measure: speed, direction: slow, joint: moving_wrist}

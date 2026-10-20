@@ -20,9 +20,23 @@ pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (
   dtw_angles: [shoulder_elevation_left, shoulder_elevation_right, elbow_left, elbow_right]
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
-assess:
-  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
+assess:                          # Module III (M16 starting definitions, implemented 2026-10-20, M17); rules: TODO verify
+                                 # against this exercise's EAAQ when the appendix is available (M5)
   angle: shoulder_elevation      # elevation over the circle (ROM) ...
-  path_measures: [wrist_path_circularity, wrist_path_amplitude]   # ... + the wrist path's two principal components
-  posture_channels: [elbow_extension, trunk_lateral_lean, shoulder_asymmetry]
+  path_measures: [wrist_path]    # ... + the wrist path's amplitude and circularity (reported, not scored; M17)
+  rom_direction: max
+  align: arm                     # the upper-arm direction traces the circle
   mirror_left_arm: true
+  speed: {source: expert_data, expert_min_score: 95, eaaq_phase_s: null}
+  channels: [shoulder_elevation, elbow_extension, trunk_lateral_lean, shoulder_asymmetry]
+  posture_channels: [elbow_extension, trunk_lateral_lean, shoulder_asymmetry]   # M14
+  score:
+    angle_channels: [shoulder_elevation, elbow_extension, trunk_lateral_lean]
+    symmetry_channel: shoulder_asymmetry
+  rules:
+    - {type: circumduction_range_insufficient, measure: rom_shortfall, joint: moving_shoulder}
+    - {type: elbow_bent, channel: elbow_extension, direction: below, joint: moving_elbow}
+    - {type: trunk_lean, channel: trunk_lateral_lean, direction: both, joint: trunk}
+    - {type: shoulder_hitch, channel: shoulder_asymmetry, direction: above, joint: moving_shoulder}
+    - {type: too_fast, measure: speed, direction: fast}
+    - {type: too_slow, measure: speed, direction: slow}

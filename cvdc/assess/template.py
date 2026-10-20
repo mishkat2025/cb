@@ -17,13 +17,18 @@ gives the deployable library (demo).
 
 Alignment (M8): DTW on the direction of the moving upper arm in the trunk frame (unit vector: outward, up, forward).
 It is defined in every frame (unlike E02's horizontal adduction, undefined while the arm hangs) and both E01's and
-E02's main angles are functions of it. Every channel is then read along the same path.
+E02's main angles are functions of it. Every channel is then read along the same path. Full scope (M17):
+``assess.align`` picks the segment per exercise: arm (E01, E02, E05), forearm (E03, E04, E06), thigh of the moving
+leg (E07), both thighs (E08) or the main angle itself (E09, whose trunk has no limb segment); ``assess.rom_direction``
+says which end of the main angle is the end range (max, or min for E03, where the forearm rises as its elevation from
+the trunk's up axis falls); channels can come from outside the Pose landmarks (``extra``: E06's wrist angle from
+MediaPipe Hands, side views only).
 """
 import warnings
 
 import numpy as np
 
-from .angles import ASSESS_ANGLES, horizontal_adduction, trunk_frame
+from .angles import ALIGN_SEGMENTS, ASSESS_ANGLES, horizontal_adduction, other, segment_direction, trunk_frame
 from .dtw import dtw
 from ..data.skeleton import J
 
@@ -38,12 +43,49 @@ def arm_direction(P, side):
     return v / np.maximum(np.linalg.norm(v, axis=-1, keepdims=True), 1e-9)
 
 
-def channel_curves(P, side, channels, min_proj=0.25):
-    """{channel: (n,) degrees} for the moving arm ``side`` (horizontal adduction is NaN while the arm hangs, M7a)."""
+def channel_curves(P, side, channels, min_proj=0.25, extra=None):
+    """{channel: (n,) degrees} for the moving limb ``side`` (horizontal adduction is NaN while the arm hangs, M7a);
+    channels in ``extra`` ({name: (n,) values for these frames}) are taken from there (E06's Hands wrist angle)."""
     out = {}
     for c in channels:
-        out[c] = horizontal_adduction(P, side, min_proj) if c == "horizontal_adduction" else ASSESS_ANGLES[c](P, side)
+        if extra is not None and c in extra:
+            out[c] = np.asarray(extra[c], float)
+        elif c == "horizontal_adduction":
+            out[c] = horizontal_adduction(P, side, min_proj)
+        else:
+            out[c] = ASSESS_ANGLES[c](P, side)
     return out
+
+
+def align_feature(P, side, ex_assess, ch):
+    """The DTW alignment feature (M8, M17): the direction of the configured segment in the trunk frame, both thighs
+    side by side, or the main angle (scaled to ~1)."""
+    a = ex_assess.get("align", "arm")
+    if a in ALIGN_SEGMENTS:
+        return segment_direction(P, side, *ALIGN_SEGMENTS[a])
+    if a == "thighs":
+        return np.concatenate([segment_direction(P, side, "hip", "knee"),
+                               segment_direction(P, other(side), "hip", "knee")], 1)
+    if a == "main":
+        x = np.asarray(ch[ex_assess["angle"]], float)
+        x = np.where(np.isfinite(x), x, np.nanmean(x) if np.isfinite(x).any() else 0.0)
+        return (x / 90.0)[:, None]
+    raise ValueError(f"assess.align {a!r}: arm | forearm | thigh | thighs | main")
+
+
+def wrist_path_measures(P, side):
+    """E05 path measures (M16): the wrist path relative to the shoulder in the trunk frame over the rep: amplitude =
+    the SD along its first two principal components (torso units, root-centred world coordinates), circularity =
+    their ratio (1 = a circle, 0 = a line)."""
+    lat, up, fwd = trunk_frame(P)
+    d = P[..., J[f"{side}_wrist"], :] - P[..., J[f"{side}_shoulder"], :]
+    out = lat if side == "right" else -lat
+    r = np.stack([np.sum(d * out, -1), np.sum(d * up, -1), np.sum(d * fwd, -1)], -1)
+    r = r[np.isfinite(r).all(1)]
+    if len(r) < 5:
+        return {"path_amplitude": np.nan, "path_circularity": np.nan}
+    sv = np.linalg.svd(r - r.mean(0), compute_uv=False) / np.sqrt(len(r))
+    return {"path_amplitude": float(np.hypot(sv[0], sv[1])), "path_circularity": float(sv[1] / max(sv[0], 1e-9))}
 
 
 def angle_range(a, name):
@@ -59,21 +101,29 @@ def angle_range(a, name):
     return float(360.0 - np.diff(np.r_[s, s[0] + 360.0]).max())
 
 
-def rep_signals(world, start, end, side, ex_assess, fps):
-    """Signals of one rep (frames start..end of the uniform grid): alignment feature, channel curves, timing."""
+def rep_signals(world, start, end, side, ex_assess, fps, extra=None):
+    """Signals of one rep (frames start..end of the uniform grid): alignment feature, channel curves, timing.
+    ``extra``: {channel: (n_video,) values on the same grid} for channels not computed from the Pose landmarks."""
     P = np.asarray(world[start:end + 1], float)
-    ch = channel_curves(P, side, ex_assess["channels"], ex_assess.get("angle_min_proj", 0.25))
+    ex = {c: np.asarray(v, float)[start:end + 1] for c, v in (extra or {}).items()}
+    ch = channel_curves(P, side, ex_assess["channels"], ex_assess.get("angle_min_proj", 0.25), ex)
     main = ex_assess["angle"]
-    return {"feat": arm_direction(P, side), "ch": ch, "n": len(P), "start": int(start), "end": int(end),
-            "side": side, "duration_s": (len(P) - 1) / fps, "rom": end_range(ch[main]),
-            "excursion": angle_range(ch[main], main)}
+    sig = {"feat": align_feature(P, side, ex_assess, ch), "ch": ch, "n": len(P), "start": int(start),
+           "end": int(end), "side": side, "duration_s": (len(P) - 1) / fps,
+           "rom": end_range(ch[main], direction=ex_assess.get("rom_direction", "max")),
+           "excursion": angle_range(ch[main], main)}
+    if "wrist_path" in (ex_assess.get("path_measures") or []):
+        sig["path"] = wrist_path_measures(P, side)
+    return sig
 
 
-def end_range(a, k=3):
+def end_range(a, k=3, direction="max"):
     """ROM as in clinical goniometry (M10): the end-range angle reached, measured from the anatomical zero position:
     the maximum of the main angle after a k-frame running median (removes single-frame 3D glitches; a sharp peak
-    without a hold loses at most one frame's change). NaN-aware."""
+    without a hold loses at most one frame's change), or its minimum with ``direction='min'`` (E03, M17). NaN-aware."""
     a = np.asarray(a, float)
+    if direction == "min":
+        return -end_range(-a, k)
     if not np.isfinite(a).any():
         return np.nan
     if len(a) >= k:
@@ -142,18 +192,23 @@ def build_reference(pt_reps, ex_assess, fps, meta=None):
         path = align(r["feat"], ax["feat"])
         for c in chans:
             acc[c].append(on_template(r["ch"][c], path, n_ax))
-        feats.append(np.stack([on_template(r["feat"][:, k], path, n_ax) for k in range(3)], 1))
+        feats.append(np.stack([on_template(r["feat"][:, k], path, n_ax) for k in range(r["feat"].shape[1])], 1))
     n = int(round(lens.mean()))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)  # frames where every PT rep is undefined stay NaN
         curves = {c: np.nanmean(np.stack(acc[c]), 0) for c in chans}
     curves = {c: _resample_nan(v, n) for c, v in curves.items()}
     f = resample(np.mean(feats, 0), n)
-    f /= np.maximum(np.linalg.norm(f, axis=1, keepdims=True), 1e-9)
+    if ex_assess.get("align", "arm") != "main":  # direction features: back to unit vectors, per 3-d segment block
+        f = f.reshape(n, -1, 3)
+        f = (f / np.maximum(np.linalg.norm(f, axis=-1, keepdims=True), 1e-9)).reshape(n, -1)
     main = ex_assess["angle"]
     pk = curves[main]
     lo, hi = np.nanmin(pk), np.nanmax(pk)
-    peak_frames = np.flatnonzero(pk >= lo + 0.9 * (hi - lo))  # the template's peak region (range errors, M12)
+    if ex_assess.get("rom_direction", "max") == "min":  # the end range is the minimum (E03, M17)
+        peak_frames, hi = np.flatnonzero(pk <= lo + 0.1 * (hi - lo)), lo
+    else:
+        peak_frames = np.flatnonzero(pk >= lo + 0.9 * (hi - lo))  # the template's peak region (range errors, M12)
     return {"curves": curves, "feat": f, "n": n, "duration_s": (n - 1) / fps, "channels": chans, "main": main,
             "rom": float(np.mean([r["rom"] for r in pt_reps])),
             "excursion": float(np.mean([r["excursion"] for r in pt_reps])), "peak": float(hi), "peak_frames": peak_frames, "n_pt_reps": len(pt_reps),

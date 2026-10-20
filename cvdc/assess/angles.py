@@ -2,8 +2,9 @@
 
 All functions take arrays shaped (..., 33, C) with C = 2 (image) or 3 (world) and return degrees.
 Rep segmentation (Phase 1) uses ``shoulder_elevation`` for E01 and the non-angle ``wrist_path_pc1`` for E02;
-Module III (Phase 4) assesses joint angles only: E01 ``shoulder_elevation``, E02 ``horizontal_adduction``
-(M7; the full per-exercise angle set is added in Phase 4).
+Module III (Phase 4) assesses joint angles only: E01 ``shoulder_elevation``, E02 ``horizontal_adduction`` (M7);
+the full scope adds the E03-E09 channels of M16 (forearm elevation, hip / knee flexion, trunk-thigh angle, the
+contralateral leg and left/right asymmetry channels) and the alignment segments.
 """
 import numpy as np
 
@@ -226,11 +227,54 @@ UNITS = {"shoulder_elevation": "deg", "arm_frontal_angle": "deg", "horizontal_ad
          "wrist_path_pc1": "torso", "hip_flexion": "deg", "knee_flexion": "deg", "trunk_thigh_angle": "deg",
          "forearm_elevation": "deg", "wrist_height_2d": "torso", "all_joint_pc1": "torso", "wrist_extension": "deg",
          "trunk_inclination_2d": "deg"}
-# Module III channels (Phase 4, M7): every function takes (P, side) with side = the moving arm, so a left-arm
-# performance is assessed as its mirror image (P8).
+def contralateral_hip_flexion(P, side="right"):
+    """E07 pelvis stability: hip flexion of the leg that should stay on the floor (the other leg of ``side``)."""
+    return hip_flexion(P, other(side))
+
+
+def contralateral_knee_flexion(P, side="right"):
+    """E07: knee flexion of the leg that should stay straight (the other leg of ``side``)."""
+    return knee_flexion(P, other(side))
+
+
+def hip_flexion_asymmetry(P, side="right"):
+    """E08 / E09 left/right symmetry: hip flexion of the ``side`` leg minus that of the other leg (0 = symmetric)."""
+    return hip_flexion(P, side) - hip_flexion(P, other(side))
+
+
+def knee_flexion_asymmetry(P, side="right"):
+    """E08: knee flexion of the ``side`` leg minus that of the other leg."""
+    return knee_flexion(P, side) - knee_flexion(P, other(side))
+
+
+def knee_flexion_both(P, side=None):
+    """E09: mean knee flexion of both legs (legs straight on the floor = 0); ``side`` is ignored."""
+    return (knee_flexion(P, "left") + knee_flexion(P, "right")) / 2
+
+
+def segment_direction(P, side, a, b):
+    """(n, 3) unit vector of the segment a -> b of the ``side`` limb in the trunk frame (outward, up, forward); for
+    side 'left' outward = -lat, so a left limb is expressed as its mirror image. Module III's DTW alignment feature
+    (M8): the upper arm (shoulder -> elbow), the forearm (elbow -> wrist) or the thigh (hip -> knee)."""
+    lat, up, fwd = trunk_frame(P)
+    u = P[..., J[f"{side}_{b}"], :] - P[..., J[f"{side}_{a}"], :]
+    out = lat if side == "right" else -lat
+    v = np.stack([np.sum(u * out, -1), np.sum(u * up, -1), np.sum(u * fwd, -1)], -1)
+    return v / np.maximum(np.linalg.norm(v, axis=-1, keepdims=True), 1e-9)
+
+
+# Module III channels (Phase 4, M7; full scope M16): every function takes (P, side) with side = the moving limb, so a
+# left-side performance is assessed as its mirror image (P8). E06's wrist extension comes from MediaPipe Hands and is
+# computed per video (cvdc.eval.baselines.hand_angle_2d, side views only, P1c), not from P.
 ASSESS_ANGLES = {"shoulder_elevation": shoulder_elevation, "horizontal_adduction": horizontal_adduction,
                  "elbow_extension": elbow_extension, "contralateral_elevation": contralateral_elevation,
-                 "trunk_lateral_lean": trunk_lateral_lean, "shoulder_asymmetry": shoulder_asymmetry}
+                 "trunk_lateral_lean": trunk_lateral_lean, "shoulder_asymmetry": shoulder_asymmetry,
+                 "forearm_elevation": forearm_elevation, "hip_flexion": hip_flexion, "knee_flexion": knee_flexion,
+                 "contralateral_hip_flexion": contralateral_hip_flexion,
+                 "contralateral_knee_flexion": contralateral_knee_flexion, "trunk_thigh_angle": trunk_thigh_angle,
+                 "hip_flexion_asymmetry": hip_flexion_asymmetry, "knee_flexion_asymmetry": knee_flexion_asymmetry,
+                 "knee_flexion_both": knee_flexion_both}
+ALIGN_SEGMENTS = {"arm": ("shoulder", "elbow"), "forearm": ("elbow", "wrist"), "thigh": ("hip", "knee")}
 
 
 def primary_angle(P, name, side):

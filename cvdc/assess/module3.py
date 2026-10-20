@@ -47,8 +47,9 @@ def severity(excess, cuts=(1.0, 2.0)):
 
 
 def joint_name(joint, side):
-    return {"moving_shoulder": f"{side}_shoulder", "moving_elbow": f"{side}_elbow",
-            "other_shoulder": f"{other(side)}_shoulder", "trunk": "trunk"}.get(joint, joint)
+    return {"moving_shoulder": f"{side}_shoulder", "moving_elbow": f"{side}_elbow", "moving_wrist": f"{side}_wrist",
+            "other_shoulder": f"{other(side)}_shoulder", "moving_hip": f"{side}_hip", "moving_knee": f"{side}_knee",
+            "other_hip": f"{other(side)}_hip", "other_knee": f"{other(side)}_knee", "trunk": "trunk"}.get(joint, joint)
 
 
 def compare(sig, al, ref, lib_v, ac):
@@ -61,8 +62,9 @@ def compare(sig, al, ref, lib_v, ac):
     if centre not in ("pt_demo", "experts"):
         raise ValueError(f"assess.posture_centre {centre!r}: pt_demo | experts")
     posture = set(ac.get("posture_channels") or []) - {ref["main"]}
+    main_experts = ac.get("main_centre", "pt_demo") == "experts"  # M17: E06's Hands wrist angle (side views only)
     for c in ref["channels"]:
-        if centre == "experts" and c in posture:
+        if (centre == "experts" and c in posture) or (main_experts and c == ref["main"]):
             t = lib_v["mean"][c]  # M14: posture checks centred on the high-scoring experts of this view
         else:
             t = ref["curves"][c] + lib_v["bias"][c]
@@ -77,12 +79,15 @@ def compare(sig, al, ref, lib_v, ac):
         m[f"D_{c}"] = float(np.nanmean(u[c][ok])) if good else np.nan
         m[f"defined_{c}"] = float(ok.mean())
     main = ref["main"]
-    m["rom_target"] = ref["rom"] + lib_v["rom_bias"]
-    m["rom_shortfall"] = m["rom_target"] - sig["rom"]
+    m["rom_target"] = lib_v["rom_mu"] if main_experts else ref["rom"] + lib_v["rom_bias"]
+    # shortfall > 0 = the end range is not reached: below the target for a maximum, above it for a minimum (E03, M17)
+    sgn = -1.0 if ac.get("rom_direction", "max") == "min" else 1.0
+    m["rom_shortfall"] = sgn * (m["rom_target"] - sig["rom"])
     m["z_rom"] = m["rom_shortfall"] / lib_v["rom_sd"]
     m["log2_speed"] = al["log2_speed"]
     m["z_speed"] = (al["log2_speed"] - lib_v["speed_mu"]) / lib_v["speed_sd"]
     m["z_speed_demo"] = al["log2_speed"] / lib_v["speed_sd"]  # M15: exploratory only (demo-centred speed)
+    m.update(sig.get("path") or {})  # E05 wrist-path amplitude / circularity (reported, not scored)
     w_t = np.gradient(tgt[main]) * ac["fps"]
     dw = al["omega"] - w_t
     m["omega_dev"] = float(np.nanmean(np.abs(dw))) if np.isfinite(dw).mean() >= min_def else np.nan
@@ -156,7 +161,7 @@ def detect_errors(cmp, al, ref, lib_v, sig, ac, rules):
             m = cmp["measures"]
             out.append({"type": r["type"], "joint": joint_name(r["joint"], side),
                         "measured_deg": round(float(sig["rom"]), 1), "target_deg": round(float(m["rom_target"]), 1),
-                        "deviation_deg": round(float(-m["rom_shortfall"]), 1),
+                        "deviation_deg": round(float(sig["rom"] - m["rom_target"]), 1),
                         "frames": [int(start + fr[:, 0].min()), int(start + fr[:, 1].max())],
                         "severity": severity(float(z - k), cuts), "excess_sd": round(float(z - k), 2)})
         elif kind == "speed":
@@ -206,6 +211,7 @@ def rep_entry(i, sig, s, meas, X, errors, ac, embedding=None):
                       "speed_ratio": _num(2 ** meas["log2_speed"]) if np.isfinite(meas["log2_speed"]) else None,
                       "angular_velocity_dev_deg_s": _num(meas["omega_dev"], 1),
                       "angle_dev_deg": {k[8:]: _num(v, 1) for k, v in meas.items() if k.startswith("dev_abs_")},
+                      **{k: _num(meas[k], 3) for k in ("path_amplitude", "path_circularity") if k in meas},
                       "distance_sd": {g: _num(x) for g, x in X.items()}},
          "errors": errors}
     if embedding is not None:

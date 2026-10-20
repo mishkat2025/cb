@@ -25,9 +25,20 @@ pairs:                           # C1(c), A5: DTW angles for rep-matched pairs, 
                                  # 10.8 trunk only, 9.8 without DTW (dtw_angle_check_E09_v2.log)
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
-assess:
-  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
-  angle: trunk_thigh_angle     # trunk vs thigh line (0 -> ~45 deg)
-  posture_channels: [knee_flexion]   # legs straight on the floor
-  symmetry: [hip_flexion]
-  both_sides: true
+assess:                          # Module III (M16 starting definitions, implemented 2026-10-20, M17); rules: TODO verify
+                                 # against this exercise's EAAQ when the appendix is available (M5)
+  angle: trunk_thigh_angle       # trunk vs thigh line (0 -> ~45 deg)
+  rom_direction: max
+  align: main                    # M17: no limb segment carries the trunk's movement, so DTW on the main angle
+  speed: {source: expert_data, expert_min_score: 95, eaaq_phase_s: null}
+  channels: [trunk_thigh_angle, knee_flexion_both, hip_flexion_asymmetry]
+  posture_channels: [knee_flexion_both, hip_flexion_asymmetry]   # legs straight on the floor, symmetry (M14)
+  score:
+    angle_channels: [trunk_thigh_angle, knee_flexion_both]
+    symmetry_channel: hip_flexion_asymmetry
+  rules:
+    - {type: trunk_extension_range_insufficient, measure: rom_shortfall, joint: trunk}
+    - {type: knees_flexed, channel: knee_flexion_both, direction: above, joint: knees}
+    - {type: hip_asymmetry, channel: hip_flexion_asymmetry, direction: both, joint: hips}
+    - {type: too_fast, measure: speed, direction: fast, joint: trunk}
+    - {type: too_slow, measure: speed, direction: slow, joint: trunk}

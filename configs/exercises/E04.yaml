@@ -22,8 +22,22 @@ pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (
   dtw_angles: [forearm_elevation_left, forearm_elevation_right, shoulder_elevation_left, shoulder_elevation_right]
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
-assess:
-  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
-  angle: forearm_elevation       # forearm rotation as forearm elevation in the trunk frame (~70 -> ~145 deg)
-  posture_channels: [shoulder_elevation, elbow_extension, trunk_lateral_lean]
+assess:                          # Module III (M16 starting definitions, implemented 2026-10-20, M17); rules: TODO verify
+                                 # against this exercise's EAAQ when the appendix is available (M5)
+  angle: forearm_elevation       # forearm vs the trunk's up axis (3D): ~70 (about horizontal) -> ~145 deg (down)
+  rom_direction: max
+  align: forearm                 # M17
   mirror_left_arm: true
+  speed: {source: expert_data, expert_min_score: 95, eaaq_phase_s: null}
+  channels: [forearm_elevation, shoulder_elevation, elbow_extension, trunk_lateral_lean]
+  posture_channels: [shoulder_elevation, elbow_extension, trunk_lateral_lean]   # M14
+  score:
+    angle_channels: [forearm_elevation, shoulder_elevation, elbow_extension, trunk_lateral_lean]
+    symmetry_channel: null       # no left/right channel in the M16 list for E04
+  rules:
+    - {type: medial_rotation_range_insufficient, measure: rom_shortfall, joint: moving_shoulder}
+    - {type: shoulder_elevation_deviation, channel: shoulder_elevation, direction: both, joint: moving_shoulder}
+    - {type: elbow_angle_deviation, channel: elbow_extension, direction: both, joint: moving_elbow}
+    - {type: trunk_lean, channel: trunk_lateral_lean, direction: both, joint: trunk}
+    - {type: too_fast, measure: speed, direction: fast}
+    - {type: too_slow, measure: speed, direction: slow}

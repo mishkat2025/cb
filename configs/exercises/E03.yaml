@@ -23,8 +23,25 @@ pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (
   dtw_angles: [forearm_elevation_left, forearm_elevation_right, shoulder_elevation_left, shoulder_elevation_right]
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
-assess:
-  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
-  angle: forearm_elevation       # forearm rotation read as forearm elevation in the trunk frame (~130 -> ~27 deg)
-  posture_channels: [shoulder_elevation, elbow_extension, shoulder_asymmetry, trunk_lateral_lean]   # abduction ~90, elbow ~90
+assess:                          # Module III (M16 starting definitions, implemented 2026-10-20, M17); rules: TODO verify
+                                 # against this exercise's EAAQ when the appendix is available (M5)
+  angle: forearm_elevation       # forearm vs the trunk's up axis (3D): ~130 (forward-down) -> ~27 deg (up)
+  rom_direction: min             # M17: the end range is the minimum (forearm up)
+  align: forearm                 # M17: DTW on the forearm direction in the trunk frame (the upper arm stays at 90/90)
   mirror_left_arm: true
+  template_both_sides: true      # M3: V3 shows both arms; the left one is mirrored and averaged in
+  template_working_phase: {channel: shoulder_elevation, min_deg: 70}   # M3: only the 90/90 working phase of the demo
+  speed: {source: expert_data, expert_min_score: 95, eaaq_phase_s: null}
+  channels: [forearm_elevation, shoulder_elevation, elbow_extension, trunk_lateral_lean, shoulder_asymmetry]
+  posture_channels: [shoulder_elevation, elbow_extension, trunk_lateral_lean, shoulder_asymmetry]   # M14
+  score:
+    angle_channels: [forearm_elevation, shoulder_elevation, elbow_extension, trunk_lateral_lean]
+    symmetry_channel: shoulder_asymmetry
+  rules:
+    - {type: lateral_rotation_range_insufficient, measure: rom_shortfall, joint: moving_shoulder}
+    - {type: shoulder_abduction_deviation, channel: shoulder_elevation, direction: both, joint: moving_shoulder}
+    - {type: elbow_angle_deviation, channel: elbow_extension, direction: both, joint: moving_elbow}
+    - {type: trunk_lean, channel: trunk_lateral_lean, direction: both, joint: trunk}
+    - {type: shoulder_asymmetry, channel: shoulder_asymmetry, direction: above, joint: moving_shoulder}
+    - {type: too_fast, measure: speed, direction: fast}
+    - {type: too_slow, measure: speed, direction: slow}

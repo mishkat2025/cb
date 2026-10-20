@@ -22,8 +22,22 @@ pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (
   dtw_angles: [hip_flexion_left, hip_flexion_right, knee_flexion_left, knee_flexion_right]
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
-assess:
-  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
-  angle: hip_flexion           # moving leg, trunk vs thigh (0 -> ~125 deg)
-  posture_channels: [knee_flexion, contralateral_hip_flexion, contralateral_knee_flexion]   # pelvis stability
+assess:                          # Module III (M16 starting definitions, implemented 2026-10-20, M17); rules: TODO verify
+                                 # against this exercise's EAAQ when the appendix is available (M5)
+  angle: hip_flexion             # moving leg, trunk vs thigh (0 -> ~125 deg)
+  rom_direction: max
+  align: thigh                   # M17: the moving thigh's direction in the trunk frame
   mirror_left_side: true
+  speed: {source: expert_data, expert_min_score: 95, eaaq_phase_s: null}
+  channels: [hip_flexion, knee_flexion, contralateral_hip_flexion, contralateral_knee_flexion]
+  posture_channels: [knee_flexion, contralateral_hip_flexion, contralateral_knee_flexion]   # pelvis stability (M14)
+  score:
+    angle_channels: [hip_flexion, knee_flexion, contralateral_hip_flexion, contralateral_knee_flexion]
+    symmetry_channel: null
+  rules:
+    - {type: hip_flexion_range_insufficient, measure: rom_shortfall, joint: moving_hip}
+    - {type: knee_angle_deviation, channel: knee_flexion, direction: both, joint: moving_knee}
+    - {type: other_hip_flexed, channel: contralateral_hip_flexion, direction: above, joint: other_hip}
+    - {type: other_knee_flexed, channel: contralateral_knee_flexion, direction: above, joint: other_knee}
+    - {type: too_fast, measure: speed, direction: fast, joint: moving_hip}
+    - {type: too_slow, measure: speed, direction: slow, joint: moving_hip}

@@ -22,9 +22,22 @@ pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (
   dtw_angles: [hip_flexion_left, hip_flexion_right, knee_flexion_left, knee_flexion_right]
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
-assess:
-  # starting definitions (user answer 7, 2026-10-20; M16): implemented and checked in Phase 4, not used yet
-  angle: hip_flexion           # both legs
-  posture_channels: [knee_flexion]   # both legs
-  symmetry: [hip_flexion, knee_flexion]   # left/right
+assess:                          # Module III (M16 starting definitions, implemented 2026-10-20, M17); rules: TODO verify
+                                 # against this exercise's EAAQ when the appendix is available (M5)
+  angle: hip_flexion             # the leg with the larger range (both flex together)
+  rom_direction: max
+  align: thighs                  # M17: both thighs' directions in the trunk frame
   both_sides: true
+  speed: {source: expert_data, expert_min_score: 95, eaaq_phase_s: null}
+  channels: [hip_flexion, knee_flexion, hip_flexion_asymmetry, knee_flexion_asymmetry]
+  posture_channels: [knee_flexion, hip_flexion_asymmetry, knee_flexion_asymmetry]   # M14
+  score:
+    angle_channels: [hip_flexion, knee_flexion]
+    symmetry_channel: hip_flexion_asymmetry
+  rules:
+    - {type: hip_flexion_range_insufficient, measure: rom_shortfall, joint: moving_hip}
+    - {type: knee_flexion_deviation, channel: knee_flexion, direction: both, joint: moving_knee}
+    - {type: hip_asymmetry, channel: hip_flexion_asymmetry, direction: both, joint: moving_hip}
+    - {type: knee_asymmetry, channel: knee_flexion_asymmetry, direction: both, joint: moving_knee}
+    - {type: too_fast, measure: speed, direction: fast, joint: moving_hip}
+    - {type: too_slow, measure: speed, direction: slow, joint: moving_hip}
