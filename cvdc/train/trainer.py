@@ -200,7 +200,8 @@ class Run:
         self.dir = Path(root)
         self.dir.mkdir(parents=True, exist_ok=True)
         snap = {k: v for k, v in cfg.items() if k != "exercises"}
-        snap["exercises"] = {k: v for k, v in cfg["exercises"].items() if k in cfg["data"]["include_exercises"]}
+        inc = cfg["data"]["include_exercises"]  # [] = every exercise (full scope, D0)
+        snap["exercises"] = {k: v for k, v in cfg["exercises"].items() if not inc or k in inc}
         (self.dir / "config.yaml").write_text(yaml.safe_dump(snap, sort_keys=False), encoding="utf-8")
         info = {**info, "git": git_state(), "torch": torch.__version__,
                 "gpu": torch.cuda.get_device_name() if torch.cuda.is_available() else None,

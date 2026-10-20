@@ -50,18 +50,25 @@ def reuse_cvdc(cfg, data, plan, log=print):
     tag = cfg["train"].get("cvdc_init_from")
     if not tag:
         return None
-    d = resolve(cfg["train"]["runs_dir"]) / tag / "proposed" / f"fold{plan['fold']}" / "cvdc"
-    if not (d / "best.pt").exists():
-        log(f"  cvdc: no {d / 'best.pt'}; pretraining instead")
+    return load_cvdc(cfg, data, plan, resolve(cfg["train"]["runs_dir"]) / tag / "proposed" / f"fold{plan['fold']}" /
+                     "cvdc", log)
+
+
+def load_cvdc(cfg, data, plan, d, log=print):
+    """Load the CVDC encoder of run directory ``d`` (<...>/fold<k>/cvdc) if its pretraining finished (best.pt and
+    summary.json) on exactly this fold's inner training / validation and test subjects and training views.
+    Returns (model, summary) or None."""
+    if not (d / "best.pt").exists() or not (d / "summary.json").exists():
+        log(f"  cvdc: no finished pretraining in {d}")
         return None
     info = json.loads((d / "run_info.json").read_text(encoding="utf-8"))
     for k in ("inner_train", "inner_val", "test"):
         if sorted(info[k]) != sorted(plan[k]):
-            log(f"  cvdc: {d} used other {k} subjects; pretraining instead")
+            log(f"  cvdc: {d} used other {k} subjects; not reused")
             return None
     if info.get("views") != plan.get("views"):  # E24: an all-view encoder has seen the held-out view
-        log(f"  cvdc: {d} used training views {info.get('views') or 'all'}, not {plan.get('views') or 'all'}; "
-            "pretraining instead")
+        log(f"  cvdc: {d} used training views {info.get('views') or 'all'}, not {plan.get('views') or 'all'}; not "
+            "reused")
         return None
     ck = torch.load(d / "best.pt", map_location=data.device, weights_only=True)
     if ck["input"] != cfg["model"]["input"]:
@@ -91,7 +98,14 @@ def run_method_fold(cfg, data, method, plan, out, linear_probe=None, epochs=None
             "cvdc_lambda": c["train"].get("cvdc_lambda", 0.0), "subjects": plan}
     init = None
     if mc["cvdc"]:
-        r = None if epochs else reuse_cvdc(c, data, plan, log)
+        if mc.get("cvdc_from"):  # T15: share the CVDC encoder that another method of this run pretrained on the fold
+            d = out.parent.parent / mc["cvdc_from"] / f"fold{plan['fold']}" / "cvdc"
+            r = load_cvdc(c, data, plan, d, log)
+            if r is None:
+                raise RuntimeError(f"{method} fold {plan['fold']}: no usable CVDC encoder in {d}; run "
+                                   f"{mc['cvdc_from']} first")
+        else:
+            r = None if epochs else reuse_cvdc(c, data, plan, log)
         model, s = r if r else pretrain_cvdc(c, data, plan, out / "cvdc", seed, epochs, log)
         done["cvdc_stage"] = s
         np.savez_compressed(out / "embeddings_pretrained.npz", **embedding_snapshot(model, data, plan, c))

@@ -4,8 +4,10 @@
                     (exercise x expert / non-expert) and the set-level features
   set_features      per video: the set rep count (Phase 1 ``n_reps_set``, best view, P6b), the mean rep duration of
                     its training reps and the mean range of motion of the exercise's main angle over those reps
-                    (``assess.angle``: E01 3D shoulder elevation, E02 3D horizontal adduction, M7a); cached in
-                    data/cache/set_features.csv
+                    (``assess.angle``: E01 / E05 3D shoulder elevation, E02 3D horizontal adduction (M7a), E03 / E04
+                    forearm elevation, E07 / E08 hip flexion, E09 trunk-thigh angle (M16); E06 the 2D wrist angle
+                    from MediaPipe Hands in the side views only, none in the front view (P1c)); cached in
+                    ``data.set_features_csv``
   item_activity     T14: per stratum and EAAQ item, the spread of the labels and whether the item varies within
                     the group (off its modal value in videos of >= ``min_subjects`` subjects)
   score_decomposition  the total score is (100 / 7) x the sum of the 7 items, so each item's covariance with the
@@ -17,9 +19,12 @@
 """
 import numpy as np
 import pandas as pd
+from scipy.ndimage import median_filter
 
-from ..assess.angles import horizontal_adduction, shoulder_elevation
+from ..assess.angles import (H_MIDDLE_MCP, H_WRIST, PRIMARY_ANGLES, angle_between, horizontal_adduction,
+                             shoulder_elevation)
 from ..config import data_path, resolve
+from ..data.skeleton import J
 
 ALL_ITEMS = ["PF1", "PF2", "PF3", "PF4", "CF1", "CF2", "CF3"]
 SET_FEATURES = ["n_reps_set", "rep_duration_s", "rom_deg"]
@@ -36,12 +41,42 @@ def stratum_name(exercise, group):
 
 
 def main_angle(world, cfg_ex, side):
+    """The exercise's Module III main angle (``assess.angle``, M7a, M16) on 3D world landmarks, moving side."""
     a = cfg_ex["assess"]["angle"]
     if a == "shoulder_elevation":
         return shoulder_elevation(world, side)
     if a == "horizontal_adduction":
         return horizontal_adduction(world, side, cfg_ex["assess"].get("angle_min_proj", 0.0))
+    if a in ("forearm_elevation", "hip_flexion", "trunk_thigh_angle"):  # E03 / E04, E07 / E08, E09
+        return PRIMARY_ANGLES[a](world, side)
     raise ValueError(f"no main-angle rule for {a!r}")
+
+
+def hand_angle_2d(kp_path, hand_path, side, n, fps=30, max_gap_s=0.5, median_frames=9):
+    """E06 main angle as decided in the tenth review (P1c): the unsigned wrist angle in the image plane, Pose forearm
+    (elbow -> wrist) vs the hand axis (Hands wrist -> middle MCP), for one body side, on the n-frame uniform grid of
+    the preprocessed file (frames without a detected hand interpolated over gaps <= max_gap_s, otherwise NaN), with
+    a running median of ``median_frames`` against single-frame hand glitches."""
+    with np.load(resolve(kp_path)) as z:
+        t, lm, (H, W) = z["t"], z["lm2d"].astype(float), z["frame_hw"]
+    with np.load(resolve(hand_path)) as z:
+        h2 = z["hand2d"][:, 0 if side == "left" else 1].astype(float)
+    P2, Q2 = lm[..., :2] * (W, H), h2[..., :2] * (W, H)
+    fa = P2[:, J[f"{side}_wrist"]] - P2[:, J[f"{side}_elbow"]]
+    a = angle_between(fa, Q2[:, H_MIDDLE_MCP] - Q2[:, H_WRIST])
+    ok = np.isfinite(a)
+    g = np.arange(n) / fps
+    out = np.full(n, np.nan)
+    if ok.sum() < 2:
+        return out
+    tv, av = t[ok], a[ok]
+    out = np.interp(g, tv, av)
+    k = np.clip(np.searchsorted(tv, g), 1, len(tv) - 1)
+    out[np.minimum(np.abs(g - tv[k - 1]), np.abs(g - tv[k])) > max_gap_s] = np.nan
+    fin = np.isfinite(out)
+    if fin.sum() > median_frames:
+        out[fin] = median_filter(out[fin], size=median_frames, mode="nearest")
+    return out
 
 
 def angle_range(a, name):
@@ -66,10 +101,17 @@ def set_features(cfg, refresh=False):
     rows = []
     for vid, r in reps.groupby("video_id", sort=False):
         ex = r.exercise.iloc[0]
+        ae = cfg["exercises"][ex]["assess"]
         w = np.load(resolve(idx.loc[vid, "pre_path"]))["world"].astype(float)
+        hand = None
+        if ae.get("angle_source") == "hands":  # E06 (P1c): side views only, the hand that camera sees; front: none
+            view = idx.loc[vid, "view"]
+            hand = (hand_angle_2d(idx.loc[vid, "kp_path"], idx.loc[vid, "hand_path"], ae["near_hand"][view], len(w))
+                    if view in ae.get("angle_views", []) else np.full(len(w), np.nan))
         roms, defined = [], []
         for x in r.itertuples():
-            a = main_angle(w[x.start:x.end + 1], cfg["exercises"][ex], x.side)
+            a = (hand[x.start:x.end + 1] if hand is not None
+                 else main_angle(w[x.start:x.end + 1], cfg["exercises"][ex], x.side))
             ok = np.isfinite(a)
             defined.append(ok.mean())
             roms.append(angle_range(a[ok], cfg["exercises"][ex]["assess"]["angle"]) if ok.sum() >= 2 else np.nan)

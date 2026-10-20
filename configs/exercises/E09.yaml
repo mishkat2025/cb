@@ -18,9 +18,11 @@ reps:                            # P6c: per-video adaptive thresholds, the Step 
   polarity: peak                 # P6c: rep = the trunk rising (lying flat = rest)
   max_rep_s: 20.0
   quality_joints: [knee]
-pairs:                           # C1(c), A5: DTW angles for rep-matched pairs (user, 2026-10-20: trunk / lower-body angles)
-  dtw_angles: [trunk_thigh, knee_flexion_left, knee_flexion_right]   # best trunk / lower-body set in the known-warp test:
-                                 # 7.4 frames vs 7.8 trunk + hips, 10.8 trunk only (upper-limb angles 4.8; dtw_angle_check)
+pairs:                           # C1(c), A5: DTW angles for rep-matched pairs, chosen by the known-warp test (user, 2026-10-20,
+  dtw_angles: [shoulder_elevation_left, shoulder_elevation_right, elbow_left, elbow_right]   # eleventh review): the arm
+                                 # angles recover the warp best (median 4.8 frames on 327 rep pairs) vs 6.0 for trunk-thigh +
+                                 # knees + arms, 7.4 trunk-thigh + knees, 7.5 hips + knees, 7.8 trunk + hips, 8.1 hips,
+                                 # 10.8 trunk only, 9.8 without DTW (dtw_angle_check_E09_v2.log)
 eaaq:
   expected_reps: 10              # TODO: verify when the EAAQ appendix is available
 assess:

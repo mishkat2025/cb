@@ -59,6 +59,7 @@ def test_reuse_refuses_an_encoder_trained_on_other_views(tmp_path):
     d = tmp_path / "prev" / "proposed" / "fold0" / "cvdc"
     d.mkdir(parents=True)
     (d / "best.pt").write_bytes(b"")
+    (d / "summary.json").write_text(json.dumps({"best_epoch": 1, "stopped_epoch": 1}), encoding="utf-8")
     info = {k: p[k] for k in ("inner_train", "inner_val", "test")}  # same subjects, all views (no "views" key)
     (d / "run_info.json").write_text(json.dumps(info), encoding="utf-8")
     cfg = {**CFG, "train": {**CFG["train"], "runs_dir": str(tmp_path), "cvdc_init_from": "prev"}}

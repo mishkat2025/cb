@@ -22,6 +22,13 @@ ITEMS = ["PF1", "PF2", "PF4", "CF1", "CF2", "CF3"]  # D5: PF3 is not a target
 LIFTED = {"xyz_ktpformer": "ktpformer"}
 
 
+def exercise_label_ok(cfg, meta):
+    """(n,) bool: False for rows of (exercise, subject) pairs in ``data.exercise_label_exclude`` (D8: the movement
+    shows a wrong exercise, e.g. E03 P02), which the exercise head neither learns nor is scored on."""
+    excl = {(e, s) for e, subs in (cfg["data"].get("exercise_label_exclude") or {}).items() for s in subs}
+    return np.array([(e, s) not in excl for e, s in zip(meta.exercise, meta.subject)], bool)
+
+
 def to_input(xy, vis, world, mode, lifted=None):
     """(N, T, V, *) arrays/tensors -> (N, T, V, C) for the input mode (``lifted``: the lifter's 3D)."""
     if mode == "xy":
@@ -70,6 +77,10 @@ class PackData:
         qn = cfg["labels"]["quality_names"]
         m = self.meta
         self.exercise = torch.tensor(m.exercise.map(codes.index).to_numpy(), device=device)
+        # D8: subjects whose movement shows a wrong exercise keep their exercise as input (exercise embedding) but
+        # get no exercise-head target (-1 = masked in the loss)
+        self.exercise_target = torch.where(torch.tensor(exercise_label_ok(cfg, m), device=device), self.exercise,
+                                           torch.full_like(self.exercise, -1))
         self.quality = torch.tensor(m.quality.map(lambda q: qn.index(q) if q in qn else -1).to_numpy(), device=device)
         self.score = torch.tensor(m.score.to_numpy(np.float32), device=device)
         self.items = {k: torch.tensor(m[k].to_numpy(np.float32), device=device) for k in ITEMS}
@@ -106,7 +117,7 @@ class PackData:
                         None if self.lifted is None else self.lifted[idx])
 
     def targets(self, idx, items):
-        return {"score": self.score[idx], "quality": self.quality[idx], "exercise": self.exercise[idx],
+        return {"score": self.score[idx], "quality": self.quality[idx], "exercise": self.exercise_target[idx],
                 "items": torch.stack([self.items[k][idx] for k in items], -1) if items else None}
 
     def subject_mask(self, subjects, views=None):

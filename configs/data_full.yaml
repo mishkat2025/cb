@@ -73,9 +73,14 @@ cvdc:
 train:
   runs_dir: runs/full
   cvdc_init_from: null                  # never reuse the pilot's CVDC encoders
+methods:                                # T15: the frozen-encoder Proposed (the reported alternative) uses the CVDC encoder
+  proposed_lp: {cvdc_from: proposed_j1} # that proposed_j1 pretrained on the same fold of the same run (run it first)
 ablation:
   reuse: {}
 eval:
   results_dir: outputs/full/results
+  k: 10                                 # E1 (user, eleventh review, 2026-10-20): GroupKFold-10, stratified by expert /
+                                        # non-expert, is the final scheme for the full scope; LOSO only if the supervisor asks
+  noise_floor: {E01: 5.28, E02: 4.38, E03: 3.38, E04: 2.45, E05: 4.76, E06: 3.16, E07: 2.76, E08: 4.04, E09: 2.68}  # E3
 lifter:
   out_dir: data/full/cache/lift_ktpformer

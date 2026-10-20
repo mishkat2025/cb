@@ -100,7 +100,7 @@ def bench_steps(cfg, rep, vid, n):
                 x = augment(data.inputs(it_, "xy"), ac, 2, generator=g).permute(0, 3, 1, 2).contiguous()
                 y = data.targets(it_, items)
                 with ctx(amp):
-                    o = m(x, exercise=y["exercise"])
+                    o = m(x, exercise=data.exercise[it_])
                 loss, _ = sup(o, y)
                 opt.zero_grad(set_to_none=True)
                 loss.backward()

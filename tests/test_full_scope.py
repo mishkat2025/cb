@@ -154,9 +154,11 @@ def test_per_exercise_dtw_angles_and_their_features():
     full, pilot = load_config("configs/data_full.yaml"), load_config("configs/data.yaml")
     assert dtw_angle_names(pilot, "E01") == pilot["cvdc"]["pairs"]["dtw_angles"]       # the pilot is unchanged
     assert dtw_angle_names(full, "E01") == pilot["cvdc"]["pairs"]["dtw_angles"]
-    for ex in ("E07", "E08", "E09"):                   # lower-body / trunk angles (user, 2026-10-20)
+    for ex in ("E07", "E08"):                          # lower-body angles (user, 2026-10-20)
         names = dtw_angle_names(full, ex)
         assert names and all(n.startswith(("hip_", "knee_", "trunk_")) for n in names)
+    # E09: the set with the lowest known-warp error (user, eleventh review): the arm angles (A5)
+    assert dtw_angle_names(full, "E09") == pilot["cvdc"]["pairs"]["dtw_angles"]
     assert all(set(dtw_angle_names(full, ex)) <= set(ANGLES) for ex in full["exercises"])
     w = np.repeat(_pose(), 5, 0)
     F = angle_features(w, ["hip_flexion_left", "knee_flexion_right", "trunk_thigh"])

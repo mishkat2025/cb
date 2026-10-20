@@ -202,7 +202,7 @@ def head_gradients(model, data, cfg, dev, items, items_list, scaler, n=512):
     out = {}
     for head in ("score", "items", "quality", "exercise"):
         with autocast(cfg, dev):
-            o = model(x, exercise=y["exercise"])
+            o = model(x, exercise=data.exercise[it])
         _, parts = sup(o, y)
         keep = {k: v for k, v in o.items() if k in ("z", head)}
         loss, _ = sup(keep, y)
@@ -237,7 +237,7 @@ def supervised(model, data, cfg, dev, train_items, test_items, epochs, items_lis
             x = augment(data.inputs(it, mode), ac, cc, generator=g).permute(0, 3, 1, 2).contiguous()
             y = data.targets(it, items_list)
             with autocast(cfg, dev):
-                o = model(x, exercise=y["exercise"])
+                o = model(x, exercise=data.exercise[it])
             loss, p = sup(o, y)
             opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -288,7 +288,7 @@ def evaluate(model, data, cfg, dev, items, items_list, train_items, scaler):
     return {"rmse": torch.sqrt(((s - y["score"]) ** 2).mean()).item(),
             "rmse_mean_baseline": torch.sqrt(((mean_train - y["score"]) ** 2).mean()).item(), **within,
             "cf_mae": (cf - y["items"]).abs().nanmean().item(),
-            "exercise_acc": (torch.cat(preds["exercise"]) == y["exercise"]).float().mean().item(),
+            "exercise_acc": (torch.cat(preds["exercise"]) == data.exercise[items]).float().mean().item(),
             "pred_min": s.min().item(), "pred_max": s.max().item()}
 
 
