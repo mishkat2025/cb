@@ -165,6 +165,7 @@ class ReferencePlayer:
             self.seq = np.arange(k0, k1 + 1)
             self.covered, self.rest_k = (ws - k0, we - k0), 0
         self.xy = xy[self.seq]                         # (m, 33, 2): the PT's own keypoints, rest -> peak -> rest
+        self.world = world[self.seq]                   # (m, 33, 3): its 3D world landmarks (root-centred, torso units)
         self.feat = features(world[self.seq], side, ac)
         self.n, self.n_template = len(self.xy), int(ref["n"])
         self.peak = int(np.flatnonzero(self.seq == r.peak)[0])

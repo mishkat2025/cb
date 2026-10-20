@@ -257,6 +257,27 @@ def frames_from(source, max_side):
     yield from iter_frames(source, max_side, False)
 
 
+def source_fps(src):
+    """The video's average frame rate, so a saved video plays back at normal speed (30 for a webcam)."""
+    if str(src).isdigit():
+        return 30.0
+    try:
+        import av
+        with av.open(str(src)) as c:
+            r = c.streams.video[0].average_rate
+            return float(r) if r else 30.0
+    except Exception:  # noqa: BLE001 (an unreadable rate falls back to 30 fps)
+        return 30.0
+
+
+def even_size(img, max_side=1920):
+    """Downscale so the longer side is <= max_side, with even dimensions (mp4)."""
+    h, w = img.shape[:2]
+    s = min(1.0, max_side / max(h, w))
+    nw, nh = int(w * s) // 2 * 2, int(h * s) // 2 * 2
+    return img if (nw, nh) == (w, h) else cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA)
+
+
 def pick_dataset_video(cfg, ex, subject, view, variation):
     idx = pd.read_csv(resolve(cfg["data"]["index_csv"]))
     r = idx[(idx.exercise == ex) & (idx.subject == subject) & (idx.view == view) & (idx.variation == variation)]
@@ -288,7 +309,11 @@ def main():
     ap.add_argument("--ghost", action="store_true", help="draw the PT reference as a faint ghost on the patient (X6)")
     ap.add_argument("--ghost-any-view", action="store_true",
                     help="allow the ghost on side-view videos too (labelled: the reference is a front-view clip)")
+    ap.add_argument("--export4", metavar="OUT.mp4",
+                    help="render offline a 2 x 2 video: patient | PT reference / estimated 3D | CVDC embedding (X9)")
     a = ap.parse_args()
+    if a.export4:  # offline rendering; written at the source's frame rate, so it plays back at normal speed
+        a.headless, a.no_realtime = True, True
     cfg = load_config(a.config if Path(a.config).exists() else REPO / a.config)  # runs from any folder
     if a.list:
         idx = pd.read_csv(resolve(cfg["data"]["index_csv"]))
@@ -337,6 +362,15 @@ def main():
         if a.ghost and not ghost_on:
             print(f"ghost off: the {view} view is not the reference's {player.view} view (--ghost-any-view to force)")
     geo_hist, blur_state = [], {}
+    out_fps = source_fps(src)
+    writer4 = sk3d = emb = None
+    if a.export4:  # X9: the four-panel export (demo/export4.py)
+        from demo.export4 import EmbeddingView, Skeleton3DView, compose4, normalise3d
+        from demo.reference import mirror33
+        if player is None:
+            raise SystemExit("--export4 needs the PT reference (drop --no-reference)")
+        sk3d = Skeleton3DView()
+        emb = EmbeddingView(cfg, model) if model is not None else None
     try:
         for t, rgb, geom in frames_from(src, cfg["pose"]["max_side"]):
             if a.max_seconds and t > a.max_seconds:
@@ -368,7 +402,8 @@ def main():
             if time.time() - fps_t >= 1.0:
                 fps, n_frames, fps_t = n_frames / (time.time() - fps_t), 0, time.time()
             y = 24
-            for s in (f"{ex} {cfg['exercises'][ex]['name']} | view {view} | t {t:5.1f} s | {fps:4.1f} FPS",
+            for s in (f"{ex} {cfg['exercises'][ex]['name']} | view {view} | t {t:5.1f} s | "
+                      + ("offline render" if a.export4 else f"{fps:4.1f} FPS"),
                       f"reps: {len(sess.entries)}" + (" | in a rep" if rs["in_rep"] else " | at rest")
                       + (f" | model: {model.method} fold {model.fold}" if model else
                          " | Module III only (no checkpoint)")):
@@ -414,12 +449,31 @@ def main():
                                         rs["diffs"], "rep" if rs["in_rep"] else "rest",
                                         gm[0] if gm is not None else None, gm[2] if gm is not None else None,
                                         rs.get("j"))
-            saved = blur_faces(canvas.copy(), lm, blur_state) if (writer is not None or a.save_mp4) and \
-                a.save_mode == "blur" else canvas
+            saved = blur_faces(canvas.copy(), lm, blur_state) if (writer is not None or a.save_mp4 or a.export4) \
+                and a.save_mode == "blur" else canvas
+            if a.export4:  # X9: 2 x 2, every panel the size of the video frame
+                p2 = reference_panel(H, W, ref_xy, rs["k"], player, mirrored, view, rs["diffs"],
+                                     "rep" if rs["in_rep"] else "rest", gm[0] if gm is not None else None,
+                                     gm[2] if gm is not None else None, rs.get("j"))
+                Pw = np.asarray(pose.world[-3:], float)
+                Pw = Pw[np.isfinite(Pw).all(axis=(1, 2))]
+                pt3 = player.world[int(np.clip(rs["k"], 0, player.n - 1))]
+                p3 = sk3d.draw(W, H, normalise3d(np.median(Pw, 0)) if len(Pw) else None,
+                               normalise3d(mirror33(pt3) if mirrored else pt3), t, mirrored)
+                if emb is not None:
+                    p4 = emb.draw(W, H, sess, rs["side"] or sess.side or player.side)
+                else:
+                    p4 = np.full((H, W, 3), 22, np.uint8)
+                    text(p4, "CVDC embedding: no model loaded (Module III only)", (10, 24), 0.55, GREY)
+                grid = even_size(compose4(saved, p2, p3, p4))
+                if writer4 is None:
+                    writer4 = cv2.VideoWriter(str(a.export4), cv2.VideoWriter_fourcc(*"mp4v"), out_fps,
+                                              (grid.shape[1], grid.shape[0]))
+                writer4.write(grid)
             if panel is not None:
                 canvas, saved = np.hstack([canvas, panel]), np.hstack([saved, panel])
             if writer is None and a.save_mp4:
-                writer = cv2.VideoWriter(str(a.save_mp4), cv2.VideoWriter_fourcc(*"mp4v"), 30,
+                writer = cv2.VideoWriter(str(a.save_mp4), cv2.VideoWriter_fourcc(*"mp4v"), out_fps,
                                          (canvas.shape[1], canvas.shape[0]))
             if writer is not None:
                 writer.write(saved)
@@ -448,6 +502,9 @@ def main():
         pose.close()
         if writer is not None:
             writer.release()
+        if writer4 is not None:
+            writer4.release()
+            print("four-panel video:", a.export4)
         if not a.headless:
             cv2.destroyAllWindows()
     rep = sess.set_report(video_id or "")

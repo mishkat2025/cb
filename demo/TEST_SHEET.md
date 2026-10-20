@@ -13,7 +13,8 @@ call the venv's Python directly (`.venv\Scripts\python.exe`), so nothing needs a
 - Expected numbers were checked on 2026-10-20 (21:20–21:40) with the code of that day's commit. "Module III / model"
   = the set scores printed on the last console line; "PT" = the physiotherapists' score of that video. The scores are
   single examples of the within-group results (PROGRESS §6h.9: no model beats the within-group mean), not a validation.
-- Decisions: X1–X8 in `cvdc-physio\DESIGN_DECISIONS.md`; the reference display is X7 (E03's rest pose: X8).
+- Decisions: X1–X9 in `cvdc-physio\DESIGN_DECISIONS.md`; the reference display is X7 (E03's rest pose: X8), the
+  four-panel export X9.
 
 ## 1. One held-out video per exercise (front view, with the ghost)
 
@@ -76,6 +77,26 @@ Each takes ~35 s. Rest | peak screenshots of these videos are in the same folder
 `E01_P03_AF_VFL_GM_rest_15.0s_peak_5.7s.png`, `E02_P07_AF_VML_GM_rest_21.8s_peak_4.0s.png`,
 `E03_P05_AF_VFL_GM_rest_3.2s_peak_3.9s.png`, `E04_P10_AF_VFL_GF_rest_5.0s_peak_3.5s.png`. The earlier version (X6,
 arm ~25° out at rest) is kept in `cvdc-physio\outputs\full\demo\examples\` for comparison.
+
+## 4b. Four-panel export videos (X9; offline, CPU)
+
+```
+.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --ghost --export4 cvdc-physio\outputs\full\demo\examples_x7\E01_P03_F_FL_4panel.mp4
+.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E02 P07 F ML --ghost --export4 cvdc-physio\outputs\full\demo\examples_x7\E02_P07_F_ML_4panel.mp4
+.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E03 P05 F FL --ghost --export4 cvdc-physio\outputs\full\demo\examples_x7\E03_P05_F_FL_4panel.mp4
+.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 F FL --ghost --export4 cvdc-physio\outputs\full\demo\examples_x7\E04_P10_F_FL_4panel.mp4
+```
+
+`--export4` renders without a window, as fast as the CPU allows (~45 s per video; the first run per exercise and fold
+also encodes that fold's training reps for the PCA, cached in `cvdc-physio\outputs\full\demo\pca\`), and writes the
+video at the source's frame rate, so it plays back at normal speed. Same console output and scores as §1. Layout:
+**top-left** the patient video with the skeleton (error joints red, face blurred); **top-right** the PT reference panel
+(as in the live window); **bottom-left** "estimated 3D (single camera)": the patient (green) and the PT (cyan, at the
+frame the reference panel shows) from MediaPipe's world landmarks, centred on the mid-hip, torso-scaled, with a slowly
+turning camera (12°/s); **bottom-right** the Proposed model's embedding of every completed rep (yellow trail) and the
+PT reference (cyan star) in the PCA plane of that fold's training reps (dots coloured by score), the distance gauge
+(centred cosine to the PT reference) and the rep scores, with a per-rep table. The live window stays two-panel.
+Screenshots: `…_4panel_rep4_peak_<t>s.png` in the same folder.
 
 ## 5. Streamlit app
 
