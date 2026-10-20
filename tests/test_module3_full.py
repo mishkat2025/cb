@@ -100,3 +100,23 @@ def test_every_exercise_config_builds_a_template():
         ref = build_reference(sigs, ac, 30)
         assert set(ref["curves"]) == set(ac["channels"]) and ref["feat"].shape[0] == ref["n"]
         assert all(r["type"] for r in ac["rules"])
+
+
+def test_rom_and_channel_centre_overrides():
+    """M18: the range target and single channels can be centred on the experts (or back on the PT demo)."""
+    ref = {"main": "m", "channels": ["m", "k"], "curves": {"m": np.full(10, 50.0), "k": np.full(10, 10.0)},
+           "rom": 20.0, "n": 10}
+    lib = {"bias": {"m": np.zeros(10), "k": np.zeros(10)}, "sigma": {"m": np.full(10, 5.0), "k": np.full(10, 5.0)},
+           "mean": {"m": np.full(10, 50.0), "k": np.full(10, 30.0)}, "rom_bias": 0.0, "rom_sd": 5.0, "rom_mu": 25.0,
+           "speed_mu": 0.0, "speed_sd": 1.0}
+    al = {"curves": {"m": np.full(10, 50.0), "k": np.full(10, 30.0)}, "omega": np.zeros(10), "log2_speed": 0.0}
+    ac = {"min_defined_frac": 0.3, "fps": 30, "rom_direction": "min", "posture_centre": "experts",
+          "posture_channels": ["k"]}
+    base = compare({"rom": 30.0}, al, ref, lib, ac)["measures"]
+    assert base["rom_target"] == pytest.approx(20) and base["dev_abs_k"] == pytest.approx(0)   # k on the experts
+    m = compare({"rom": 30.0}, al, ref, lib, {**ac, "rom_centre": "experts"})["measures"]
+    assert m["rom_target"] == pytest.approx(25) and m["rom_shortfall"] == pytest.approx(5)
+    m = compare({"rom": 30.0}, al, ref, lib, {**ac, "channel_centre": {"k": "pt_demo"}})["measures"]
+    assert m["dev_abs_k"] == pytest.approx(20)                                                   # k back on the demo
+    with pytest.raises(ValueError):
+        compare({"rom": 30.0}, al, ref, lib, {**ac, "rom_centre": "median"})

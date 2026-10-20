@@ -27,6 +27,8 @@ assess:                          # Module III (M16 starting definitions, impleme
                                  # against this exercise's EAAQ when the appendix is available (M5)
   angle: forearm_elevation       # forearm vs the trunk's up axis (3D): ~130 (forward-down) -> ~27 deg (up)
   rom_direction: min             # M17: the end range is the minimum (forearm up)
+  rom_centre: experts            # M18 (post-hoc, user 2026-10-20): the range target = the >= 95 experts' mean end range
+                                 # per view (training subjects); the V3 demo (19 deg) is beyond most experts (~27 deg)
   align: forearm                 # M17: DTW on the forearm direction in the trunk frame (the upper arm stays at 90/90)
   mirror_left_arm: true
   template_both_sides: true      # M3: V3 shows both arms; the left one is mirrored and averaged in

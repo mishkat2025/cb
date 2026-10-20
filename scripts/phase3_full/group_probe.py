@@ -1,8 +1,9 @@
 """E11 (supervisor warning, fourth review): do the embeddings encode the expert / non-expert group more than they order
-the scores within a group? Full scope, GroupKFold-10 (runs/full/<tag>, cvdc.train.run).
+the scores within a group? Full scope, one model per exercise (T17): runs/full/<tag>/<EX>/<method>/fold<k>
+(cvdc.train.run_per_exercise), each exercise with its own GroupKFold-5 folds.
 
-Per encoder and fold, every rep of every subject is embedded with the fold's checkpoint (z, 256-d, plain packs) and
-a video embedding = the mean of its reps' z. Probes are linear, trained on the fold's training subjects' videos and
+Per exercise, encoder and fold, every rep of that exercise is embedded with the fold's checkpoint (z, 256-d, plain
+packs) and a video embedding = the mean of its reps' z. Probes are linear, trained on the fold's training subjects' videos and
 scored on its test subjects' videos (pooled over the folds, as E1); features are standardised with the training
 videos; the regularisation is chosen by a subject-grouped 5-fold CV inside the training subjects.
   group probe   logistic regression expert vs non-expert (class-balanced weights), one per exercise that has both
@@ -12,11 +13,12 @@ videos; the regularisation is chosen by a subject-grouped 5-fold CV inside the t
   score probe   ridge regression of the total score within each exercise x group stratum; out-of-fold Spearman and
                 R2 against the within-group training mean (R2 > 0 = better than the group-only baseline); pooled
                 within group after subtracting each video's within-group training mean from label and prediction
-Encoders: B1, B2-MediaPipe, B2-KTPFormer, Proposed (lambda 1.0) final checkpoints; the frozen CVDC encoder
+Encoders: B1, B2-KTPFormer, Proposed (lambda 1.0) final checkpoints; the frozen CVDC encoder
 (Proposed alternative = the encoder after CVDC); the random-init encoder of the 2D input (seed of the fold), as a
 floor. 95% CIs: subject bootstrap within expert / non-expert (E17).
 
-usage: python scripts/phase3_full/group_probe.py [--config configs/data_full.yaml] [--tag full_gkf10] [--boot 2000]
+usage: python scripts/phase3_full/group_probe.py [--config configs/per_exercise.yaml] [--tag perex_gkf5] [--boot 2000]
+       [--exercises E01 ...] [--device cpu]
 Writes group_probe_summary.csv, group_probe_per_exercise.csv, group_probe_predictions.csv, score_probe.csv to
 <eval.results_dir>/<tag>/.
 """
@@ -40,11 +42,10 @@ from cvdc.data.dataset import PackData  # noqa: E402
 from cvdc.eval.metrics import interval, item_weights, regression, subject_draws, wranks  # noqa: E402
 from cvdc.models.model import CVDCModel  # noqa: E402
 from cvdc.train.run import method_config  # noqa: E402
-from cvdc.train.trainer import fold_plan, forward_all, get_device, seed_everything  # noqa: E402
+from cvdc.train.trainer import fold_plan, forward_all, get_device, items_of, seed_everything  # noqa: E402
 
 ENCODERS = [("init_xy", "random-init encoder (2D input)", "b1", "init"),
             ("b1", "B1 (2D xy, scratch)", "b1", "final"),
-            ("b2_mediapipe", "B2-MediaPipe (world xyz, scratch)", "b2_mediapipe", "final"),
             ("b2_ktpformer", "B2-KTPFormer (lifted xyz, scratch)", "b2_ktpformer", "final"),
             ("proposed_j1", "Proposed (CVDC + fine-tune, λ = 1.0)", "proposed_j1", "final"),
             ("proposed_lp", "Proposed alt. = encoder after CVDC (frozen)", "proposed_lp", "final")]
@@ -52,11 +53,13 @@ C_GRID = [1e-3, 1e-2, 1e-1, 1.0, 10.0]
 ALPHA_GRID = [1.0, 10.0, 100.0, 1e3, 1e4, 1e5]
 
 
-def video_embeddings(model, data, cfg):
-    z = forward_all(model, data, torch.arange(len(data), device=data.device), cfg, heads=False)["z"]
-    nv = len(data.vmeta)
-    s = torch.zeros(nv, z.shape[1], device=z.device).index_add_(0, data.video_of, z)
-    return (s / data.v_nreps[:, None].float()).cpu().numpy()
+def video_embeddings(model, data, cfg, items):
+    """(video codes, (n_videos, 256) mean rep embedding) for the videos of ``items``."""
+    z = forward_all(model, data, items, cfg, heads=False)["z"]
+    vids, seg = torch.unique(data.video_of[items], return_inverse=True)
+    s = torch.zeros(len(vids), z.shape[1], device=z.device).index_add_(0, seg, z)
+    cnt = torch.bincount(seg, minlength=len(vids)).float()
+    return vids.cpu().numpy(), (s / cnt[:, None]).cpu().numpy()
 
 
 def load_encoder(cfg, data, root, method, stage, fold):
@@ -116,7 +119,7 @@ def group_probe(E, vm, plans, view_matched=False):
             out = vm.iloc[te][["video_id", "subject", "group", "exercise", "view", "variation"]].copy()
             out["fold"], out["p_nonexpert"], out["C"] = p["fold"], prob, bp["C"]
             rows.append(out)
-    return pd.concat(rows, ignore_index=True)
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
 def score_probe(E, vm, plans):
@@ -164,9 +167,10 @@ def draws(d, n_boot, seed):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--config", default="configs/data_full.yaml")
+    ap.add_argument("--config", default="configs/per_exercise.yaml")
     ap.add_argument("--model-config")
-    ap.add_argument("--tag", default="full_gkf10")
+    ap.add_argument("--tag", default="perex_gkf5")
+    ap.add_argument("--exercises", nargs="+")
     ap.add_argument("--boot", type=int)
     ap.add_argument("--device", help="override train.device (e.g. cpu while a training job holds the GPU)")
     a = ap.parse_args()
@@ -184,32 +188,36 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     smoke = a.tag.endswith("_smoke")
     data = PackData(cfg, "rep", get_device(cfg), lift="ktpformer")
-    vm = data.vmeta.reset_index(drop=True)
-    plans = fold_plan(cfg, data.meta, smoke=smoke)
-    plans = [p for p in plans if (root / "b1" / f"fold{p['fold']}" / "done.json").exists()]
     gp_rows, sp_rows = [], []
-    for key, label, method, stage in ENCODERS:
-        if not all((root / method / f"fold{p['fold']}" / "done.json").exists() for p in plans):
-            print(f"skip {key}: not every fold is finished", flush=True)
-            continue
-        E = {}
-        for p in plans:
-            model, c = load_encoder(cfg, data, root, method, stage, p["fold"])
-            E[p["fold"]] = video_embeddings(model, data, c)
-            del model
-        # probes per fold use that fold's encoder for its training and test videos
-        g, gv, s = [], [], []
-        for p in plans:
-            g.append(group_probe(E[p["fold"]], vm, [p]))
-            gv.append(group_probe(E[p["fold"]], vm, [p], view_matched=True))
-            s.append(score_probe(E[p["fold"]], vm, [p]))
-        for df, kind in ((pd.concat(g), "all"), (pd.concat(gv), "view_matched")):
-            df["encoder"], df["kind"] = key, kind
-            gp_rows.append(df)
-        s = pd.concat(s)
-        s["encoder"] = key
-        sp_rows.append(s)
-        print(f"{key}: probes done ({time.time() - t0:.0f} s)", flush=True)
+    for ex in a.exercises or sorted(data.meta.exercise.unique()):
+        data.set_scope([ex])
+        plans = fold_plan(cfg, data.meta[data.meta.exercise == ex], smoke=smoke)
+        ex_root = root / ex
+        plans = [p for p in plans if (ex_root / "b1" / f"fold{p['fold']}" / "done.json").exists()]
+        for key, label, method, stage in ENCODERS:
+            if not plans or not all((ex_root / method / f"fold{p['fold']}" / "done.json").exists() for p in plans):
+                print(f"skip {ex} {key}: not every fold is finished", flush=True)
+                continue
+            g, gv, s = [], [], []
+            for p in plans:  # probes per fold use that fold's encoder for its training and test videos
+                model, c = load_encoder(cfg, data, ex_root, method, stage, p["fold"])
+                vids, E = video_embeddings(model, data, c, items_of(data, p["train"] + p["test"]))
+                del model
+                vm = data.vmeta.iloc[vids].reset_index(drop=True)
+                g.append(group_probe(E, vm, [p]))
+                gv.append(group_probe(E, vm, [p], view_matched=True))
+                s.append(score_probe(E, vm, [p]))
+            for parts, kind in ((g, "all"), (gv, "view_matched")):
+                parts = [x for x in parts if len(x)]
+                if parts:
+                    df = pd.concat(parts)
+                    df["encoder"], df["kind"] = key, kind
+                    gp_rows.append(df)
+            s = pd.concat(s)
+            s["encoder"] = key
+            sp_rows.append(s)
+            print(f"{ex} {key}: probes done ({time.time() - t0:.0f} s)", flush=True)
+    data.set_scope(None)
     GP, SP = pd.concat(gp_rows, ignore_index=True), pd.concat(sp_rows, ignore_index=True)
     GP.to_csv(out / "group_probe_predictions.csv", index=False)
     SP.to_csv(out / "score_probe_predictions.csv", index=False)

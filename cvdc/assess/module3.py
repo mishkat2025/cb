@@ -63,8 +63,13 @@ def compare(sig, al, ref, lib_v, ac):
         raise ValueError(f"assess.posture_centre {centre!r}: pt_demo | experts")
     posture = set(ac.get("posture_channels") or []) - {ref["main"]}
     main_experts = ac.get("main_centre", "pt_demo") == "experts"  # M17: E06's Hands wrist angle (side views only)
+    per_channel = ac.get("channel_centre") or {}  # M18: per-channel override, experts | pt_demo
     for c in ref["channels"]:
-        if (centre == "experts" and c in posture) or (main_experts and c == ref["main"]):
+        cc = per_channel.get(c) or ("experts" if (centre == "experts" and c in posture) or
+                                    (main_experts and c == ref["main"]) else "pt_demo")
+        if cc not in ("pt_demo", "experts"):
+            raise ValueError(f"assess.channel_centre[{c!r}] = {cc!r}: pt_demo | experts")
+        if cc == "experts":
             t = lib_v["mean"][c]  # M14: posture checks centred on the high-scoring experts of this view
         else:
             t = ref["curves"][c] + lib_v["bias"][c]
@@ -79,7 +84,10 @@ def compare(sig, al, ref, lib_v, ac):
         m[f"D_{c}"] = float(np.nanmean(u[c][ok])) if good else np.nan
         m[f"defined_{c}"] = float(ok.mean())
     main = ref["main"]
-    m["rom_target"] = lib_v["rom_mu"] if main_experts else ref["rom"] + lib_v["rom_bias"]
+    rom_centre = ac.get("rom_centre") or ("experts" if main_experts else "pt_demo")  # M18 (E03), M17 (E06)
+    if rom_centre not in ("pt_demo", "experts"):
+        raise ValueError(f"assess.rom_centre {rom_centre!r}: pt_demo | experts")
+    m["rom_target"] = lib_v["rom_mu"] if rom_centre == "experts" else ref["rom"] + lib_v["rom_bias"]
     # shortfall > 0 = the end range is not reached: below the target for a maximum, above it for a minimum (E03, M17)
     sgn = -1.0 if ac.get("rom_direction", "max") == "min" else 1.0
     m["rom_shortfall"] = sgn * (m["rom_target"] - sig["rom"])

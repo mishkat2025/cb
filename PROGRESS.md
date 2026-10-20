@@ -1198,7 +1198,7 @@ Per exercise (1–2): 0.6 h (E07) to 1.0 h (E01). The cross-view figure by set c
 |---|---|---|
 | E01 expert / non-expert | 0.04 [−0.09, 0.19] / −0.03 | 0.17 [−0.00, 0.33] / −0.03 |
 | E02 expert | 0.16 [−0.04, 0.36] | **0.34 [0.12, 0.52]** |
-| E03 expert / non-expert | **0.19 [0.06, 0.31]** / **0.40 [0.21, 0.56]** | **0.18 [0.02, 0.32]** / **0.40 [0.21, 0.55]** |
+| E03 expert / non-expert (after M18) | **0.23 [0.05, 0.38]** / **0.43 [0.20, 0.60]** | **0.22 [0.03, 0.39]** / **0.42 [0.19, 0.59]** |
 | E04 expert | 0.17 [−0.05, 0.37] | 0.07 |
 | E05 expert / non-expert | 0.10 / **0.38 [0.05, 0.60]** | 0.05 / **0.36 [0.04, 0.59]** |
 | E06 expert | **0.22 [0.04, 0.40]** | **0.23 [0.04, 0.42]** |
@@ -1209,8 +1209,22 @@ Per exercise (1–2): 0.6 h (E07) to 1.0 h (E01). The cross-view figure by set c
 - **Weak positive agreement in most strata, none strong; one negative** (E08 non-experts: a higher Module III score goes with lower physiotherapist scores). The E09 non-expert value rests on 11 subjects whose clips mostly barely move (median score 0), so it mainly separates moving from not moving.
 - **As a predictor** (out-of-fold within-group line vs the within-group mean): no stratum gains with a CI below 0; the largest gains are the non-experts of E03 (−0.82 [−1.54, 0.11]) and E05 (−0.83 [−2.01, 0.45]); E04 MQ and E08 expert lines are slightly worse than the mean (CIs above 0). As in the pilot (E21), the reference score does not beat the within-group mean.
 - **Expert vs non-expert separation** (context): AUC E01 0.98, E09 0.94, E08 0.73, E05 0.71, E03 0.61. Outside E01/E09 the groups score much closer under Module III than under the physiotherapists (e.g. E03 74.7 vs 70.7; physiotherapists 75.4 vs 44.4).
-- **Rule specificity** (share of reps, experts' videos ≥ 95 vs < 80): specific in E02 (posture rules, as after M14), E07 (`other_hip_flexed` 13% vs 26%, `other_knee_flexed` 13% vs 25%, `too_fast` 1% vs 30%), E06 (`too_fast` 2% vs 22%), E04 (`shoulder_elevation_deviation` 16% vs 26%); **not specific** in E03 (`lateral_rotation_range_insufficient` fires in 38% of the best videos' reps: the V3 demo reaches 19° of forearm elevation while the experts stop at ~27°, so the demo-centred ROM target, M10, is beyond most experts) and E08 (`knee_flexion_deviation` 11% vs 0%). `too_fast` fires in 28–81% of non-expert reps everywhere (short clips, quick reps).
-- **View stability** over synced expert performances (rep level, ICC(1)): the full score 0.33 (E03) – 0.68 (E04), but without its speed group (shared rep timing, P6b) 0.03 (E06) – 0.45 (E04); the end-range angle −0.11 – 0.30. Module III's 3D measures stay view-dependent, as in the pilot.
+- **Rule specificity** (share of reps, experts' videos ≥ 95 vs < 80): specific in E02 (posture rules, as after M14), E07 (`other_hip_flexed` 13% vs 26%, `other_knee_flexed` 13% vs 25%, `too_fast` 1% vs 30%), E06 (`too_fast` 2% vs 22%), E04 (`shoulder_elevation_deviation` 16% vs 26%); **not specific** in E03 (`lateral_rotation_range_insufficient` fired in 38% of the best videos' reps: the V3 demo reaches 19° of forearm elevation while the experts stop at ~27°, so the demo-centred ROM target, M10, was beyond most experts; **after the M18 calibration 7% vs 6%**, §6h.8) and E08 (`knee_flexion_deviation` 11% vs 0%, the latter from only 17 videos). `too_fast` fires in 28–81% of non-expert reps everywhere (short clips, quick reps).
+- **View stability** over synced expert performances (rep level, ICC(1)): the full score 0.51 (E03 after M18; 0.33 before) – 0.68 (E04), but without its speed group (shared rep timing, P6b) 0.03 (E06) – 0.45 (E04; E03 0.26 after M18, 0.07 before); the end-range angle −0.11 – 0.30. Module III's 3D measures stay view-dependent, as in the pilot.
+
+### 6h.8 Module III rule calibration (post-hoc, M18) and the E08 non-expert sign (user, 2026-10-20; CPU only)
+`scripts/phase4_full/rule_calibration.py` → `outputs/full/phase4/calibration/summary.md`; before = targets on the PT demo (`outputs/full/phase4/calibration_pt_demo/`, `--set E03:rom_centre=pt_demo --set 'E08:channel_centre={knee_flexion: pt_demo}'`), after = on the ≥ 95 experts per view (fitted per fold on the training subjects; now the default output). Checked: the before run reproduces the earlier E03 output exactly, and the after run changes only E03.
+
+| Rule | version | experts ≥ 95 | experts < 80 | non-experts | agreement with total (experts / non-experts) |
+|---|---|---|---|---|---|
+| E03 `lateral_rotation_range_insufficient` | PT demo (before) | 38% | 35% | 48% | 0.19 / 0.40 |
+| | **experts (after)** | **7%** | 6% | 7% | 0.23 / 0.43 (Δ +0.04 [−0.04, 0.11] / +0.02 [−0.05, 0.09]) |
+| E08 `knee_flexion_deviation` | PT demo (before) | 16% | 0% (17 videos) | 6% | −0.01 / −0.35 |
+| | experts (after = the M14 default already) | 11% | 0% (17 videos) | 4% | −0.04 / −0.33 |
+
+- **E03:** the range rule no longer flags the best videos (38% → 7%) but is still not more frequent in the lower-scoring ones (6%); the mean expert set score rises 74.7 → 81.0, the view stability of the rep score improves (ICC 0.33 → 0.51; without speed 0.07 → 0.26), agreement changes within noise.
+- **E08 knee rule:** its target was already the experts' curve (E08's knee is a posture channel under M14), so nothing new was applied; the demo-centred version fires more (16% vs 11%). Its 0% in the experts' videos < 80 comes from 17 videos, so the rule's specificity cannot be judged in E08 (56% of its expert videos score 100).
+- **E08 non-experts (ρ −0.33): the speed group carries the sign.** Without it the set score agrees positively (+0.22 [−0.05, 0.41]); without any other group it stays negative. The better non-experts (P27, P45–P50; physiotherapists 45–60) do 1.2–2 reps per clip at ~2 s per rep and are flagged `too_fast` in 42–100% of their reps; the lowest (P29, P38, P41: PF1 ≈ 0, scores 0–8) do one slow ~3–4 s rep, close to the experts' tempo, with normal end ranges, so Module III rates them higher. The rep count per clip (ρ +0.60) and the speed ratio (+0.54) are what tracks the physiotherapists here; the knee deviation goes the right way (ρ −0.46). The speed centre was not changed (M5a, M15).
 
 ### 6h.7 Phase 6 demo code (CPU, during the training; twelfth review item 5)
 `demo/pipeline.py` (engine), `demo/live.py` (video file at real-time speed, or `--source 0`), `demo/app.py` (Streamlit); decision X5.
@@ -1228,7 +1242,7 @@ The pilot phases ran on **E01 + E02** (§0); the full scope (all nine) has Phase
 - [x] **Phase 1 on the full scope (E01–E09)** (2026-10-20; §5b): video root and new folders (`configs/data_full.yaml`); Pose for 3,685 videos + Hands for E06 (on wrist crops); sync with S8 and the extended motion candidates; reps with the approved signals, adaptive thresholds and the rep-phase fix (P6c); packs; KTPFormer lift; renders and report; E05 PF1 motion check; E06 Hands check; E01/E02 vs the pilot and E03–E09 vs Step 0; 20 new tests.
 - [x] **E09 DTW angles by the warp test** (eleventh review; §6h.1): arm angles, pairs rebuilt.
 - [x] ~~Shared all-exercise GroupKFold-10 run~~ (eleventh review): started, **stopped** (twelfth review: one model per exercise); partial outputs archived (§6h.2).
-- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [running]; per-exercise report [ ]; Module III E03–E09 [x] (§6h.6); Phase 6 demo [x] (§6h.7); (6) cross-view per exercise [ ]; (7) LOSO per exercise: not started (supervisor / cloud).
+- [ ] **One model per exercise (T17; §6h):** runner + smoke test [x]; runtime estimates [x]; (1–2) GroupKFold-5 main runs [running]; per-exercise report [ ]; Module III E03–E09 [x] (§6h.6; rule calibration M18, §6h.8); Phase 6 demo [x] (§6h.7); (6) cross-view per exercise [ ]; (7) LOSO per exercise: not started (supervisor / cloud).
 - [x] **Tenth-review changes** (2026-10-20; §5b.3, §5b.10, §5b.11): E06 wrist angle in side views only (Phase 4); rep-phase fix accepted; E03 / E09 rep signals re-chosen by cross-view agreement; per-exercise DTW angles; CVDC pairs built for the full scope; 2 more tests (187). **Not started:** any training on the full scope (waits for the user's confirmation of the final evaluation scheme).
 - [x] **Phase 1, keypoints and preprocessing** (2026-10-17; results in §5)
   - [x] `cvdc/data/`:

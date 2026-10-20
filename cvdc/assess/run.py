@@ -17,6 +17,7 @@ side camera sees (P1c; front views: no wrist channel), with that arm's other cha
 
 usage: python -m cvdc.assess.run [--config C] [--exercises E03 ...] [--workers 8] [--posture-centre pt_demo|experts]
        [--out DIR] [--no-json]
+``--set EX:KEY=VALUE`` overrides an exercise's assess key (M18 before / after runs).
 Writes <out> (default: the folder above ``assess.json_dir``, outputs/phase4/ for the pilot): module3_reps.csv,
 module3_errors.csv, module3_videos.csv, reference_curves.csv, library_fold_counts.csv, json/<video_id>.json;
 <templates.library_dir>/<EX>.{npz,json}. ``--posture-centre`` overrides
@@ -124,11 +125,20 @@ def main():
     ap.add_argument("--posture-centre", choices=["pt_demo", "experts"], help="override assess.posture_centre (M14)")
     ap.add_argument("--out", help=f"output directory (default: the folder above assess.json_dir; pilot {OUT})")
     ap.add_argument("--no-json", action="store_true", help="skip the per-video JSON files")
+    ap.add_argument("--set", action="append", default=[], metavar="EX:KEY=YAML",
+                    help="override an exercise's assess key, e.g. E03:rom_centre=pt_demo or "
+                         "'E08:channel_centre={knee_flexion: pt_demo}' (M18 before / after runs)")
     a = ap.parse_args()
     t0 = time.time()
     cfg = load_config(a.config)
     if a.posture_centre:
         cfg["assess"]["posture_centre"] = a.posture_centre
+    for spec in a.set:  # M18: reproduce the uncalibrated (PT-demo-centred) rules
+        import yaml
+        ex_key, val = spec.split("=", 1)
+        ex, key = ex_key.split(":", 1)
+        cfg["exercises"][ex.upper()].setdefault("assess", {})[key] = yaml.safe_load(val)
+        print(f"override {ex.upper()} assess.{key} = {yaml.safe_load(val)!r}")
     out = resolve(a.out) if a.out else resolve(cfg["assess"]["json_dir"]).parent
     (out / "json").mkdir(parents=True, exist_ok=True)
     print(f"posture checks centred on: {cfg['assess'].get('posture_centre', 'pt_demo')}; output {out}")
