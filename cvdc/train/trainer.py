@@ -5,6 +5,7 @@
                  validation split (T8): ~20% of the fold's training subjects per group, seeded per fold. Early
                  stopping and checkpoint selection use only the inner validation subjects; the model trains on
                  the remaining (inner training) subjects; the test fold is never used for either.
+  loso_plans     the same for leave-one-subject-out (one fold per subject, E1)
   EarlyStopping  keeps the best state by the (optionally EMA-smoothed) validation metric, only from ``min_epochs``
                  on, and stops after ``patience`` eligible epochs without improvement (T8, T8b)
   warmup_cosine  linear warm-up, then cosine decay over the max-epoch budget (T9)
@@ -24,7 +25,7 @@ import torch
 import yaml
 
 from ..config import REPO
-from ..eval.splits import check_no_leakage, group_kfold, subject_table
+from ..eval.splits import check_no_leakage, group_kfold, loso, subject_table
 
 
 def get_device(cfg):
@@ -96,6 +97,23 @@ def fold_plan(cfg, meta, smoke=False):
         plans = [p]
     for p in plans:
         check_plan(p)
+    return plans
+
+
+def loso_plans(cfg, meta):
+    """Leave-one-subject-out (E1): one plan per subject of ``meta`` (sorted), that subject alone as the test set.
+    The inner validation split of the remaining subjects follows the T8 rule of fold_plan (round(inner_frac x n) of
+    each group, at least 1), seeded eval.seed + seed_offset + fold. Returns dicts(fold, subject, train, inner_train,
+    inner_val, test)."""
+    ec, es = cfg["eval"], cfg["train"]["early_stopping"]
+    splits = loso(meta)
+    check_no_leakage(splits, meta.subject.unique())
+    plans = []
+    for f, (tr, te) in enumerate(splits):
+        itr, iva = inner_split(meta, tr, es["inner_frac"], ec["seed"] + es["seed_offset"] + f)
+        p = dict(fold=f, subject=te[0], train=sorted(tr), inner_train=itr, inner_val=iva, test=sorted(te))
+        check_plan(p)
+        plans.append(p)
     return plans
 
 

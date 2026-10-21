@@ -1,0 +1,13 @@
+# LOSO per exercise for the final scope E01-E04 (user, 2026-10-22; DESIGN_DECISIONS E1, T17, C7, E30).
+# Same settings as the GroupKFold-5 per-exercise runs (configs/per_exercise.yaml); only the split changes, and it is
+# set by the runner, not here: eval.split / eval.k below stay the GroupKFold-5 folds whose CVDC encoders LOSO reuses.
+# python -m cvdc.train.run_loso   (detached launch, status, stop: scripts/loso/README.md)
+extends: per_exercise.yaml
+
+eval:
+  loso:
+    exercises: [E01, E02, E03, E04]                      # D18: final scope
+    methods: [b1, b2_ktpformer, proposed_j1, proposed_lp]
+    encoder_tag: perex_gkf5        # C7: per-fold CVDC encoders of runs/full/perex_gkf5/<EX>/<encoder_method>/fold<g>/cvdc
+    encoder_method: proposed_j1
+    smoke_subjects: 2              # smoke: per exercise one expert + one non-expert where both exist, else two subjects

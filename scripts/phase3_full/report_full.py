@@ -140,7 +140,12 @@ def draws_for(d, n_boot, seed):
     return subj.subject.to_numpy(), M
 
 
-def regression_tables(P, strata, entries, active, floors, n_boot, seed, ci):
+VS_DEFAULT = [("base_group", "baseline"), ("base_setfeat", "baseline"), ("base_repcount", "baseline"), ("b1", None)]
+
+
+def regression_tables(P, strata, entries, active, floors, n_boot, seed, ci, vs_list=None):
+    """Score rows and paired deltas of every entry vs each comparison of ``vs_list`` ((method, source); source None =
+    the entry's own source; default VS_DEFAULT, as in every earlier report)."""
     score_rows, delta_rows = [], []
     for sname, ex, grp in strata:
         d = P[stratum_mask(P, ex, grp)]
@@ -182,8 +187,8 @@ def regression_tables(P, strata, entries, active, floors, n_boot, seed, ci):
         for m, src in entries:
             if src == "baseline":
                 continue
-            for vs, vsrc in (("base_group", "baseline"), ("base_setfeat", "baseline"), ("base_repcount", "baseline"),
-                             ("b1", src)):
+            for vs, vsrc in (vs_list or VS_DEFAULT):
+                vsrc = vsrc or src
                 if (vs, vsrc) == (m, src):
                     continue
                 for t in (REP_TARGETS if src == "rep head" else VIDEO_TARGETS):

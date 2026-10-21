@@ -21,6 +21,7 @@ import argparse
 import copy
 import json
 import time
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -70,6 +71,14 @@ def load_cvdc(cfg, data, plan, d, log=print):
         log(f"  cvdc: {d} used training views {info.get('views') or 'all'}, not {plan.get('views') or 'all'}; not "
             "reused")
         return None
+    model = _load_encoder(cfg, data, d)
+    s = json.loads((d / "summary.json").read_text(encoding="utf-8"))
+    log(f"  cvdc: reusing {d} (best epoch {s['best_epoch']}, stopped {s['stopped_epoch']})")
+    return model, {**s, "reused_from": str(d)}
+
+
+def _load_encoder(cfg, data, d):
+    """CVDCModel with the encoder and projection head of <d>/best.pt (a CVDC pretraining run)."""
     ck = torch.load(d / "best.pt", map_location=data.device, weights_only=True)
     if ck["input"] != cfg["model"]["input"]:
         raise RuntimeError(f"{d}: CVDC input {ck['input']} vs {cfg['model']['input']}")
@@ -77,9 +86,46 @@ def load_cvdc(cfg, data, plan, d, log=print):
     sd = ck["model"]
     model.encoder.load_state_dict({k[8:]: v for k, v in sd.items() if k.startswith("encoder.")})
     model.projection.load_state_dict({k[11:]: v for k, v in sd.items() if k.startswith("projection.")})
+    return model
+
+
+def check_shortcut_encoder(info, plan):
+    """C7, the LOSO per-fold-encoder shortcut: ``info`` = run_info.json of a GroupKFold CVDC pretraining. The encoder
+    may be used for the LOSO ``plan`` only if (1) it is the same exercise and training views, (2) no held-out subject
+    of the plan is among the subjects it trained or early-stopped on (its inner training / validation subjects),
+    (3) every held-out subject was in its test fold, and (4) every subject it saw is a training subject of the plan.
+    Returns the record of the check; raises AssertionError on a violation."""
+    held = set(map(str, plan["test"]))
+    seen = set(info["inner_train"]) | set(info["inner_val"]) | set(info.get("train", []))
+    if info.get("exercise") != plan.get("exercise"):
+        raise AssertionError(f"encoder of exercise {info.get('exercise')}, plan of {plan.get('exercise')}")
+    if info.get("views") != plan.get("views"):
+        raise AssertionError(f"encoder views {info.get('views')}, plan views {plan.get('views')}")
+    if held & seen:
+        raise AssertionError(f"LEAKAGE: the encoder saw held-out subject(s) {sorted(held & seen)}")
+    if not held <= set(info["test"]):
+        raise AssertionError(f"held-out subject(s) {sorted(held - set(info['test']))} not in the encoder's test fold")
+    if not seen <= set(plan["train"]):
+        raise AssertionError(f"the encoder saw subjects outside the plan's training set: {sorted(seen - set(plan['train']))}")
+    return {"encoder_fold": info["fold"], "held_out": sorted(held), "held_out_in_encoder_test": True,
+            "held_out_in_encoder_inner_train": False, "held_out_in_encoder_inner_val": False,
+            "encoder_inner_train": len(info["inner_train"]), "encoder_inner_val": len(info["inner_val"]),
+            "encoder_test": sorted(info["test"])}
+
+
+def load_cvdc_shortcut(cfg, data, plan, d, log=print):
+    """The CVDC encoder of GroupKFold run directory ``d`` (<...>/fold<g>/cvdc) for a LOSO plan, after
+    check_shortcut_encoder. Returns (model, summary with the check)."""
+    if not (d / "best.pt").exists() or not (d / "summary.json").exists():
+        raise RuntimeError(f"{d}: no finished CVDC pretraining")
+    info = json.loads((d / "run_info.json").read_text(encoding="utf-8"))
+    chk = check_shortcut_encoder(info, plan)
+    model = _load_encoder(cfg, data, d)
     s = json.loads((d / "summary.json").read_text(encoding="utf-8"))
-    log(f"  cvdc: reusing {d} (best epoch {s['best_epoch']}, stopped {s['stopped_epoch']})")
-    return model, {**s, "reused_from": str(d)}
+    log(f"  cvdc: LOSO shortcut (C7), encoder of GroupKFold fold {info['fold']} ({d}); held out "
+        f"{chk['held_out']}: in its test fold, not among its {chk['encoder_inner_train']} inner-training / "
+        f"{chk['encoder_inner_val']} inner-validation subjects (best epoch {s['best_epoch']})")
+    return model, {**s, "reused_from": str(d), "shortcut_check": chk}
 
 
 def run_method_fold(cfg, data, method, plan, out, linear_probe=None, epochs=None, log=print):
@@ -98,7 +144,9 @@ def run_method_fold(cfg, data, method, plan, out, linear_probe=None, epochs=None
             "cvdc_lambda": c["train"].get("cvdc_lambda", 0.0), "subjects": plan}
     init = None
     if mc["cvdc"]:
-        if mc.get("cvdc_from"):  # T15: share the CVDC encoder that another method of this run pretrained on the fold
+        if plan.get("cvdc_encoder"):  # LOSO per-fold-encoder shortcut (C7): every CVDC method uses that encoder
+            r = load_cvdc_shortcut(c, data, plan, Path(plan["cvdc_encoder"]), log)
+        elif mc.get("cvdc_from"):  # T15: share the CVDC encoder that another method of this run pretrained on the fold
             d = out.parent.parent / mc["cvdc_from"] / f"fold{plan['fold']}" / "cvdc"
             r = load_cvdc(c, data, plan, d, log)
             if r is None:

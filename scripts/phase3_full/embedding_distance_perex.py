@@ -9,7 +9,9 @@ E13) and the L2 distance. Methods: B1, B2-KTPFormer, Proposed (lambda 1.0), the 
 the random-init encoder of each fold (xy, the fold's seed). Embeddings are checked against the training-time snapshot.
 
 usage: python scripts/phase3_full/embedding_distance_perex.py [--config configs/per_exercise.yaml] [--tag perex_gkf5]
-       [--device cpu]
+       [--device cpu] [--exercises E01 ...] [--loso]
+--loso: the LOSO runs of cvdc.train.run_loso (one fold per subject, cvdc.train.trainer.loso_plans), e.g.
+--config configs/per_exercise_loso.yaml --tag perex_loso --exercises E01 E02 E03 E04 --loso.
 Writes <eval.results_dir>/<tag>/embedding_distance_reps.csv (exercise, method, fold, video_id, rep, side, d_cos,
 d_l2, is_test).
 """
@@ -31,7 +33,7 @@ from cvdc.data.preprocess import resample_fixed  # noqa: E402
 from cvdc.data.skeleton import JOINT_SETS  # noqa: E402
 from cvdc.models.model import CVDCModel  # noqa: E402
 from cvdc.train.run import method_config  # noqa: E402
-from cvdc.train.trainer import fold_plan, forward_all, get_device, items_of, seed_everything  # noqa: E402
+from cvdc.train.trainer import fold_plan, forward_all, get_device, items_of, loso_plans, seed_everything  # noqa: E402
 from embedding_distance import distances, encode_ref  # noqa: E402
 
 INIT = "init_xy"
@@ -65,6 +67,7 @@ def main():
     ap.add_argument("--methods", nargs="+", default=METHODS)
     ap.add_argument("--exercises", nargs="+")
     ap.add_argument("--device", help="override train.device")
+    ap.add_argument("--loso", action="store_true", help="LOSO runs (one fold per subject) instead of GroupKFold-5")
     a = ap.parse_args()
     t0 = time.time()
     cfg = load_config(a.config)
@@ -80,7 +83,8 @@ def main():
     rows = []
     for ex in a.exercises or sorted(meta.exercise.unique()):
         data.set_scope([ex])
-        plans = fold_plan(cfg, meta[meta.exercise == ex], smoke=smoke)
+        plans = (loso_plans(cfg, meta[meta.exercise == ex]) if a.loso
+                 else fold_plan(cfg, meta[meta.exercise == ex], smoke=smoke))
         pack, demo_side = ref_pack(cfg, ex)
         for m in a.methods:
             c = method_config(cfg, "b1" if m == INIT else m)
