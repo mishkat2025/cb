@@ -5,9 +5,10 @@ Display only: nothing here changes a number. Meanings come from MobiPhysio.md, c
 cvdc/assess/module3.py and DESIGN_DECISIONS.md (D5, D11, D13, M11, M12).
 """
 
-EXERCISES = {"E01": "Shoulder abduction", "E02": "Shoulder adduction", "E03": "Shoulder lateral rotation",
-             "E04": "Shoulder medial rotation", "E05": "Shoulder circumduction", "E06": "Wrist extension",
-             "E07": "Hip joint flexion", "E08": "Both-leg flexion (lumbar)", "E09": "Back extension"}
+# as the dataset's exercise folders name them (E02's folder is spelled "Aduction")
+EXERCISES = {"E01": "Abduction", "E02": "Aduction", "E03": "Lateral Rotation", "E04": "Medial Rotation",
+             "E05": "Circumduction", "E06": "Wrist Extension", "E07": "Hip Joint Flexion", "E08": "Both Leg Flexion",
+             "E09": "Back Extension"}
 
 CAMERAS = {"F": "Front", "L": "Left side", "R": "Right side"}
 
