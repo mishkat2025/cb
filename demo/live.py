@@ -270,6 +270,46 @@ def source_fps(src):
         return 30.0
 
 
+class VideoOut:
+    """.mp4 writer: H.264 (libx264, yuv420p, faststart) through PyAV, so the file plays in a browser (the Streamlit
+    app) and in any player; OpenCV's mp4v when PyAV has no H.264 encoder. Odd frame sizes are cropped by one pixel."""
+
+    def __init__(self, path, fps, size):
+        w, h = size[0] // 2 * 2, size[1] // 2 * 2
+        self.wh, self.n, self.c, self.cv = (w, h), 0, None, None
+        try:
+            import av
+            from fractions import Fraction
+            self.c = av.open(str(path), "w", options={"movflags": "+faststart"})
+            self.s = self.c.add_stream("libx264", rate=Fraction(fps).limit_denominator(1001))
+            self.s.width, self.s.height, self.s.pix_fmt = w, h, "yuv420p"
+            self.s.options = {"crf": "20", "preset": "veryfast"}
+        except Exception:  # noqa: BLE001 (no PyAV or no libx264: fall back to OpenCV)
+            if self.c is not None:
+                self.c.close()
+            self.c = None
+            self.cv = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+
+    def write(self, bgr):
+        bgr = bgr[:self.wh[1], :self.wh[0]]
+        if self.cv is not None:
+            self.cv.write(bgr)
+            return
+        import av
+        f = av.VideoFrame.from_ndarray(np.ascontiguousarray(bgr), format="bgr24")
+        f.pts, self.n = self.n, self.n + 1
+        for p in self.s.encode(f):
+            self.c.mux(p)
+
+    def release(self):
+        if self.cv is not None:
+            self.cv.release()
+            return
+        for p in self.s.encode():
+            self.c.mux(p)
+        self.c.close()
+
+
 def even_size(img, max_side=1920):
     """Downscale so the longer side is <= max_side, with even dimensions (mp4)."""
     h, w = img.shape[:2]
@@ -467,14 +507,12 @@ def main():
                     text(p4, "CVDC embedding: no model loaded (Module III only)", (10, 24), 0.55, GREY)
                 grid = even_size(compose4(saved, p2, p3, p4))
                 if writer4 is None:
-                    writer4 = cv2.VideoWriter(str(a.export4), cv2.VideoWriter_fourcc(*"mp4v"), out_fps,
-                                              (grid.shape[1], grid.shape[0]))
+                    writer4 = VideoOut(a.export4, out_fps, (grid.shape[1], grid.shape[0]))
                 writer4.write(grid)
             if panel is not None:
                 canvas, saved = np.hstack([canvas, panel]), np.hstack([saved, panel])
             if writer is None and a.save_mp4:
-                writer = cv2.VideoWriter(str(a.save_mp4), cv2.VideoWriter_fourcc(*"mp4v"), out_fps,
-                                         (canvas.shape[1], canvas.shape[0]))
+                writer = VideoOut(a.save_mp4, out_fps, (canvas.shape[1], canvas.shape[0]))
             if writer is not None:
                 writer.write(saved)
             if not a.headless:

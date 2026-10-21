@@ -104,11 +104,18 @@ Screenshots: `…_4panel_rep4_peak_<t>s.png` in the same folder.
 .venv\Scripts\python.exe -m streamlit run cvdc-physio\demo\app.py
 ```
 
-Sidebar: **dataset video** → E01 / P15 / F / FL (held out by fold 0) → **assess**. Expected: 10 reps, Module III set
-score 88.0, model set score 82.8 (MQ 85.9; PT 76.67); the per-rep table; for the chosen rep, the patient against the
-PT reference at 5 template phases (the PT's own keypoints at the matching frame of its rep, in cyan; per-joint
-differences green / red), the angle-vs-template curves and the embedding plot; **download JSON**. Moving the rep slider
-keeps the result.
+**From the dataset** → exercise `E01 · Shoulder abduction`, filters **Front** and **Full light** → tick the **P03** row
+→ **Assess this video** (X10). Expected (2026-10-21, ~1 min with the four-panel video on): 9 reps (`Too few
+repetitions`, mild), rule-based score 84.7 (Correct), model score 80.2 (fold 0, "never saw participant P03"), PT 60.5
+(Partly correct), no rep problems; the four-panel video plays in the page and is saved as
+`cvdc-physio\outputs\full\demo\app\E01_P03_AF_VFL_GM__proposed_j1__ghost_4panel.mp4` (H.264, 30 s; a second Assess
+reuses it); below: the per-rep table, one rep in detail (problems as sentences, measurements, score breakdown that adds
+up to the rep score, angle differences, the model's answers), the patient-vs-PT and angle plots, the model section with
+the embedding map, the JSON download and the glossary.
+
+Problems check (video toggle off, ~30 s): `E02 · Shoulder adduction`, **Front**, **Medium light**, **P07** → 14 reps,
+73.3 / model 95.5 (PT 47.6); reps 3, 8, 11 and 13 show `Movement too small (arm movement across the body)` (severe) with
+`Arm height off` and `Too fast`.
 
 ## 6. Automated checks
 
