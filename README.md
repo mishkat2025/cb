@@ -88,8 +88,10 @@ No webcam on this machine: video files play at real-time speed (`--source 0` ope
 model per exercise (T17): give the exercise, or pick a dataset video by its fields (the model fold that held its
 subject out is loaded; otherwise a leakage warning is shown). **The assessment is always Module III's score**
 (X11): with the Proposed model it is the proposal's pipeline (Module III aligns and compares each rep in that fold's
-CVDC embedding space, M19 + M20); without a checkpoint, or with another network, the rule-based Module III. A
-network's own learned score is shown separately, labelled supplementary.
+CVDC embedding space, M19 + M20). The app offers no other model (X12): the comparison networks belong to the
+evaluation; the rule-based Module III runs only as a fallback when the checkpoint is missing (and as the
+developer switches `--method` / `--no-model` of `demo.live`). The network's own learned score is shown
+separately, labelled supplementary.
 
 ```bash
 python -m demo.live --list E03                                   # dataset videos of an exercise

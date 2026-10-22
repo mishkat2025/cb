@@ -55,12 +55,12 @@ the PT's peak). During a hold at the top, the PT stays at the start of its own h
 
 | Check | Command (from `D:\cb`) | Expected |
 |---|---|---|
-| E01 non-expert | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P30 F FL --ghost` | fold 4; 2 reps (`too_few_reps`, severe); Module III 67.6 / model 14.2 (PT 64.3) |
-| E03 non-expert, one-rep clip | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E03 P30 F FL --ghost` | fold 4; 1 rep (`too_few_reps`, severe); 89.6 / 52.5 (PT 50.0) |
-| E01 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 L FL --ghost` | fold 0; prints `ghost off: the L view is not the reference's front view`; 9 reps; 90.0 / 60.9 (PT 59.0); panel says to compare the 3D-angle differences, not the picture |
-| E02 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E02 P07 R ML --ghost` | fold 2; ghost off; 16 reps; 76.8 / 82.6 (PT 47.6). Side views follow the PT poorly (X7 check) |
-| E04 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 L FL --ghost` | fold 1; ghost off (`not the reference's oblique view`); 9 reps; 76.1 / 79.6 (PT 81.9) |
-| Module III only | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --no-model` | no checkpoint needed (X3); 9 reps; rule-based Module III 84.7; no supplementary score |
+| E01 non-expert | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P30 F FL --ghost` | fold 4; 2 reps (`too_few_reps`, severe); assessment 56.7 / suppl. model 14.2 (PT 64.3) |
+| E03 non-expert, one-rep clip | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E03 P30 F FL --ghost` | fold 4; 1 rep (`too_few_reps`, severe); 90.9 / 52.5 (PT 50.0) |
+| E01 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 L FL --ghost` | fold 0; prints `ghost off: the L view is not the reference's front view`; 9 reps; 88.7 / 60.9 (PT 59.0); panel says to compare the 3D-angle differences, not the picture |
+| E02 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E02 P07 R ML --ghost` | fold 2; ghost off; 16 reps; 81.5 / 82.6 (PT 47.6). Side views follow the PT poorly (X7 check) |
+| E04 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 L FL --ghost` | fold 1; ghost off (`not the reference's oblique view`); 9 reps; 76.5 / 79.6 (PT 81.9) |
+| Developer check: the fallback without a model | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --no-model` | runs with no checkpoint (X3; in the app only as the automatic fallback when the model is missing, X12); 9 reps; rule-based Module III 84.7; no supplementary score |
 | Leakage warning | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P11 F FL --fold 0` | prints `WARNING: LEAKAGE: subject P11 was in the training split of E01 proposed_j1 fold 0 ...` (red line in the window) |
 | A video file | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --source "D:\cb\dataset\videos\E01(Abduction)\E01_P03_AF_VFL_GM.mp4" --exercise E01 --view F --ghost` | the same as the first E01 row (the subject is looked up, so the held-out fold is used) |
 
@@ -110,11 +110,11 @@ Screenshots: `…_4panel_rep4_peak_<t>s.png` in the same folder.
 → **Assess this video** (X10). Expected (2026-10-21, ~1 min with the four-panel video on): 9 reps (`Too few
 repetitions`, mild), assessment score 87.7 (Correct; Module III with the CVDC model, fold 0), PT 60.5
 (Partly correct), no rep problems; the four-panel video plays in the page and is saved as
-`cvdc-physio\outputs\full\demo\app\E01_P03_AF_VFL_GM__proposed_j1__ghost_4panel.mp4` (H.264, 30 s; a second Assess
+`cvdc-physio\outputs\full\demo\app\E01_P03_AF_VFL_GM__proposed_j1__ghost_4panel_x11.mp4` (H.264, 30 s; a second Assess
 reuses it); below: the per-rep table, one rep in detail (problems as sentences, measurements, score breakdown that adds
 up to the rep score, angle differences, the network's own outputs marked supplementary), the patient-vs-PT and angle
 plots, the **Supplementary** section at the end (the network's set score 80.2, its answers and the embedding map; X11),
-the JSON download and the glossary. With **No network** in the sidebar the assessment is the rule-based 84.7.
+the JSON download and the glossary. The app has no model menu (X12): it always runs the proposal's pipeline.
 
 Problems check (video toggle off, ~30 s): `E02 · Aduction`, **Front**, **Medium light**, **P07** → 14 reps,
 73.3 / model 95.5 (PT 47.6); reps 3, 8, 11 and 13 show `Movement too small (arm movement across the body)` (severe) with

@@ -1,8 +1,9 @@
 """Phase 6 Streamlit app (spec §10; X5, X9, X10): pick a dataset video from a readable, filterable table (or upload
 one) -> the four-panel video (X9: patient | PT reference / estimated 3D | CVDC embedding; faces blurred, D10), saved to
 <outputs>/demo/app/ and played in the page, and the per-rep report in plain language: the assessment, which is always
-Module III's score and verdict (X11: with the Proposed CVDC model, Module III aligns and compares in its embedding space,
-M19 + M20; otherwise rule-based), every problem as a sentence (joint, time, measured / target, severity), the
+Module III's score and verdict (X11, X12: the proposal's pipeline only: Module III aligns and compares in the Proposed
+CVDC model's embedding space, M19 + M20; the rule-based Module III only as a fallback when the checkpoint is missing;
+no model menu), every problem as a sentence (joint, time, measured / target, severity), the
 measurements and how the score was made, the patient-vs-PT and angle-vs-template plots, and, in a separate section
 labelled supplementary, the network's own learned score, EAAQ items, distance to the PT reference and embedding plot
 (the instrument used to compare the models, not the pipeline's output), the raw JSON and a glossary.
@@ -95,14 +96,15 @@ def pyplot(fig, alt):
 # ------------------------------------------------------------------ assessment and the four-panel export
 
 
-def load_model(cfg, ex, method, subject):
-    if method == R.NO_MODEL:
-        return None, ""
+def load_model(cfg, ex, subject):
+    """The proposal's pipeline only (X12): the Proposed CVDC model of the fold that held the subject out. Without a
+    trained checkpoint the app falls back to the rule-based Module III and says so (not offered as a choice)."""
     try:
-        model = ExerciseModel(cfg, ex, method, None, subject, "cpu")
+        model = ExerciseModel(cfg, ex, cfg["eval"]["proposed_default"], None, subject, "cpu")
         return model, model.warning or ""
     except FileNotFoundError as e:
-        return None, f"No trained model found, so only the rule-based check runs ({e})."
+        return None, (f"The trained CVDC model is missing, so this run uses the rule-based Module III only, without "
+                      f"the network ({e}).")
 
 
 def assess(path, cfg, ex, view, model, bar):
@@ -154,8 +156,12 @@ def finish_export(job, status):
     return None, "\n".join(tail)
 
 
+EXPORT_VERSION = "x11"  # in the file name, so a video made before the X11 / X12 assessment is never reused
+
+
 def video_name(name, model, ghost):
-    return f"{name}__{model.method if model is not None else 'module3'}{'__ghost' if ghost else ''}_4panel.mp4"
+    return (f"{name}__{model.method if model is not None else 'module3'}{'__ghost' if ghost else ''}"
+            f"_4panel_{EXPORT_VERSION}.mp4")
 
 
 # ------------------------------------------------------------------ plots
@@ -463,11 +469,11 @@ def show_glossary():
         st.markdown(
             f"- **Assessment (Module III):** every repetition is lined up in time with the physiotherapist's demo "
             f"and compared with it: joint angles, range, speed and symmetry, each against the range the "
-            f"high-scoring experts stay in. With the Proposed CVDC model the lining up happens in the model's "
-            f"camera-independent representation, and the angular speed and the movement pattern are scored too "
-            f"(the proposal's pipeline); without it the comparison is rule-based.\n"
-            f"- **Supplementary network score:** a neural network's own score, trained on the physiotherapists' "
-            f"scores (one per exercise); used to compare the networks, not the assessment.\n"
+            f"high-scoring experts stay in. The lining up happens in the CVDC model's camera-independent "
+            f"representation, and the angular speed and the movement pattern are scored too (the proposal's "
+            f"pipeline).\n"
+            f"- **Supplementary network score:** the CVDC network's own score, trained on the physiotherapists' "
+            f"scores (one network per exercise); the project uses it to compare networks, not as the assessment.\n"
             f"- **Verdict:** {R.QUALITY_RULE}\n"
             f"- **Severity:** {R.SEVERITY_RULE}\n"
             f"- **SD (standard deviation):** how much the high-scoring experts vary. 1 SD away = an ordinary "
@@ -545,9 +551,8 @@ def main():
     cfg = config()
     with st.sidebar:
         st.header("Settings")
-        opts = list(dict.fromkeys([cfg["eval"]["proposed_default"], "b1", "proposed_lp", R.NO_MODEL]))
-        method = st.radio("Network", opts, format_func=lambda m: R.label({k: v[0] for k, v in R.MODELS.items()}, m),
-                          captions=[R.MODELS.get(m, ("", ""))[1] for m in opts])
+        st.caption("Pipeline (the proposal's): 2D pose → ST-GCN with CVDC → Module III → score and the problems "
+                   "found. The comparison networks are part of the evaluation (the final report), not of this demo.")
         make_video = st.toggle("Make the four-panel video", value=True,
                                help="Takes about a minute. Saved in outputs/full/demo/app/ and played on this page. "
                                     "Faces are blurred.")
@@ -595,9 +600,9 @@ def main():
                 prow = match.iloc[0] if not match.empty else None
                 title = (f"**{R.exercise(ex)}** · uploaded file `{up.name}` · **{R.CAMERAS[view]}** camera"
                          + (f" (dataset video of participant {subject})" if subject else ""))
-            model, note = load_model(cfg, ex, method, subject)
-            st.write(f"Network: {R.MODELS[model.method][0]}, fold {model.fold}" if model is not None
-                     else "Network: none (rule-based Module III)")
+            model, note = load_model(cfg, ex, subject)
+            st.write(f"Model: {R.MODELS[model.method][0]}, fold {model.fold}" if model is not None
+                     else "Model: missing (rule-based Module III only)")
             out = resolve(cfg["outputs"]["phase1"]).parent / "demo" / "app" / video_name(name, model, ghost)
             job, video, reused = None, None, False
             if make_video and out.exists():

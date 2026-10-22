@@ -25,19 +25,12 @@ SEVERITY = {"mild": "Mild", "moderate": "Moderate", "severe": "Severe"}
 SEVERITY_RULE = ("How far the movement went outside the range the high-scoring experts stay in: Mild = up to 1 expert "
                  "SD beyond it, Moderate = 1 to 2 SD, Severe = more than 2 SD.")
 
-NO_MODEL = "none (Module III only)"
-# X11: the assessment is always Module III's score; a network's own learned score is a supplementary output
+# X12: the demo runs the proposal's pipeline only (the Proposed CVDC model); the comparison networks belong to the
+# evaluation. X11: the assessment is Module III's score; the network's own learned score is supplementary.
 MODELS = {
-    "proposed_j1": ("Proposed CVDC model (default)",
+    "proposed_j1": ("Proposed CVDC model",
                     "The proposal's pipeline: Module III lines each rep up with the physiotherapist's demo in this "
-                    "network's camera-independent (CVDC) representation and scores it. The network's own learned score "
-                    "is shown separately as a supplementary output."),
-    "b1": ("Baseline network (B1)", "For comparison: the assessment is the rule-based Module III; this network (2D, "
-                                     "no cross-camera step) adds only a supplementary score."),
-    "proposed_lp": ("Proposed network, frozen", "For comparison: the assessment is the rule-based Module III; this "
-                                                 "network adds only a supplementary score."),
-    NO_MODEL: ("No network: rule-based Module III", "Each rep compared with the physiotherapist's demo by joint "
-                                                     "angles only. Needs no trained model."),
+                    "network's camera-independent (CVDC) representation and scores it."),
 }
 ASSESSMENT = {"completed": "Module III with the CVDC model, the proposal's pipeline",
               "rules": "Module III, rule-based, with no network in the score"}
