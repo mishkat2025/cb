@@ -9,6 +9,11 @@ rotation**. The step-1 and Module III results of E05–E09 are a clearly labelle
 [`final_E01_E04_loso_tables.md`](final_E01_E04_loso_tables.md)). Sections 1–6 are the GroupKFold-5 report, unchanged
 apart from item 8 of the summary and the last limitation.
 
+**Update 2026-10-22 (later): the proposal's remaining items are reported in §8** (tables:
+[`completion_tables.md`](completion_tables.md)): classification metrics, results per recording condition, temporal
+stability, a depth check of the CVDC embedding, Module III with the CVDC representation and the angular-velocity
+deviation, and B2 with DepthAnything depth. Sections 1–7 are unchanged.
+
 ## Summary
 
 1. **No network predicts the physiotherapists' score within a group better than the within-group mean**, in any
@@ -280,3 +285,96 @@ check), `explorer.exe D:\cb\cvdc-physio\scripts\full\loso\launch.cmd` (the run, 
 `python scripts\full\loso\status.py`), `python scripts\full\phase3\embedding_distance_perex.py --config
 configs\per_exercise_loso.yaml --tag perex_loso --exercises E01 E02 E03 E04 --loso` (15 min, GPU),
 `python scripts\full\loso\report_loso.py` (2 min). Details: `scripts/full/loso/README.md`, `PROGRESS.md` §6j, decision E30.
+
+## 8. Proposal completion (added 2026-10-22)
+
+**Scope.** The items of the proposal that were not, or only partly, implemented, leaving aside what the dataset rules
+out (no new participants, exercises or fourth camera; no per-rep, error-type or metadata labels; no 3D ground truth,
+so no MPJPE), the final scope E01–E04 and one model per exercise (supervisor). Every number below comes from
+[`completion_tables.md`](completion_tables.md) (generated); decisions D19, A11, M19, M20, E31, E32.
+
+### 8.1 Summary
+
+1. **Quality class (precision / recall / F1 / accuracy).** On the D6 classes derived from the score, every network is
+   weak: pooled over the E01–E04 experts under LOSO, Proposed's quality head reaches accuracy 0.60, macro F1 0.37
+   [0.34, 0.39], κ 0.14 (B1 0.57 / 0.35 / 0.09; the binned group mean 0.54 / 0.30 / −0.03); for the non-experts every
+   network's κ is ≤ 0, while the binned set-features baseline reaches 0.61 / 0.46 / 0.08.
+2. **Recording conditions.** For the experts, no condition (medium or low light, low or high jitter, occlusion) makes
+   any network significantly less accurate than full light (all ΔRMSE CIs include 0; Proposed under high jitter
+   +2.23 [−0.18, 4.96]). Module III's agreement falls under occlusion (experts ρ −0.15 [−0.33, 0.03] vs 0.25
+   [0.07, 0.39] in full light). Pose detection drops only in the left view under low light (0.88) and high jitter (0.84).
+3. **Temporal stability.** KTPFormer's lifted 3D is the steadiest skeleton (rest jitter 0.003 torso lengths in the
+   front view, vs 0.005 for the networks' smoothed 2D input, 0.007 raw 2D and 0.010 raw MediaPipe 3D); high jitter and
+   occlusion raise the raw 2D jitter about 8× (0.006 → 0.044 / 0.046). Rep to rep within one set, Proposed's predicted
+   score varies more than B1's (median SD 2.45 vs 1.40 points); Module III's rep score varies most (3.02).
+4. **Is the CVDC embedding depth-aware?** For the same rep, the side camera measures how far the moving hand travels
+   in depth for the front camera. From the front view alone, the CVDC embeddings predict that depth excursion better
+   than B1 (pooled ΔR² +0.10 [0.03, 0.16] Proposed, +0.11 [0.06, 0.17] frozen CVDC encoder), as well as KTPFormer's
+   explicit 3D (+0.11 [0.05, 0.17]), but the absolute R² stays small (≤ 0.04 pooled, ≤ 0.16 in E02). The embedding
+   carries a little depth information; "depth-aware" holds only in this weak sense.
+5. **Module III with the CVDC representation (M19) and angular velocity (M20).** The proposal's pipeline (Fig. 3)
+   now runs end to end: reps are aligned to the PT template in the Proposed model's embedding space, the joint angles
+   are compared along that alignment, and the embedding distance and the angular-velocity deviation are scored and
+   localised. Agreement with the physiotherapists does not change: pooled experts ρ 0.15 → 0.14 (Δ −0.00 [−0.04,
+   0.03]) under GroupKFold-5 and 0.15 → 0.17 (Δ +0.01 [−0.04, 0.06]) under LOSO; the CVDC alignment alone lowers E03
+   experts' agreement (Δ −0.07 [−0.12, −0.02]). The new embedding rule flags 84% of the E01 non-experts' reps against
+   15–20% of the experts', but it is not more frequent in the experts' weaker videos (< 80) than in their best (≥ 95).
+6. **B2-DepthAnything** (baseline 2 with DepthAnything depth, A11): *running at the time of writing (PROGRESS §0);
+   §8.4 and the tables' section 6 are filled in from `depth_baseline_report.py` when it finishes.*
+
+**In one line:** the proposal's methodology is now implemented in full on E01–E04 (apart from the parts that need
+people or new data), and the added parts confirm the earlier conclusion: CVDC makes the representation consistent
+across cameras and carries a little depth information, but no part of the system judges a performance better than
+the group average does on this dataset.
+
+### 8.2 What was added, briefly
+
+- **Measures (E31):** `scripts/full/completion/classification_conditions.py`, `temporal_stability.py`,
+  `depth_check.py` (the last after `encode.py --z`, which encodes every rep with every fold model and checks each model
+  against the embeddings it saved in training).
+- **Module III (M19, M20):** `configs/completion.yaml`; `cvdc/assess/cvdc_join.py` (per-time CVDC features,
+  `STGCN.sequence`, alignment in the embedding space, frame path); `cvdc.assess.run --join TAG --velocity on|off
+  --loso`. With both switched off the changed code reproduces the published Module III exactly (13,598 reps, max
+  difference 0).
+- **DepthAnything (A11):** Depth-Anything-V2 Small (Apache-2.0 code and weights), `cvdc/models/depth.py`;
+  `depth_extract.py`, `depth_pack.py`; method `b2_depthanything`; `depth_chain.py` runs extraction, packing and both
+  training schemes as one hidden, resumable job.
+- **LOSO (E32):** Module III (published and completed) with per-subject libraries; B2-DepthAnything. Not added, as
+  the proposal does not require them: CVDC pretraining per LOSO subject (C7 shortcut kept) and the cross-view protocol
+  under LOSO.
+
+### 8.3 Limitations of the added parts
+
+- The quality classes are cut from the score, not rated by the physiotherapists, so the classification metrics
+  repeat the score results in another form.
+- The depth check's reference is the side camera's 2D view of the same rep: a real measurement, but noisy (the side
+  view's own keypoint error, an arm partly hidden behind the body) and only one depth direction (forward).
+- Module III's new rules have no error labels to be checked against (as before); their rates are reported.
+- Still not done, because they need people: a usability study and a physiotherapist review of the feedback. The
+  live-camera test is replaced by videos the user records and uploads to the Streamlit app.
+
+### 8.4 B2-DepthAnything
+
+*Pending: filled in when `scripts/full/completion/depth_chain.py` has finished (PROGRESS §0).*
+
+### 8.5 Reproduction
+
+From `D:\cb\cvdc-physio` with `..\.venv\Scripts\python.exe`:
+
+```
+python scripts/full/completion/classification_conditions.py             # 1 min, CPU
+python scripts/full/completion/temporal_stability.py                    # 1 min, CPU
+python scripts/full/completion/encode.py --tag perex_gkf5 --z           # 3 min, GPU
+python scripts/full/completion/encode.py --tag perex_loso --loso        # 5 min, GPU
+python scripts/full/completion/depth_check.py                           # 3 min, CPU
+python -m cvdc.assess.run --config configs/completion.yaml --exercises E01 E02 E03 E04
+python -m cvdc.assess.run --config configs/completion.yaml --exercises E01 E02 E03 E04 --join none --out outputs/full/results/completion/module3_velocity_only --no-json
+python -m cvdc.assess.run --config configs/completion.yaml --exercises E01 E02 E03 E04 --velocity off --out outputs/full/results/completion/module3_join_only --no-json
+python -m cvdc.assess.run --config configs/per_exercise.yaml --exercises E01 E02 E03 E04 --loso --out outputs/full/results/completion/module3_loso_original --no-json
+python -m cvdc.assess.run --config configs/completion.yaml --exercises E01 E02 E03 E04 --loso --join perex_loso --out outputs/full/results/completion/module3_loso --no-json
+python scripts/full/phase4/report_module3.py --config configs/completion.yaml --dir outputs/full/results/completion/<run> [--loso]   # per run folder
+python scripts/full/completion/module3_comparison.py [--loso]
+explorer.exe D:\cb\cvdc-physio\scripts\full\completion\run_depth_chain.cmd   # DepthAnything chain (~8 h, GPU)
+python scripts/full/completion/depth_baseline_report.py
+python scripts/full/completion/report_completion.py                     # assembles reports/completion_tables.md
+```

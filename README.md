@@ -287,6 +287,29 @@ python scripts/pilot/phase5/loso_estimate.py                          # -> outpu
 Measured runtimes (one job at a time): cross-view 3.9 h (Proposed 2.4 h, each baseline ~0.5 h), pair sources 1.8 h
 (the 'all' setting reuses the step (a) encoders), distance + reports ~8 min. Results: `PROGRESS.md` §6e–6g.
 
+## Proposal completion (2026-10-22)
+
+The items of the proposal that were missing or partial (`reports/FINAL_REPORT_E01_E04.md` §8, tables
+`reports/completion_tables.md`, decisions D19, A11, M19, M20, E31, E32). All commands from the repo root; the full
+list with run times is in the final report §8.5.
+
+```bash
+python scripts/full/completion/classification_conditions.py   # precision / recall / F1 / accuracy, recording conditions
+python scripts/full/completion/temporal_stability.py          # jitter, jitter variance, smoothness
+python scripts/full/completion/encode.py --tag perex_gkf5 --z # GPU: CVDC alignments + embeddings of every fold model
+python scripts/full/completion/depth_check.py                 # is the CVDC embedding depth-aware?
+python -m cvdc.assess.run --config configs/completion.yaml --exercises E01 E02 E03 E04   # Module III + M19 + M20
+python scripts/full/completion/module3_comparison.py          # before / after
+python scripts/full/completion/report_completion.py           # assemble reports/completion_tables.md
+```
+
+DepthAnything V2 Small (A11; Apache-2.0): `git clone https://github.com/DepthAnything/Depth-Anything-V2
+third_party/Depth-Anything-V2` (commit a561b84) and `hf download depth-anything/Depth-Anything-V2-Small
+depth_anything_v2_vits.pth --local-dir data/models/depth_anything`. The extraction, packing and the B2-DepthAnything
+training (GroupKFold-5 and LOSO) run as one hidden, resumable job: `explorer.exe
+D:\cb\cvdc-physio\scripts\full\completion\run_depth_chain.cmd` (log and status in
+`outputs/full/results/completion/`), then `python scripts/full/completion/depth_baseline_report.py`.
+
 ## Tests
 
 ```bash

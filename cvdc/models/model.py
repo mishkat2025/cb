@@ -11,7 +11,7 @@ from ..config import exercise_codes
 from .heads import ProjectionHead, TaskHeads, VideoHead
 from .stgcn import STGCN
 
-INPUT_CHANNELS = {"xy": 2, "xyv": 3, "xyz": 3, "xyz_ktpformer": 3}
+INPUT_CHANNELS = {"xy": 2, "xyv": 3, "xyz": 3, "xyz_ktpformer": 3, "xyd_depthanything": 3}
 
 
 class CVDCModel(nn.Module):

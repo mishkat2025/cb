@@ -76,13 +76,23 @@ class STGCN(nn.Module):
         self.out = nn.Identity() if embed_dim == channels[-1] else nn.Linear(channels[-1], embed_dim)
         self.embed_dim = embed_dim
 
-    def forward(self, x):
+    def _feature_map(self, x):
         N, C, T, V = x.shape
         x = self.data_bn(x.permute(0, 3, 1, 2).reshape(N, V * C, T))
         x = x.view(N, V, C, T).permute(0, 2, 3, 1).contiguous()
         for block, imp in zip(self.blocks, self.edge_importance):
             x = block(x, self.A * imp)
-        return self.out(x.mean(dim=(2, 3)))
+        return x  # (N, C_last, T', V)
+
+    def forward(self, x):
+        return self.out(self._feature_map(x).mean(dim=(2, 3)))
+
+    def sequence(self, x):
+        """(N, C, T, V) -> (N, T', embed_dim): the per-time features of the last block, averaged over the joints (T' =
+        T / 4 with the default strides). Their mean over time is ``forward(x)`` (``out`` is affine), so this is the
+        embedding before temporal pooling (proposal completion: the CVDC representation compared over time with the
+        PT template in Module III, M19)."""
+        return self.out(self._feature_map(x).mean(dim=3).transpose(1, 2))
 
     @classmethod
     def from_config(cls, mc, in_channels):

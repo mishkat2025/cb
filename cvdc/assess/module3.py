@@ -91,6 +91,9 @@ def compare(sig, al, ref, lib_v, ac):
         m[f"dev_abs_{c}"] = float(np.nanmean(np.abs(d[ok]))) if good else np.nan
         m[f"dev_mean_{c}"] = float(np.nanmean(d[ok])) if good else np.nan
         m[f"D_{c}"] = float(np.nanmean(u[c][ok])) if good else np.nan
+        # one-sided version (only deviations above the target count; M19's embedding distance, where being closer to
+        # the reference than the experts is no fault)
+        m[f"Dplus_{c}"] = float(np.nanmean(np.maximum(d[ok], 0.0) / s[ok])) if good else np.nan
         m[f"defined_{c}"] = float(ok.mean())
     main = ref["main"]
     rom_centre = ac.get("rom_centre") or ("experts" if main_experts else "pt_demo")  # M18 (E03), M17 (E06)
@@ -114,10 +117,17 @@ def compare(sig, al, ref, lib_v, ac):
 def groups(meas, ac):
     sc = ac["score"]
     ang = [meas[f"D_{c}"] for c in sc["angle_channels"] if np.isfinite(meas.get(f"D_{c}", np.nan))]
-    return {"angle": float(np.mean(ang)) if ang else np.nan,
-            "rom": max(0.0, meas["z_rom"]) if np.isfinite(meas["z_rom"]) else np.nan,
-            "speed": abs(meas["z_speed"]) if np.isfinite(meas["z_speed"]) else np.nan,
-            "symmetry": meas.get(f"D_{sc['symmetry_channel']}", np.nan)}
+    out = {"angle": float(np.mean(ang)) if ang else np.nan,
+           "rom": max(0.0, meas["z_rom"]) if np.isfinite(meas["z_rom"]) else np.nan,
+           "speed": abs(meas["z_speed"]) if np.isfinite(meas["z_speed"]) else np.nan,
+           "symmetry": meas.get(f"D_{sc['symmetry_channel']}", np.nan)}
+    # proposal completion (only when the score config gives them a weight): M20 the angular-velocity channel's mean
+    # distance from its band centre; M19 the one-sided embedding distance to the PT reference
+    if "velocity" in sc["weights"]:
+        out["velocity"] = meas.get("D_angvel", np.nan)
+    if "embedding" in sc["weights"]:
+        out["embedding"] = meas.get("Dplus_emb_dist", np.nan)
+    return out
 
 
 def score(meas, ac):
@@ -164,10 +174,12 @@ def detect_errors(cmp, al, ref, lib_v, sig, ac, rules):
             _, a, b = best
             w = a + int(np.nanargmax(u[a:b + 1]))
             fr = al["span"][a:b + 1]
+            unit = CHANNEL_UNITS.get(c, "deg")
+            nd = 3 if unit == "cosine distance" else 1
+            vals = {"measured": round(float(al["curves"][c][w]), nd), "target": round(float(cmp["target"][c][w]), nd),
+                    "deviation": round(float(d[w]), nd)}
             out.append({"type": r["type"], "joint": joint_name(r["joint"], side),
-                        "measured_deg": round(float(al["curves"][c][w]), 1),
-                        "target_deg": round(float(cmp["target"][c][w]), 1),
-                        "deviation_deg": round(float(d[w]), 1),
+                        **({f"{k}_deg": v for k, v in vals.items()} if unit == "deg" else {**vals, "unit": unit}),
                         "frames": [int(start + fr[:, 0].min()), int(start + fr[:, 1].max())],
                         "severity": severity(float(u[w] - k), cuts), "excess_sd": round(float(u[w] - k), 2)})
         elif kind == "rom_shortfall":
@@ -275,11 +287,33 @@ def validate_report(d):
     return True
 
 
+CHANNEL_UNITS = {"angvel": "deg/s", "emb_dist": "cosine distance"}
+
+
 def assess_config(cfg, ex):
-    """Global ``assess`` settings merged with the exercise's ``assess`` block (``score`` merged key by key)."""
+    """Global ``assess`` settings merged with the exercise's ``assess`` block (``score`` merged key by key).
+
+    Proposal completion (configs/completion.yaml): ``velocity_channel`` (M20) and ``cvdc_join`` (M19) add their
+    channel, centre it on the >= 95 experts (like the speed reference, M5a / M15, and the posture checks, M14) and add
+    their rule: ``angular_velocity_deviation`` at the joint of the exercise's range rule, ``movement_pattern_deviation``
+    (whole body, only above the band). The exercise's own rule list is copied, never changed."""
     g, e = cfg["assess"], (cfg["exercises"][ex].get("assess") or {})
     ac = {**g, **{k: v for k, v in e.items() if k != "score"}}
     ac["score"] = {**g.get("score", {}), **e.get("score", {})}
+    rules = list(ac.get("rules") or [])
+    centre = dict(ac.get("channel_centre") or {})
+    if ac.get("velocity_channel"):
+        centre.setdefault("angvel", "experts")
+        joint = next((r["joint"] for r in rules if r.get("measure") == "rom_shortfall"), "moving_shoulder")
+        if not any(r.get("channel") == "angvel" for r in rules):
+            rules.append({"type": "angular_velocity_deviation", "channel": "angvel", "joint": joint,
+                          "direction": "both"})
+    if ac.get("cvdc_join"):
+        centre.setdefault("emb_dist", "experts")
+        if not any(r.get("channel") == "emb_dist" for r in rules):
+            rules.append({"type": "movement_pattern_deviation", "channel": "emb_dist", "joint": "body",
+                          "direction": "above"})
+    ac["rules"], ac["channel_centre"] = rules, centre
     return ac
 
 

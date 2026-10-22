@@ -175,7 +175,8 @@ def standardise_per_fold(E, plans, col):
 
 def rescore(R, sc, replace=None):
     """Rep score from the group distances X_g (M11), optionally with some groups replaced (dict g -> array)."""
-    gs = ("angle", "rom", "speed", "symmetry")
+    # the configured groups (M11; the proposal-completion runs add velocity and embedding, M19)
+    gs = [g for g in sc["weights"] if f"X_{g}" in R.columns]
     cols = {g: R[f"X_{g}"].to_numpy(float) for g in gs}
     cols.update(replace or {})
     P = np.stack([np.minimum(1.0, cols[g] / sc["d_zero"]) * sc["weights"][g] for g in gs], 1)

@@ -36,7 +36,8 @@ from cvdc.config import data_path, load_config, resolve  # noqa: E402
 from cvdc.data.labels import movement_quality  # noqa: E402
 from cvdc.eval.baselines import ALL_ITEMS, item_activity, video_table  # noqa: E402
 from cvdc.eval.metrics import interval  # noqa: E402
-from cvdc.train.trainer import fold_plan  # noqa: E402
+from cvdc.assess.module3 import assess_config  # noqa: E402
+from cvdc.train.trainer import fold_plan, loso_plans  # noqa: E402
 from group_probe import weighted_auc  # noqa: E402
 from report_phase4 import corr_ci, draws, fci, fmt, oof_line, rescore, view_stability  # noqa: E402
 
@@ -51,13 +52,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", default="configs/per_exercise.yaml")
     ap.add_argument("--boot", type=int)
+    ap.add_argument("--dir", help="a cvdc.assess.run output folder (default: the folder above assess.json_dir)")
+    ap.add_argument("--loso", action="store_true", help="the run used LOSO folds (cvdc.assess.run --loso)")
     a = ap.parse_args()
     t0 = time.time()
     cfg = load_config(a.config)
     ec = cfg["eval"]
     n_boot, ci, seed = a.boot or ec["bootstrap"]["n"], ec["bootstrap"]["ci"], ec["bootstrap"]["seed"]
     low = ec.get("per_exercise_low_confidence_subjects", 15)
-    out = resolve(cfg["assess"]["json_dir"]).parent
+    out = resolve(a.dir) if a.dir else resolve(cfg["assess"]["json_dir"]).parent
     R = pd.read_csv(out / "module3_reps.csv")
     V = pd.read_csv(out / "module3_videos.csv")
     reps = pd.read_csv(data_path(cfg, "reps_csv"))
@@ -76,7 +79,7 @@ def main():
             r = corr_ci(d[t].to_numpy(float), d.ref_set_score.to_numpy(float), W, ci)
             ag.append(dict(exercise=ex, group=g, subjects=ns, videos=len(d), target=t, low_confidence=ns < low, **r))
     for ex in sorted(V.exercise.unique()):
-        plans = fold_plan(cfg, reps[reps.exercise == ex])
+        plans = (loso_plans if a.loso else fold_plan)(cfg, reps[reps.exercise == ex])
         v = V[V.exercise == ex].reset_index(drop=True)
         for t in ("score", "MQ"):
             p, b = oof_line(v, "ref_set_score", t, plans)
@@ -123,7 +126,7 @@ def main():
     rr = []
     for ex, d in R2.groupby("exercise"):
         for c in errs:
-            rules = [x["type"] for x in cfg["exercises"][ex]["assess"].get("rules", [])]
+            rules = [x["type"] for x in assess_config(cfg, ex)["rules"]]  # incl. the rules M19 / M20 add
             if c[4:] not in rules:
                 continue
             e = d[d.group == "expert"]

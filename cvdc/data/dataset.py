@@ -19,7 +19,9 @@ from ..config import data_path, exercise_codes, resolve
 ITEMS = ["PF1", "PF2", "PF4", "CF1", "CF2", "CF3"]  # D5: PF3 is not a target
 
 
-LIFTED = {"xyz_ktpformer": "ktpformer"}
+# input modes read from an extra pack <name>_<suffix>.npz (key 'world', same shape as the main pack): KTPFormer's
+# lifted 3D (A10) and, A11, the 2D x, y with DepthAnything's relative depth at the joints as the third channel
+LIFTED = {"xyz_ktpformer": "ktpformer", "xyd_depthanything": "depthanything"}
 
 
 def scope_mask(scope, meta):

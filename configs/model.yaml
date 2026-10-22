@@ -119,6 +119,7 @@ methods:                        # E14 step (a): identical splits, preprocessing,
   b1: {input: xy, cvdc: false}                  # 2D keypoints, from scratch
   b2_mediapipe: {input: xyz, cvdc: false}       # MediaPipe world landmarks, from scratch
   b2_ktpformer: {input: xyz_ktpformer, cvdc: false}   # KTPFormer lifted 3D (A10), from scratch
+  b2_depthanything: {input: xyd_depthanything, cvdc: false}   # A11 (proposal completion): 2D x, y + DepthAnything depth
   proposed: {input: xy, cvdc: true}             # CVDC pretraining on the fold's training subjects, then full fine-tuning
   # step (a2) Proposed variants (same CVDC encoder per fold):
   proposed_lp: {input: xy, cvdc: true, fine_tune: linear_probe}   # (i) frozen CVDC encoder + heads

@@ -108,6 +108,9 @@ def rep_signals(world, start, end, side, ex_assess, fps, extra=None):
     ex = {c: np.asarray(v, float)[start:end + 1] for c, v in (extra or {}).items()}
     ch = channel_curves(P, side, ex_assess["channels"], ex_assess.get("angle_min_proj", 0.25), ex)
     main = ex_assess["angle"]
+    if ex_assess.get("velocity_channel"):  # M20: the main angle's angular velocity (deg/s) as its own channel
+        with np.errstate(invalid="ignore"):
+            ch["angvel"] = np.gradient(ch[main]) * fps if len(P) > 1 else np.full(len(P), np.nan)
     sig = {"feat": align_feature(P, side, ex_assess, ch), "ch": ch, "n": len(P), "start": int(start),
            "end": int(end), "side": side, "duration_s": (len(P) - 1) / fps,
            "rom": end_range(ch[main], direction=ex_assess.get("rom_direction", "max")),
@@ -227,10 +230,15 @@ def _resample_nan(v, n):
 
 def aligned_rep(sig, ref):
     """A rep on the template's time axis: its DTW path, every channel's curve sampled at the template frames, the
-    main angle's angular velocity (deg/s, in the rep's own time) and the speed ratio (template / rep duration)."""
-    path = align(sig["feat"], ref["feat"])
+    main angle's angular velocity (deg/s, in the rep's own time) and the speed ratio (template / rep duration).
+    ``sig['frame_path']`` (M19: the alignment found in the CVDC embedding space) replaces the DTW on the segment
+    direction when present."""
+    fp = sig.get("frame_path")
+    path = fp if fp is not None else align(sig["feat"], ref["feat"])
     n = ref["n"]
-    curves = {c: on_template(sig["ch"][c], path, n) for c in ref["channels"]}
+    # a channel the rep does not carry is undefined (M19's emb_dist exists only once a fold's embedding alignment is
+    # attached; the shared first-pass alignment has none)
+    curves = {c: on_template(sig["ch"][c], path, n) if c in sig["ch"] else np.full(n, np.nan) for c in ref["channels"]}
     fps = (sig["n"] - 1) / sig["duration_s"] if sig["duration_s"] > 0 else 30.0
     with np.errstate(invalid="ignore"):
         w = np.gradient(sig["ch"][ref["main"]]) * fps if sig["n"] > 1 else np.full(sig["n"], np.nan)

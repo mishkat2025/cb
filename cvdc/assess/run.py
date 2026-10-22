@@ -36,7 +36,8 @@ from ..config import data_path, exercise_cfg, load_config, resolve
 from ..eval.baselines import hand_angle_2d
 from ..data.labels import movement_quality
 from ..eval.splits import check_no_leakage
-from ..train.trainer import fold_plan
+from ..train.trainer import fold_plan, loso_plans
+from .cvdc_join import frame_distance, frame_path
 from .module3 import assess_config, evaluate, rep_entry, set_errors, validate_report, video_report
 from .angles import ASSESS_ANGLES, other
 from .template import aligned_rep, build_reference, fit_library, rep_signals, save_library
@@ -77,7 +78,7 @@ def reference_for(cfg, ex, ac):
     row = ref_idx[(ref_idx.exercise == ex) & (ref_idx.role == "primary")].iloc[0]
     world = np.load(resolve(row.pre_path))["world"].astype(float)
     reps = rr[(rr.ref_id == row.ref_id) & (rr.exercise == ex)]
-    sigs = []
+    sigs, spans = [], []
     for r in reps.itertuples():
         for side in ([r.side, other(r.side)] if ac.get("template_both_sides") else [r.side]):
             se = (r.start, r.end)
@@ -85,13 +86,15 @@ def reference_for(cfg, ex, ac):
                 se = working_phase(world, r.start, r.end, side, ac["template_working_phase"])
                 if se is None:
                     continue
+            spans.append((int(se[0]), int(se[1]), side))  # M19: the same PT frames are packed for the CVDC reference
             extra = None
             if ac.get("angle_source") == "hands":  # the demo's own hand of the moving side (front-oblique view)
                 hp = row.hand_path if isinstance(row.hand_path, str) else ""
                 extra = ({ac["angle"]: hand_angle_2d(row.kp_path, hp, side, len(world))} if hp else
                          {ac["angle"]: np.full(len(world), np.nan)})
             sigs.append(rep_signals(world, se[0], se[1], side, ac, ac["fps"], extra))
-    meta = {"file": row.file, "ref_id": row.ref_id, "side": reps.side.iloc[0], "pt_reps_used": len(sigs)}
+    meta = {"file": row.file, "ref_id": row.ref_id, "side": reps.side.iloc[0], "pt_reps_used": len(sigs),
+            "pt_pre_path": str(row.pre_path), "spans": spans}
     return build_reference(sigs, ac, ac["fps"], meta), row.file
 
 
@@ -128,11 +131,25 @@ def main():
     ap.add_argument("--set", action="append", default=[], metavar="EX:KEY=YAML",
                     help="override an exercise's assess key, e.g. E03:rom_centre=pt_demo or "
                          "'E08:channel_centre={knee_flexion: pt_demo}' (M18 before / after runs)")
+    ap.add_argument("--loso", action="store_true", help="LOSO folds (one per subject, loso_plans) instead of "
+                                                        "GroupKFold-5; no deployable library is written")
+    ap.add_argument("--join", metavar="TAG", help="M19: align and compare in the CVDC embedding space using the "
+                    "encodings of scripts/full/completion/encode.py --tag TAG ('none' = off; default "
+                    "assess.cvdc_join)")
+    ap.add_argument("--velocity", choices=["on", "off"], help="M20: the angular-velocity channel (default "
+                                                               "assess.velocity_channel)")
     a = ap.parse_args()
     t0 = time.time()
     cfg = load_config(a.config)
     if a.posture_centre:
         cfg["assess"]["posture_centre"] = a.posture_centre
+    if a.join:
+        cfg["assess"]["cvdc_join"] = None if a.join == "none" else a.join
+    if a.velocity:
+        cfg["assess"]["velocity_channel"] = a.velocity == "on"
+    join_tag = cfg["assess"].get("cvdc_join")
+    print(f"M19 CVDC alignment: {join_tag or 'off'}; M20 angular-velocity channel: "
+          f"{'on' if cfg['assess'].get('velocity_channel') else 'off'}; folds: {'LOSO' if a.loso else 'GroupKFold'}")
     for spec in a.set:  # M18: reproduce the uncalibrated (PT-demo-centred) rules
         import yaml
         ex_key, val = spec.split("=", 1)
@@ -151,7 +168,7 @@ def main():
 
     def plans_for(ex):
         r = reps[reps.exercise == ex] if per_ex else reps
-        pl = fold_plan(cfg, r)
+        pl = loso_plans(cfg, r) if a.loso else fold_plan(cfg, r)
         check_no_leakage([(p["train"], p["test"]) for p in pl], r.subject.unique())
         return pl
 
@@ -175,11 +192,14 @@ def main():
         ex_cfg = exercise_cfg(cfg, ex)
         ac = assess_config(cfg, ex)
         ref, ref_file = reference_for(cfg, ex, ac)
+        if join_tag:  # M19: the embedding distance is a channel centred on the experts (the PT curve is not used)
+            ref["channels"] = [*ref["channels"], "emb_dist"]
+            ref["curves"]["emb_dist"] = np.zeros(ref["n"])
         for c in ref["channels"]:
             curve_rows += [dict(exercise=ex, channel=c, frame=t, pt=v) for t, v in enumerate(ref["curves"][c])]
         print(f"{ex}: template from {ref_file!r}: {ref['n_pt_reps']} PT reps {ref['pt_durations_s']} s -> "
               f"{ref['n']} frames, end-range ROM {ref['rom']:.1f} deg, excursion {ref['excursion']:.1f} deg ({ref['main']})")
-        R = reps[reps.exercise == ex].reset_index(drop=True)
+        R = reps[reps.exercise == ex].reset_index().rename(columns={"index": "item"})  # item = reps row (PackData)
         jobs = [(vid, str(resolve(pre[vid])), d[["rep", "start", "end", "side"]].to_dict("records"), ac, ref,
                  vrow.loc[vid, "view"], vrow.loc[vid, "kp_path"],
                  vrow.loc[vid, "hand_path"] if "hand_path" in vrow.columns else "")
@@ -194,21 +214,46 @@ def main():
         excl = set((cfg["data"].get("template_exclude_subjects") or {}).get(ex, []))  # D8 (E03 P02)
         good = R[(R.group == "expert") & (R.vscore >= tc["min_score"]) & ~R.subject.isin(excl)]
 
-        def library(subjects):
+        def library(subjects, al_map):
             g = good[good.subject.isin(set(subjects))]
-            curves = {v: [aligned[(x.video_id, x.rep)][1]["curves"] for x in d.itertuples()] for v, d in g.groupby("view")}
-            scal = {v: {"rom": [aligned[(x.video_id, x.rep)][0]["rom"] for x in d.itertuples()],
-                        "log2_speed": [aligned[(x.video_id, x.rep)][1]["log2_speed"] for x in d.itertuples()]}
+            curves = {v: [al_map[(x.video_id, x.rep)][1]["curves"] for x in d.itertuples()] for v, d in g.groupby("view")}
+            scal = {v: {"rom": [al_map[(x.video_id, x.rep)][0]["rom"] for x in d.itertuples()],
+                        "log2_speed": [al_map[(x.video_id, x.rep)][1]["log2_speed"] for x in d.itertuples()]}
                     for v, d in g.groupby("view")}
             return fit_library(ref, curves, scal, ac["sigma_floor_deg"], tc["min_reps"], cfg["data"]["views"]), g
 
-        lib_all, g_all = library(R.subject.unique())
-        save_library(resolve(tc["library_dir"]) / ex, ref, lib_all,
-                     {"exercise": ex, "file": ref_file, "fitted_on": "all subjects", "min_score": tc["min_score"],
-                      "n_videos": int(g_all.video_id.nunique()), "n_subjects": int(g_all.subject.nunique())})
-        libs = {}
+        def fold_alignment(p):
+            """{(video, rep): (sig, aligned)} for fold p: the shared segment-direction alignment, or (M19) the one
+            found in the embedding space of fold p's Proposed model, for the reps the fold needs (its training
+            subjects' library experts and its test subjects)."""
+            if not join_tag:
+                return aligned
+            enc_p = resolve(cfg["eval"]["results_dir"]) / "completion" / "encode" / join_tag / ex / f"fold{p['fold']}.npz"
+            with np.load(enc_p) as z:
+                pos = {int(x): i for i, x in enumerate(z["item"])}
+                jp, jd, jl = z["join_path"], z["join_dist"], z["join_len"]
+                n_steps, T = int(z["n_steps"]), int(z["T"])
+            assert set(pos) == set(R.item), f"{enc_p}: encoded items differ from the exercise's reps"
+            need = R[R.subject.isin(set(p["test"])) | (R.subject.isin(set(p["train"])) & R.index.isin(good.index))]
+            out_ = {}
+            for x in need.itertuples():
+                sig = aligned[(x.video_id, x.rep)][0]
+                i = pos[int(x.item)]
+                sp, dd = jp[i, :jl[i]].astype(int), jd[i, :jl[i]].astype(float)
+                sig2 = dict(sig, ch={**sig["ch"], "emb_dist": frame_distance(sp, dd, sig["n"], n_steps, T)},
+                            frame_path=frame_path(sp, sig["n"], ref["n"], n_steps, T))
+                out_[(x.video_id, x.rep)] = (sig2, aligned_rep(sig2, ref))
+            return out_
+
+        if not (a.loso or join_tag):  # the deployable library (demo): all subjects, segment-direction alignment
+            lib_all, g_all = library(R.subject.unique(), aligned)
+            save_library(resolve(tc["library_dir"]) / ex, ref, lib_all,
+                         {"exercise": ex, "file": ref_file, "fitted_on": "all subjects", "min_score": tc["min_score"],
+                          "n_videos": int(g_all.video_id.nunique()), "n_subjects": int(g_all.subject.nunique())})
+        libs, al_fold = {}, {}
         for p in plans:
-            libs[p["fold"]], g = library(p["train"])
+            al_fold[p["fold"]] = fold_alignment(p)
+            libs[p["fold"]], g = library(p["train"], al_fold[p["fold"]])
             for v in cfg["data"]["views"]:
                 gv = g[g.view == v]
                 count_rows.append(dict(exercise=ex, fold=p["fold"], view=v, reps=len(gv), videos=gv.video_id.nunique(),
@@ -217,7 +262,7 @@ def main():
             f = fold_of[d.subject.iloc[0]]
             entries = []
             for r in d.itertuples():
-                sig, al = aligned[(vid, r.rep)]
+                sig, al = al_fold[f][(vid, r.rep)]
                 s, X, meas, errs, _ = evaluate(sig, al, ref, libs[f][r.view], ac)
                 rep_rows.append(dict(flat_row(r, sig, s, X, meas, errs), fold=f))
                 err_rows += [dict(video_id=vid, rep=int(r.rep), exercise=ex, subject=r.subject, group=r.group,
@@ -232,7 +277,9 @@ def main():
                     "angle_source": (ac["angle_source"] if ac["angle_source"] != "hands" else
                                      "2d_mediapipe_hands_side_views + 3d_mediapipe_world"),
                     "template": {"source": tc["source"], "file": ref_file, "library": f"fold{f}",
-                                 "min_score": tc["min_score"], "posture_centre": ac.get("posture_centre", "pt_demo")},
+                                 "min_score": tc["min_score"], "posture_centre": ac.get("posture_centre", "pt_demo"),
+                                 **({"alignment": f"cvdc_embedding ({cfg['eval']['proposed_default']}, "
+                                                  f"{join_tag} fold {f})"} if join_tag else {})},
                     "n_reps_set": n_set, "expected_reps": (ex_cfg.get("eaaq") or {}).get("expected_reps")}
             rep_ = video_report(meta, entries, serr, ac)
             validate_report(rep_)

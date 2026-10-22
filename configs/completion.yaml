@@ -1,0 +1,34 @@
+# Proposal completion (2026-10-22): Module III with the two pieces of the proposal's pipeline that were missing.
+# Extends the per-exercise config (T17) and writes to its own folders; every earlier output stays as it is.
+#   M19 (proposal Fig. 3, Fig. 2 step 2): the CVDC representation inside Module III: reps are aligned to the PT
+#       template in the embedding space of the fold's Proposed model and compared with it there (channel emb_dist,
+#       score group 'embedding', rule movement_pattern_deviation); the joint angles are read along that alignment.
+#       Needs: python scripts/full/completion/encode.py --tag perex_gkf5 (LOSO: --tag perex_loso --loso and
+#       cvdc.assess.run --loso --join perex_loso).
+#   M20 (proposal Module III, Fig. 2 step 4 "angular velocity deviation"): the main angle's angular velocity as a
+#       channel (score group 'velocity', rule angular_velocity_deviation), centred on the >= 95 experts like the
+#       speed reference (M5a, M15).
+# All settings below were fixed before any completion result was seen: weights 1 like the other groups, d_zero, k,
+# run lengths and severities unchanged; band floors 10 deg/s and 0.02 (cosine distance).
+# usage: python -m cvdc.assess.run --config configs/completion.yaml
+extends: per_exercise.yaml
+
+assess:
+  json_dir: outputs/full/results/completion/module3/json
+  velocity_channel: true                # M20
+  cvdc_join: perex_gkf5                 # M19: encodings of this tag (scripts/full/completion/encode.py)
+  sigma_floor_deg: {angvel: 10.0, emb_dist: 0.02}
+  score:
+    weights: {angle: 1.0, rom: 1.0, speed: 1.0, symmetry: 1.0, velocity: 1.0, embedding: 1.0}
+
+templates:
+  library_dir: outputs/full/results/completion/module3/library   # not written by M19 runs (fold-specific alignment)
+
+depth:                                  # A11: DepthAnything V2 Small (cvdc/models/depth.py; Apache-2.0 code and weights)
+  code_dir: third_party/Depth-Anything-V2           # git clone, commit a561b84 (gitignored, like KTPFormer)
+  weights: data/models/depth_anything/depth_anything_v2_vits.pth
+  input_size: 364                       # short side fed to the model (multiple of 14); joint-level sampling only
+  decode_max_side: 648                  # frames are decoded at <= 648 px on the long side (short side >= 364)
+  batch: 32
+  out_dir: data/full/cache/depth_anything
+# the B2-DepthAnything method itself (input xyd_depthanything) is defined in configs/model.yaml next to the others

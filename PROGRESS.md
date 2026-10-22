@@ -1,5 +1,34 @@
 # Progress
 
+## 0. Proposal completion (2026-10-22): read this first
+
+**What the user asked:** implement what the proposal describes that was not or only partly implemented, setting aside
+what the dataset makes impossible (no new data, 3 views, no per-rep / error-type labels, no metadata, no 3D ground
+truth), the final scope E01–E04 (time) and one model per exercise (supervisor). Plus a cleanup and a proper file
+structure. Work on branch `proposal-completion`. Decisions D19, A11, M19, M20, E31, E32; tables
+`reports/completion_tables.md`; narrative `reports/FINAL_REPORT_E01_E04.md` §8.
+
+**Done:**
+- **File structure (D19):** `D:\cb\{cvdc-physio, dataset, docs, .venv}`; scripts in `scripts/pilot/` and `scripts/full/`;
+  unneeded artefacts moved to `D:\cb\_to_delete\` (3 GB, recoverable; empty it when no longer needed).
+- **Classification metrics, results per recording condition, temporal stability, depth check (E31):** done.
+- **Module III with the CVDC representation (M19) and the angular-velocity channel (M20):** done for GroupKFold-5 and
+  LOSO (E32); the published Module III output is reproduced exactly with both switched off.
+- **DepthAnything (A11):** code and weights (Apache-2.0) in place, wrapper tested; the chain below computes the depth,
+  packs it and trains B2-DepthAnything (GroupKFold-5, then LOSO).
+
+**Running (started 2026-10-22 ~22:05, unattended, ~8 h):** `scripts/full/completion/depth_chain.py`: depth extraction
+(~3 h) → pack → B2-DepthAnything GroupKFold-5 (~0.5 h) → LOSO (~4.5 h). It is a hidden job started through Explorer
+(survives closing the Claude app or any terminal); it keeps the PC awake. **Check:** the last lines of
+`outputs\full\results\completion\depth_chain.log` and `depth_chain_status.json` next to it. **Resume after a stop or
+reboot** (every step skips finished work): `explorer.exe D:\cb\cvdc-physio\scripts\full\completion\run_depth_chain.cmd`.
+**Stop:** end the python.exe processes in Task Manager. **When it has finished:**
+`python scripts\full\completion\depth_baseline_report.py`, then `python scripts\full\completion\report_completion.py`
+(adds section 6 to the tables) and fill in §8.4 of the final report.
+
+**Not done (needs people):** a usability study and a physiotherapist review of the feedback; the live-camera test is
+replaced by the user's recorded uploads (the Streamlit app takes them).
+
 ## LOSO job (E01–E04): check and resume commands
 
 **Check** (running?, finished runs per exercise × method out of 588, estimated time left, log tail):
