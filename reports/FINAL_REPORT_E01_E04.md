@@ -53,7 +53,9 @@ learned comes from it, but it is not the pipeline's output.
    comparisons better, 13 worse, under both schemes). **Among the networks, Proposed is the most accurate for the
    experts** (LOSO pooled −1.88 [−2.94, −0.86] RMSE vs B1, lower error for 21 of 24 experts; −1.48 vs B2-KTPFormer) and
    **worse than B1 for the non-experts** (+2.27 [0.53, 4.23]). On an unseen camera B1's error rises by 4.68 points,
-   Proposed's by 1.37. KTPFormer's 3D input does not beat 2D. B2-DepthAnything: §6.6.
+   Proposed's by 1.37. **Neither explicit depth input beats 2D**: B2-KTPFormer does not, and B2-DepthAnything does
+   not either (LOSO experts +0.20 [−1.27, 1.72] RMSE vs B1, +2.08 [0.90, 3.39] vs Proposed; §6.6), so the proposal's
+   RQ2 is not supported for explicit 3D / depth.
 10. **Other measures the proposal lists (§6.4, §7):** the derived quality class is weak for every network (κ ≤ 0.27);
     no recording condition makes the networks significantly worse for the experts; KTPFormer's 3D is the steadiest
     skeleton over time.
@@ -337,8 +339,18 @@ III's rep score 3.02).
 
 ### 6.6 B2-DepthAnything
 
-*Pending: filled in when `scripts/full/completion/depth_chain.py` has finished (PROGRESS §0): baseline 2 with
-DepthAnything depth at the joints (A11), GroupKFold-5 and LOSO, next to B1, B2-KTPFormer and Proposed.*
+Baseline 2 with the other depth method the proposal names: the 2D keypoints plus DepthAnything V2's relative depth at
+each joint, trained from scratch without CVDC (A11; depth for 1,855 videos, 3.2 h; 20 GroupKFold-5 and 147 LOSO runs,
+4.4 h). Under LOSO, pooled over the experts, it is no better than B1 (RMSE +0.20 [−1.27, 1.72]; lower error for 12 of
+24 experts, higher for 12) or B2-KTPFormer (+0.60 [−0.33, 1.59]), worse than Proposed (+2.08 [0.90, 3.39]; Proposed has
+the lower error for 20 of 24 experts, p 0.001) and worse than the group mean (+2.92 [1.74, 4.44]). The non-experts show
+the same (vs B1 +0.71 [−1.66, 3.13], vs the group mean +5.89 [3.52, 8.43]), and GroupKFold-5 agrees (experts vs B1
+−0.39 [−1.58, 0.76], vs Proposed +1.42 [0.50, 2.42]). Pooled experts' RMSE (LOSO): B1 16.17, B2-KTPFormer 15.77,
+B2-DepthAnything 16.37, Proposed 14.29, group mean 13.45.
+
+So neither explicit depth source, KTPFormer's lifted 3D or DepthAnything's depth, helps the ST-GCN over the 2D
+keypoints: the proposal's RQ2 ("does estimated 3D / depth information improve monocular assessment?") is not
+supported for either; among the networks the gain comes from CVDC. Full table: completion_tables.md §6.
 
 ## 7. Temporal stability (proposal: "jitter variance, frame-to-frame smoothness")
 
@@ -418,7 +430,8 @@ Progress log: `PROGRESS.md` §0, §6h–§6j.
 - **2026-10-22:** LOSO per exercise for the networks (now §6.3).
 - **2026-10-22:** the proposal's remaining items (D19, A11, M19, M20, E31, E32): classification metrics, recording
   conditions, temporal stability, the depth check, Module III with the CVDC representation and the angular velocity
-  (GroupKFold-5 and LOSO), DepthAnything (running); file-structure cleanup.
+  (GroupKFold-5 and LOSO), DepthAnything; file-structure cleanup.
+- **2026-10-23:** B2-DepthAnything results, GroupKFold-5 and LOSO (§6.6).
 - **2026-10-22 (X11):** the report and the demo reorganised around the proposal's single pipeline: Module III's
   score is the result (§4), the learned score head a labelled supplementary analysis (§6). No number changed; the
   earlier sections were moved, not rewritten.

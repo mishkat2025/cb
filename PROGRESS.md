@@ -15,17 +15,17 @@ pipeline's output = Module III's score, §5 CVDC's contribution, §6 the supplem
 - **Classification metrics, results per recording condition, temporal stability, depth check (E31):** done.
 - **Module III with the CVDC representation (M19) and the angular-velocity channel (M20):** done for GroupKFold-5 and
   LOSO (E32); the published Module III output is reproduced exactly with both switched off.
-- **DepthAnything (A11):** code and weights (Apache-2.0) in place, wrapper tested; the chain below computes the depth,
-  packs it and trains B2-DepthAnything (GroupKFold-5, then LOSO).
+- **DepthAnything (A11):** done. The chain (`scripts/full/completion/depth_chain.py`, a hidden job started through
+  Explorer, 2026-10-22 22:04 → 2026-10-23 05:38) computed the depth at the joints of 1,855 videos (3.2 h), packed it and
+  trained B2-DepthAnything (20 GroupKFold-5 runs, 0.5 h; 147 LOSO runs, 3.9 h); report
+  `scripts/full/completion/depth_baseline_report.py` (final report §6.6, tables §6). Result: no better than B1 (LOSO
+  experts +0.20 [−1.27, 1.72] RMSE), worse than Proposed (+2.08 [0.90, 3.39]) and than the group mean; neither explicit
+  depth source helps over 2D (RQ2 not supported). Rerun: `explorer.exe
+  D:\cb\cvdc-physio\scripts\full\completion\run_depth_chain.cmd` (every step skips finished work).
+- **One pipeline (X11, X12):** the final report is organised around the proposal's pipeline (Module III's score is
+  the result; the score head a labelled supplementary analysis), and the demo app runs only that pipeline.
 
-**Running (started 2026-10-22 ~22:05, unattended, ~8 h):** `scripts/full/completion/depth_chain.py`: depth extraction
-(~3 h) → pack → B2-DepthAnything GroupKFold-5 (~0.5 h) → LOSO (~4.5 h). It is a hidden job started through Explorer
-(survives closing the Claude app or any terminal); it keeps the PC awake. **Check:** the last lines of
-`outputs\full\results\completion\depth_chain.log` and `depth_chain_status.json` next to it. **Resume after a stop or
-reboot** (every step skips finished work): `explorer.exe D:\cb\cvdc-physio\scripts\full\completion\run_depth_chain.cmd`.
-**Stop:** end the python.exe processes in Task Manager. **When it has finished:**
-`python scripts\full\completion\depth_baseline_report.py`, then `python scripts\full\completion\report_completion.py`
-(adds section 6 to the tables) and fill in §6.6 of the final report.
+No job is running; the GPU is free.
 
 **Not done (needs people):** a usability study and a physiotherapist review of the feedback; the live-camera test is
 replaced by the user's recorded uploads (the Streamlit app takes them).
