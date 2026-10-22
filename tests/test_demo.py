@@ -180,3 +180,43 @@ def test_e03_reference_rests_at_the_90_90_hold():
     assert fo[pl.seq[pl.peak]] < 30                                  # forearm up at the peak
     assert pl.seq[-1] == rest and (np.diff(pl.seq[pl.tail[0]:]) == -1).all()  # the return ends at the hold
     assert (pl.tmap[pl.tail[0]:] == -1).all() and pl.rest_label and pl.return_label
+
+
+# ---------------------------------------------------------------- X11: the assessment is Module III's score
+ENC = resolve(CFG["eval"]["results_dir"]) / "completion" / "encode" / "perex_gkf5" / "E03"
+LIB_C = resolve(load_config("configs/completion.yaml")["templates"]["library_dir"])
+
+
+@pytest.mark.skipif(not (ENC.exists() and LIB_C.exists()), reason="needs the completion encodings and fold libraries")
+def test_completed_demo_aligns_like_the_batch_run_and_reports_module3_as_the_assessment():
+    from cvdc.assess.cvdc_join import align_steps
+    from demo.pipeline import ExerciseModel, OnlineSession
+
+    reps = pd.read_csv(data_path(CFG, "reps_csv")).reset_index()
+    m = ExerciseModel(CFG, "E03", subject="P07")
+    sess = OnlineSession(CFG, "E03", "F", m)
+    assert sess.mode == "completed" and "CVDC" in sess.pipeline_label
+    idx = pd.read_csv(resolve(CFG["data"]["index_csv"])).set_index("video_id")
+    same = 0
+    for r in reps[(reps.subject == "P07") & (reps.exercise == "E03") & (reps.view == "F")].head(5).itertuples():
+        with np.load(resolve(idx.loc[r.video_id, "pre_path"])) as z:
+            pre = {"xy": z["xy"]}
+        sp, d = align_steps(m.sequence(pre, r.start, r.end), sess.R[r.side])
+        with np.load(ENC / f"fold{m.fold}.npz") as z:
+            i = list(z["item"]).index(r.index)
+            L = int(z["join_len"][i])
+            spb, db = z["join_path"][i, :L].astype(int), z["join_dist"][i, :L]
+        same += int(len(sp) == L and (sp == spb).all())
+        assert abs(float(d.mean()) - float(np.nanmean(db))) < 0.02  # CPU fp32 vs the batch's GPU bf16
+    assert same >= 4
+    rep = sess.set_report("test")
+    assert rep["set_score_source"] == "module3_with_cvdc" and rep["model"]["role"].startswith("supplementary")
+
+
+@pytest.mark.skipif(not HAVE, reason="needs the full-scope Phase 1 caches and the Module III library")
+def test_without_a_model_the_assessment_is_the_rule_based_module3():
+    from demo.pipeline import OnlineSession
+
+    sess = OnlineSession(CFG, "E01", "F")
+    rep = sess.set_report("test")
+    assert sess.mode == "rules" and rep["set_score_source"] == "module3_rules" and "model" not in rep

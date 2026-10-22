@@ -239,7 +239,13 @@ def rep_entry(i, sig, s, meas, X, errors, ac, embedding=None):
                       "rom_shortfall_deg": _num(meas["rom_shortfall"], 1), "duration_s": _num(sig["duration_s"]),
                       "speed_ratio": _num(2 ** meas["log2_speed"]) if np.isfinite(meas["log2_speed"]) else None,
                       "angular_velocity_dev_deg_s": _num(meas["omega_dev"], 1),
-                      "angle_dev_deg": {k[8:]: _num(v, 1) for k, v in meas.items() if k.startswith("dev_abs_")},
+                      "angle_dev_deg": {k[8:]: _num(v, 1) for k, v in meas.items()
+                                        if k.startswith("dev_abs_") and k[8:] not in CHANNEL_UNITS},
+                      # M20 / M19 channels in their own units (only when switched on)
+                      **({"velocity_channel_dev_deg_s": _num(meas["dev_abs_angvel"], 1)}
+                         if "dev_abs_angvel" in meas else {}),
+                      **({"embedding_distance_vs_experts": _num(meas["dev_mean_emb_dist"], 3)}
+                         if "dev_mean_emb_dist" in meas else {}),
                       **{k: _num(meas[k], 3) for k in ("path_amplitude", "path_circularity") if k in meas},
                       "distance_sd": {g: _num(x) for g, x in X.items()}},
          "errors": errors}
@@ -335,8 +341,12 @@ class Assessor:
         self.ref, self.lib, self.ac = ref, lib, ac
         self._sig, self._align = rep_signals, aligned_rep
 
-    def rep(self, world, start, end, side, view="F", index=0, embedding=None, extra=None):
+    def rep(self, world, start, end, side, view="F", index=0, embedding=None, extra=None, transform=None):
+        """``transform``: optional function sig -> sig applied before the alignment (M19 / X11: attaches the frame
+        path found in the CVDC embedding space and the embedding-distance channel)."""
         sig = self._sig(world, start, end, side, self.ac, self.ac["fps"], extra)
+        if transform is not None:
+            sig = transform(sig)
         al = self._align(sig, self.ref)
         s, X, meas, errs, cmp = evaluate(sig, al, self.ref, self.lib[view], self.ac)
         return rep_entry(index, sig, s, meas, X, errs, self.ac, embedding), {"sig": sig, "aligned": al, "cmp": cmp}

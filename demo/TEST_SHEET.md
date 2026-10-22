@@ -10,20 +10,22 @@ call the venv's Python directly (`.venv\Scripts\python.exe`), so nothing needs a
 - Videos play at real-time speed in a window. Keys: `q` quit, `r` reset the set, `s` save the report (JSON + CSV to
   `cvdc-physio\outputs\full\demo\`). `--headless --no-realtime` runs without a window as fast as possible.
 - Saved `.mp4` files have faces blurred (D10). Outputs are gitignored.
-- Expected numbers were checked on 2026-10-20 (21:20–21:40) with the code of that day's commit. "Module III / model"
-  = the set scores printed on the last console line; "PT" = the physiotherapists' score of that video. The scores are
-  single examples of the within-group results (PROGRESS §6h.9: no model beats the within-group mean), not a validation.
-- Decisions: X1–X9 in `cvdc-physio\DESIGN_DECISIONS.md`; the reference display is X7 (E03's rest pose: X8), the
-  four-panel export X9.
+- Expected numbers were re-checked on 2026-10-22 (22:55) after X11. "Assessment / suppl. model" = the two set scores
+  on the last console lines: the **assessment** (Module III's score: with the Proposed model loaded, the completed
+  Module III that aligns and compares in the CVDC embedding space; the pipeline's output) and the network's own
+  **supplementary** score (unchanged since 2026-10-20); "PT" = the physiotherapists' score of that video. The scores
+  are single examples of the within-group results (no score beats the within-group mean), not a validation.
+- Decisions: X1–X11 in `cvdc-physio\DESIGN_DECISIONS.md`; the reference display is X7 (E03's rest pose: X8), the
+  four-panel export X9, the assessment / supplementary split X11.
 
 ## 1. One held-out video per exercise (front view, with the ghost)
 
 | Exercise | Command (from `D:\cb`) | Expected (console) |
 |---|---|---|
-| E01 abduction | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --ghost` | fold 0; 9 reps (`too_few_reps`, mild); Module III 84.7 / model 80.2 (PT 60.5) |
-| E02 adduction | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E02 P07 F ML --ghost` | fold 2; 14 reps; 73.3 / 95.5 (PT 47.6); reps 3, 8, 11 and 13 are half reps (`adduction_range_insufficient`, severe) |
-| E03 lateral rotation | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E03 P05 F FL --ghost` | fold 1; 10 reps; 85.5 / 61.4 (PT 69.0); at rest the panel shows the demo's 90/90 hold (labelled) |
-| E04 medial rotation | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 F FL --ghost` | fold 1; 10 reps; 81.1 / 87.3 (PT 81.9); the patient uses the left arm, so the panel says `mirrored` |
+| E01 abduction | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --ghost` | fold 0; 9 reps (`too_few_reps`, mild); assessment 87.7 / suppl. model 80.2 (PT 60.5) |
+| E02 adduction | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E02 P07 F ML --ghost` | fold 2; 14 reps; 78.8 / 95.5 (PT 47.6); reps 3, 8, 11 and 13 are half reps (`adduction_range_insufficient`, severe) |
+| E03 lateral rotation | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E03 P05 F FL --ghost` | fold 1; 10 reps; 86.6 / 61.4 (PT 69.0); at rest the panel shows the demo's 90/90 hold (labelled) |
+| E04 medial rotation | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 F FL --ghost` | fold 1; 10 reps; 84.1 / 87.3 (PT 81.9); the patient uses the left arm, so the panel says `mirrored` |
 
 ## 2. What to look at in the window
 
@@ -58,7 +60,7 @@ the PT's peak). During a hold at the top, the PT stays at the start of its own h
 | E01 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 L FL --ghost` | fold 0; prints `ghost off: the L view is not the reference's front view`; 9 reps; 90.0 / 60.9 (PT 59.0); panel says to compare the 3D-angle differences, not the picture |
 | E02 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E02 P07 R ML --ghost` | fold 2; ghost off; 16 reps; 76.8 / 82.6 (PT 47.6). Side views follow the PT poorly (X7 check) |
 | E04 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 L FL --ghost` | fold 1; ghost off (`not the reference's oblique view`); 9 reps; 76.1 / 79.6 (PT 81.9) |
-| Module III only | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --no-model` | no checkpoint needed (X3); 9 reps; Module III 84.7; no model scores |
+| Module III only | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --no-model` | no checkpoint needed (X3); 9 reps; rule-based Module III 84.7; no supplementary score |
 | Leakage warning | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P11 F FL --fold 0` | prints `WARNING: LEAKAGE: subject P11 was in the training split of E01 proposed_j1 fold 0 ...` (red line in the window) |
 | A video file | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --source "D:\cb\dataset\videos\E01(Abduction)\E01_P03_AF_VFL_GM.mp4" --exercise E01 --view F --ghost` | the same as the first E01 row (the subject is looked up, so the held-out fold is used) |
 
@@ -106,12 +108,13 @@ Screenshots: `…_4panel_rep4_peak_<t>s.png` in the same folder.
 
 **From the dataset** → exercise `E01 · Abduction`, filters **Front** and **Full light** → tick the **P03** row
 → **Assess this video** (X10). Expected (2026-10-21, ~1 min with the four-panel video on): 9 reps (`Too few
-repetitions`, mild), rule-based score 84.7 (Correct), model score 80.2 (fold 0, "never saw participant P03"), PT 60.5
+repetitions`, mild), assessment score 87.7 (Correct; Module III with the CVDC model, fold 0), PT 60.5
 (Partly correct), no rep problems; the four-panel video plays in the page and is saved as
 `cvdc-physio\outputs\full\demo\app\E01_P03_AF_VFL_GM__proposed_j1__ghost_4panel.mp4` (H.264, 30 s; a second Assess
 reuses it); below: the per-rep table, one rep in detail (problems as sentences, measurements, score breakdown that adds
-up to the rep score, angle differences, the model's answers), the patient-vs-PT and angle plots, the model section with
-the embedding map, the JSON download and the glossary.
+up to the rep score, angle differences, the network's own outputs marked supplementary), the patient-vs-PT and angle
+plots, the **Supplementary** section at the end (the network's set score 80.2, its answers and the embedding map; X11),
+the JSON download and the glossary. With **No network** in the sidebar the assessment is the rule-based 84.7.
 
 Problems check (video toggle off, ~30 s): `E02 · Aduction`, **Front**, **Medium light**, **P07** → 14 reps,
 73.3 / model 95.5 (PT 47.6); reps 3, 8, 11 and 13 show `Movement too small (arm movement across the body)` (severe) with

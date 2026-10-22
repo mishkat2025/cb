@@ -1,6 +1,6 @@
 # Proposal completion: generated tables (E01–E04)
 
-Assembled by `scripts/full/completion/report_completion.py` on 2026-10-22 22:06 from the summaries in `outputs/full/results/completion/`. Narrative and decisions: [`FINAL_REPORT_E01_E04.md`](FINAL_REPORT_E01_E04.md) §8, `DESIGN_DECISIONS.md` D19, M19, M20, A11, E31, E32.
+Assembled by `scripts/full/completion/report_completion.py` on 2026-10-22 22:52 from the summaries in `outputs/full/results/completion/`. Narrative and decisions: [`FINAL_REPORT_E01_E04.md`](FINAL_REPORT_E01_E04.md) §4–§7, `DESIGN_DECISIONS.md` D19, M19, M20, A11, E31, E32, X11. The pipeline's output (Module III's score) has its own tables: [`pipeline_tables.md`](pipeline_tables.md).
 
 
 ---

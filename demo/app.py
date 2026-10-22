@@ -1,9 +1,11 @@
 """Phase 6 Streamlit app (spec §10; X5, X9, X10): pick a dataset video from a readable, filterable table (or upload
 one) -> the four-panel video (X9: patient | PT reference / estimated 3D | CVDC embedding; faces blurred, D10), saved to
-<outputs>/demo/app/ and played in the page, and the per-rep report in plain language: the Module III score and verdict,
-every problem as a sentence (joint, time, measured / target angle, severity), the measurements and how the score was
-made, the selected exercise's model score, EAAQ items and distance to the PT reference (T17), the patient-vs-PT and
-angle-vs-template plots, the embedding plot, the raw JSON and a glossary.
+<outputs>/demo/app/ and played in the page, and the per-rep report in plain language: the assessment, which is always
+Module III's score and verdict (X11: with the Proposed CVDC model, Module III aligns and compares in its embedding space,
+M19 + M20; otherwise rule-based), every problem as a sentence (joint, time, measured / target, severity), the
+measurements and how the score was made, the patient-vs-PT and angle-vs-template plots, and, in a separate section
+labelled supplementary, the network's own learned score, EAAQ items, distance to the PT reference and embedding plot
+(the instrument used to compare the models, not the pipeline's output), the raw JSON and a glossary.
 
 Video frames appear only in the four-panel export, which blurs faces (D10, X9). An uploaded file is written to a
 temporary folder for decoding and the export, and deleted right after.
@@ -72,7 +74,7 @@ def plain(x):
     return json.loads(json.dumps(x, default=float))
 
 
-UNITS = {"deg": "°", "deg/s": " °/s", "x": "×", "s": " s"}
+UNITS = {"deg": "°", "deg/s": " °/s", "x": "×", "s": " s", "": ""}
 
 
 def num(v, digits=3):
@@ -287,22 +289,15 @@ def show_summary(res, rep, model, fps):
         exp = rep.get("expected_reps")
         st.metric("Repetitions found" + (f" (asks for {exp})" if exp else ""), f"{rep['n_reps']}", border=True,
                   help="Repetitions the app found in the video" + (f"; the exercise asks for {exp}." if exp else "."))
-        st.metric("Rule-based score", f"{rep['set_score']:.1f}", border=True,
-                  help="Module III: each repetition compared with the physiotherapist's demo, then averaged. 0 to 100.")
-        ms = rep.get("model", {}).get("set_score")
-        if ms is not None:
-            st.metric("Model score", f"{ms:.1f}", border=True,
-                      help=f"{R.MODELS[model.method][0]}, fold {model.fold}. 0 to 100.")
-            mq = rep["model"].get("movement_quality")
-            if mq is not None:
-                st.metric("Movement quality (model)", f"{mq:.1f}", border=True,
-                          help="The model's estimate of the posture and control questions only, leaving out the "
-                               "repetition count. 0 to 100.")
+        mode = res["sess"].mode
+        st.metric("Assessment score", f"{rep['set_score']:.1f}", border=True,
+                  help=f"{R.ASSESSMENT[mode]}: each repetition compared with the physiotherapist's demo, then "
+                       "averaged. 0 to 100. This is the system's result.")
         if row is not None and pd.notna(row["PT score"]):
             st.metric("Physiotherapists' score", f"{row['PT score']:.1f}", border=True,
                       help="Average of three physiotherapists for this video. 0 to 100.")
     with st.container(horizontal=True, vertical_alignment="center"):
-        st.markdown("Rule-based verdict:")
+        st.markdown("Assessment verdict:")
         st.badge(verdict(rep["set_quality"]), color=VERDICT_COLOR.get(rep["set_quality"], "gray"))
         if row is not None and isinstance(row.quality, str):
             st.markdown("Physiotherapists' verdict:")
@@ -310,21 +305,20 @@ def show_summary(res, rep, model, fps):
     # the same in words
     s = [f"The app found **{rep['n_reps']} repetitions**"
          + (f" (the exercise asks for {rep['expected_reps']})" if rep.get("expected_reps") else "") + "."]
-    s.append(f"The rule-based check compared each one with the physiotherapist's demo and gave "
+    how = ("lined each one up with the physiotherapist's demo in the CVDC model's camera-independent "
+           f"representation (fold {model.fold}) and compared the joint angles, the angular speed and the movement "
+           "pattern" if mode == "completed" else "compared each one's joint angles with the physiotherapist's demo")
+    s.append(f"The assessment, {R.ASSESSMENT_SHORT[mode]}, {how}, and gave "
              f"**{rep['set_score']:.1f} / 100 ({verdict(rep['set_quality']).lower()})**.")
-    if ms is not None:
-        held = model.info().get("test_subjects") or []
-        who = res["subject"]
-        seen = (f", which never saw participant {who} during training" if who and who in held else "")
-        short = R.MODELS[model.method][0].replace(" (default)", "").lower()
-        s.append(f"The {short} (fold {model.fold}{seen}) gave **{ms:.1f} / 100**.")
     if row is not None and pd.notna(row["PT score"]):
         s.append(f"The three physiotherapists gave this video **{row['PT score']:.1f} / 100 "
                  f"({verdict(row.quality).lower()})**.")
     st.markdown(" ".join(s))
-    if ms is not None:
-        st.caption("Model scores are examples, not validated predictions: in the project's tests no model predicted the "
-                   "physiotherapists' score better than the average score of the participant's group.")
+    st.caption("In the project's tests this score agreed only weakly with the physiotherapists (Spearman about 0.15 "
+               "to 0.4) and did not predict their score better than the average of the participant's group, so treat "
+               "it as an example, not a validated clinical score.")
+    if rep.get("model", {}).get("set_score") is not None:
+        st.caption("The network's own learned score is in the **supplementary** section at the end of the page.")
 
 
 def show_problem_overview(rep, fps):
@@ -348,27 +342,28 @@ def show_problem_overview(rep, fps):
 
 def show_rep_table(rep, fps):
     rows = [{"Rep": r["rep"] + 1, "Time": f"{r['time_s'][0]:.1f}–{r['time_s'][1]:.1f} s",
-             "Rule score": r["score"], "Verdict": verdict(r["quality"]), "Model score": r.get("model_score"),
+             "Score": r["score"], "Verdict": verdict(r["quality"]), "Suppl. model score": r.get("model_score"),
              "Distance to PT": (r.get("embedding_distance") or {}).get("cosine_centred"),
              "Problems": "; ".join(f"{R.error_title(e)} ({R.label(R.SEVERITY, e['severity']).lower()})"
                                    for e in r["errors"]) or "none"}
             for r in rep["reps"]]
     df = pd.DataFrame(rows)
-    if df["Model score"].isna().all():
-        df = df.drop(columns=["Model score", "Distance to PT"])
+    if df["Suppl. model score"].isna().all():
+        df = df.drop(columns=["Suppl. model score", "Distance to PT"])
     st.dataframe(df, hide_index=True, alt="Per-repetition results", column_config={
         "Rep": st.column_config.NumberColumn(help="Repetition number"),
         "Time": st.column_config.TextColumn(help="Start and end of the repetition in the video"),
-        "Rule score": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f",
-                                                      help="Module III score of this repetition (0 to 100)"),
+        "Score": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f",
+                                                 help="The assessment of this repetition: Module III's score (0 to 100)"),
         "Verdict": st.column_config.TextColumn(help=R.QUALITY_RULE),
-        "Model score": st.column_config.NumberColumn(
-            format="%.1f", help="The model's score of this repetition. It is a raw prediction, so it can land slightly "
-                                "above 100 or below 0."),
+        "Suppl. model score": st.column_config.NumberColumn(
+            format="%.1f", help="Supplementary: the network's own learned score of this repetition, used to compare "
+                                "the models; not the assessment. A raw prediction, so it can land slightly above 100 "
+                                "or below 0."),
         "Distance to PT": st.column_config.NumberColumn(
             format="%.2f", help="How different this repetition looks to the model compared with the physiotherapist's "
                                 "demo: 0 = the same, larger = less alike (about 0 to 1.5)."),
-        "Problems": st.column_config.TextColumn(width="large", help="Problems found by the rule-based check"),
+        "Problems": st.column_config.TextColumn(width="large", help="Problems found by the assessment (Module III)"),
     })
 
 
@@ -393,7 +388,7 @@ def show_rep_detail(cfg, res, rep, sess, fps):
                  "What it means": R.MEASURES[key][2]} for key in R.MEASURES if m.get(key) is not None]
         table(rows, "Measurements of this repetition")
     with right:
-        st.markdown("**How the rule-based score was made**")
+        st.markdown("**How the score was made**")
         parts = points_lost(r, sess.ac)
         table([{k: (f"{v:g}" if isinstance(v, float) else v) for k, v in p.items()} for p in parts], "Score breakdown")
         lost = sum(p["Points lost (of 100)"] for p in parts)
@@ -406,7 +401,8 @@ def show_rep_detail(cfg, res, rep, sess, fps):
             table([{"Angle": R.label(R.CHANNELS, c), "Average difference": "–" if v is None else f"{v:g}°"}
                    for c, v in dev.items()], "Angle differences")
         if r.get("model_score") is not None:
-            st.markdown("**What the model says about this repetition**")
+            st.markdown("**Supplementary: the network's own outputs for this repetition**")
+            st.caption("Not part of the assessment: the learned score head used to compare the models.")
             rows = [{"Question": "Score (0 to 100)", "Model's estimate": num(r["model_score"])}]
             rows += [{"Question": R.label(R.ITEMS, i) + " (0 to 1)", "Model's estimate": num(v)}
                      for i, v in (r.get("model_items") or {}).items()]
@@ -430,8 +426,19 @@ def show_rep_detail(cfg, res, rep, sess, fps):
 
 
 def show_model(cfg, rep, model, sess):
-    st.subheader("What the model says about the whole set")
+    st.subheader("Supplementary: the network's own score (for comparing the models)")
     info = rep["model"]
+    st.info("Not the assessment. The proposal's pipeline outputs Module III's score (above). This network also has a "
+            "learned score head, trained on the physiotherapists' scores; the project uses it to compare the "
+            "networks (B1, B2, Proposed) on the same task. In the tests it did not predict the physiotherapists' "
+            "score better than the average of the participant's group.", icon=":material/info:")
+    with st.container(horizontal=True):
+        st.metric("Network's set score", f"{info['set_score']:.1f}", border=True,
+                  help=f"{R.MODELS[model.method][0]}, fold {model.fold}. 0 to 100.")
+        if info.get("movement_quality") is not None:
+            st.metric("Network's movement quality", f"{info['movement_quality']:.1f}", border=True,
+                      help="Its estimate of the posture and control questions only, leaving out the repetition "
+                           "count. 0 to 100.")
     left, right = st.columns(2, gap="large")
     with left:
         held = info.get("test_subjects") or []
@@ -454,10 +461,13 @@ def show_model(cfg, rep, model, sess):
 def show_glossary():
     with st.expander("Glossary: what the words mean"):
         st.markdown(
-            f"- **Rule-based check (Module III):** every repetition is lined up in time with the physiotherapist's "
-            f"demo and each joint angle is compared with a target and with the range that the high-scoring experts "
-            f"stay in. No machine learning.\n"
-            f"- **Model:** a neural network trained on the physiotherapists' scores (one per exercise).\n"
+            f"- **Assessment (Module III):** every repetition is lined up in time with the physiotherapist's demo "
+            f"and compared with it: joint angles, range, speed and symmetry, each against the range the "
+            f"high-scoring experts stay in. With the Proposed CVDC model the lining up happens in the model's "
+            f"camera-independent representation, and the angular speed and the movement pattern are scored too "
+            f"(the proposal's pipeline); without it the comparison is rule-based.\n"
+            f"- **Supplementary network score:** a neural network's own score, trained on the physiotherapists' "
+            f"scores (one per exercise); used to compare the networks, not the assessment.\n"
             f"- **Verdict:** {R.QUALITY_RULE}\n"
             f"- **Severity:** {R.SEVERITY_RULE}\n"
             f"- **SD (standard deviation):** how much the high-scoring experts vary. 1 SD away = an ordinary "
@@ -536,7 +546,7 @@ def main():
     with st.sidebar:
         st.header("Settings")
         opts = list(dict.fromkeys([cfg["eval"]["proposed_default"], "b1", "proposed_lp", R.NO_MODEL]))
-        method = st.radio("Scoring model", opts, format_func=lambda m: R.label({k: v[0] for k, v in R.MODELS.items()}, m),
+        method = st.radio("Network", opts, format_func=lambda m: R.label({k: v[0] for k, v in R.MODELS.items()}, m),
                           captions=[R.MODELS.get(m, ("", ""))[1] for m in opts])
         make_video = st.toggle("Make the four-panel video", value=True,
                                help="Takes about a minute. Saved in outputs/full/demo/app/ and played on this page. "
@@ -545,8 +555,9 @@ def main():
                           help="Front-camera videos only: the physiotherapist's skeleton as a faint cyan outline on "
                                "the patient during each repetition.")
     st.title("Physiotherapy exercise assessment")
-    st.caption("Choose a video, press Assess, and read the report: a rule-based comparison with the physiotherapist's "
-               "demo, the trained model's score, and the four-panel video.")
+    st.caption("Choose a video, press Assess, and read the report: Module III's assessment against the "
+               "physiotherapist's demo (with the Proposed CVDC model, the proposal's pipeline), the four-panel video, "
+               "and, separately, the network's own supplementary score.")
     source = st.segmented_control("Video source", ["dataset", "upload"], required=True, default="dataset",
                                   format_func={"dataset": "From the dataset", "upload": "Upload my own video"}.get)
     row = up = None
@@ -585,8 +596,8 @@ def main():
                 title = (f"**{R.exercise(ex)}** · uploaded file `{up.name}` · **{R.CAMERAS[view]}** camera"
                          + (f" (dataset video of participant {subject})" if subject else ""))
             model, note = load_model(cfg, ex, method, subject)
-            st.write(f"Model: {R.MODELS[model.method][0]}, fold {model.fold}" if model is not None
-                     else "Model: none (rule-based check only)")
+            st.write(f"Network: {R.MODELS[model.method][0]}, fold {model.fold}" if model is not None
+                     else "Network: none (rule-based Module III)")
             out = resolve(cfg["outputs"]["phase1"]).parent / "demo" / "app" / video_name(name, model, ghost)
             job, video, reused = None, None, False
             if make_video and out.exists():

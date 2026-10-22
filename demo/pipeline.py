@@ -6,12 +6,20 @@ dataset rep:
                   also MediaPipe Hands on crops around both Pose wrists (P1c)
   OnlineSession   the buffered keypoints -> Phase 1 preprocessing (30 fps grid, interpolation, smoothing, root / torso
                   normalisation, P5) -> the exercise's rep signal and adaptive segmentation (P6, P6c) -> every rep that
-                  has ended is assessed once by Module III with the exercise's deployable library (M8-M13, M17; the
-                  camera view selects the per-view bias and bands, X4) and, with a model, scored by the network
-  ExerciseModel   the per-exercise checkpoint (T17; default Proposed, lambda 1.0): rep score (rep head), set score and
-                  items (video head, T13) and the cosine distance of the rep embedding to the PT demo's reference
-                  embedding (E5, mirrored for the other side); the fold is the one that held the subject out when the
-                  video is a dataset video (X2), and the demo warns when the subject was in the model's training split
+                  has ended is assessed once by Module III (the camera view selects the per-view bias and bands, X4)
+  ExerciseModel   the per-exercise checkpoint (T17; default Proposed, lambda 1.0): its per-time CVDC features (for the
+                  completed Module III), and, as a supplementary output, the rep score (rep head), set score and items
+                  (video head, T13) and the cosine distance of the rep embedding to the PT demo's reference embedding
+                  (E5, mirrored for the other side); the fold is the one that held the subject out when the video is a
+                  dataset video (X2), and the demo warns when the subject was in the model's training split
+
+X11 (2026-10-22): **the assessment is Module III's score, as in the proposal (Fig. 3)**. With the Proposed model
+(eval.proposed_default) loaded, it is the completed Module III (M19 + M20; configs/completion.yaml): every rep is
+aligned to the PT template in the CVDC embedding space of the model's fold, the joint angles are compared along that
+alignment, and the embedding distance and the angular velocity are scored and localised, with the library of that
+fold (the completed run's ``<EX>_fold<k>``). Without a model, or with another network, it is the rule-based Module
+III with the deployable library (M8-M18). The network's own scores (rep head, video head) are a **supplementary**
+output, labelled as such: the instrument used to compare the models, not the pipeline's result.
 No frame, crop or face is stored by the engine (keypoints only, D10).
 """
 import json
@@ -24,9 +32,14 @@ import pandas as pd
 import torch
 
 from cvdc.assess.angles import ASSESS_ANGLES
+from cvdc.assess.cvdc_join import align_steps, encode_sequences, frame_distance, frame_path, ref_template_packs
 from cvdc.assess.module3 import Assessor, assess_config, set_errors, video_report
 from cvdc.assess.template import load_library
-from cvdc.config import data_path, exercise_cfg, resolve
+from cvdc.config import data_path, exercise_cfg, load_config, resolve
+
+COMPLETION_CONFIG = "configs/completion.yaml"  # X11: the completed Module III's settings and fold libraries
+SUPPLEMENTARY = ("supplementary: the network's learned score head, used to compare the models; not the pipeline's "
+                 "output (the assessment is Module III's score)")
 from cvdc.data.extract import HAND_CONF, HAND_SIDES, detect_hand
 from cvdc.data.labels import MQ_ITEMS
 from cvdc.data.preprocess import preprocess_arrays, resample_fixed
@@ -179,6 +192,18 @@ class ExerciseModel:
             out[s] = torch.cat(zs).mean(0).cpu().numpy().astype(np.float64)
         return out
 
+    def sequence(self, pre, start, end):
+        """(T', D) per-time CVDC features of one rep (STGCN.sequence), centred with the fold's training mean (M19)."""
+        x = self._pack(pre, start, end).permute(0, 3, 1, 2).contiguous()
+        return encode_sequences(self.model, x, self.mc, self.dev)[0] - self.centre
+
+    def ref_sequences(self, ref_meta):
+        """{patient side: (T', D)} the PT template reps of Module III (``ref_meta['spans']``) encoded and averaged,
+        mirrored for the other side, centred (exactly as scripts/full/completion/encode.py)."""
+        from cvdc.assess.cvdc_join import ref_sequences
+        packs = ref_template_packs(self.cfg, ref_meta, self.T)
+        return {k: v - self.centre for k, v in ref_sequences(self.model, packs, self.mc, self.dev).items()}
+
     @torch.no_grad()
     def rep(self, pre, start, end, side):
         """Rep head outputs and the distance to the PT reference of one rep (frames start..end of the 30 fps grid)."""
@@ -219,14 +244,34 @@ class OnlineSession:
     least ``margin_s`` before the newest frame are assessed. Unchanged reps (same boundaries and side) come from a
     cache; ``final=True`` recomputes every rep, so the final report equals the batch result for the whole video."""
 
-    def __init__(self, cfg, exercise, view="F", model=None, library_dir=None, margin_s=0.6):
+    def __init__(self, cfg, exercise, view="F", model=None, library_dir=None, margin_s=0.6, pipeline="auto"):
+        """``pipeline``: 'completed' (Module III with the CVDC model, X11), 'rules' (Module III without a network) or
+        'auto' = completed when the Proposed model is loaded and its fold library exists, otherwise rules."""
         self.cfg, self.ex, self.view, self.model, self.margin_s = cfg, exercise, view, model, margin_s
         self.ex_cfg = exercise_cfg(cfg, exercise)
-        self.ac = assess_config(cfg, exercise)
-        ref, lib, meta = load_library(resolve(library_dir or cfg["templates"]["library_dir"]) / exercise)
+        self.fps = cfg["preprocess"]["fps"]
+        self.mode, self.R = "rules", None
+        if pipeline != "rules" and model is not None and model.method == cfg["eval"]["proposed_default"]:
+            cc = load_config(resolve(COMPLETION_CONFIG))
+            lp = resolve(cc["templates"]["library_dir"]) / f"{exercise}_fold{model.fold}"
+            if lp.with_suffix(".npz").exists():
+                self.mode = "completed"
+                self.ac = assess_config(cc, exercise)
+                ref, lib, meta = load_library(lp)
+                self.R = model.ref_sequences(ref)
+            elif pipeline == "completed":
+                raise FileNotFoundError(f"{lp}.npz: run python -m cvdc.assess.run --config {COMPLETION_CONFIG}")
+        elif pipeline == "completed":
+            raise ValueError(f"the completed Module III needs the {cfg['eval']['proposed_default']} model")
+        if self.mode == "rules":
+            self.ac = assess_config(cfg, exercise)
+            ref, lib, meta = load_library(resolve(library_dir or cfg["templates"]["library_dir"]) / exercise)
         self.assessor = Assessor(ref, lib, self.ac)
         self.ref, self.lib, self.lib_meta = ref, lib, meta
-        self.fps = cfg["preprocess"]["fps"]
+        self.pipeline_label = (
+            f"Module III with the CVDC model ({model.method}, fold {model.fold}): alignment in the embedding space, "
+            "joint angles, angular velocity and embedding distance (M19, M20)" if self.mode == "completed" else
+            "Module III, rule-based (joint angles against the PT template; no network in the score)")
         self.reset()
 
     def reset(self):
@@ -245,12 +290,25 @@ class OnlineSession:
                                                            hs, n)}, hs
         return {self.ac["angle"]: np.full(n, np.nan)}, side
 
+    def _joined(self, pre, r, side):
+        """M19 / X11: a transform that attaches the alignment found in the CVDC embedding space and the embedding
+        distance channel to the rep's signals (as cvdc.assess.run does for the batch evaluation)."""
+        S = self.model.sequence(pre, r["start"], r["end"])
+        sp, d = align_steps(S, self.R[side])
+        n_steps, T = S.shape[0], self.model.T
+
+        def transform(sig):
+            return dict(sig, ch={**sig["ch"], "emb_dist": frame_distance(sp, d, sig["n"], n_steps, T)},
+                        frame_path=frame_path(sp, sig["n"], self.ref["n"], n_steps, T))
+        return transform
+
     def _assess(self, pre, arrs, n, r, side, index):
         extra, aside = self._extra(arrs, n, side)
         mo = self.model.rep(pre, r["start"], r["end"], side) if self.model else None
+        tr = self._joined(pre, r, side) if self.mode == "completed" else None
         entry, dbg = self.assessor.rep(pre["world"], r["start"], r["end"], aside, self.view, index,
-                                       mo["embedding_distance"] if mo else None, extra)
-        if mo:
+                                       mo["embedding_distance"] if mo else None, extra, transform=tr)
+        if mo:  # supplementary (X11): the network's own outputs, not the assessment
             entry["model_score"] = round(mo["score"], 1)
             entry["model_items"] = {k: round(v, 3) for k, v in mo["items"].items()}
         entry["time_s"] = [round(r["start"] / self.fps, 2), round(r["end"] / self.fps, 2)]
@@ -294,12 +352,14 @@ class OnlineSession:
                 "angle_source": (self.ac["angle_source"] if self.ac["angle_source"] != "hands"
                                  else "2d_mediapipe_hands_side_views + 3d_mediapipe_world"),
                 "template": {"source": self.cfg["templates"]["source"], "file": self.lib_meta.get("file"),
-                             "library": self.lib_meta.get("fitted_on")},
-                "n_reps_set": len(self.entries), "expected_reps": exp, "mode": "demo"}
+                             "library": self.lib_meta.get("fitted_on"),
+                             **({"alignment": self.lib_meta.get("alignment")} if self.mode == "completed" else {})},
+                "n_reps_set": len(self.entries), "expected_reps": exp, "mode": "demo", "pipeline": self.pipeline_label}
         rep = video_report(meta, self.entries, set_errors(len(self.entries), exp), self.ac)
+        rep["set_score_source"] = "module3_with_cvdc" if self.mode == "completed" else "module3_rules"  # X11
         if self.model:
-            rep["model"] = {**self.model.info(), **(self.model.video(self.zs, len(self.entries)) or {})}
-        rep["set_score_source"] = "model" if self.model and rep["model"].get("set_score") is not None else "module3"
+            rep["model"] = {"role": SUPPLEMENTARY, **self.model.info(),
+                            **(self.model.video(self.zs, len(self.entries)) or {})}
         return rep
 
     def live_angle(self, world_frame, side=None):

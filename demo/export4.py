@@ -12,7 +12,7 @@ writes it at the source's frame rate, so it plays back at normal speed. The 2 x 
                   PCA fitted on that fold's training embeddings (the fold that held the subject out; centred on
                   their mean, as the cosine distance is, E13); the training reps as a faint cloud coloured by
                   score, the patient's reps as a trail, a gauge of the latest rep's centred cosine distance to the
-                  reference and its rep scores
+                  reference, and its scores: Module III's (the assessment, X11) and the model's own (supplementary)
 
 The live window stays two-panel. CPU only. The PCA (and the training projections) are cached per exercise, method
 and fold in <outputs>/demo/pca/.
@@ -194,19 +194,19 @@ class EmbeddingView:
             put(img, f"{dist:.2f}", (gx1 + 6, gy + 13), 0.5, WHITE)
         y = gy + 62
         if e is not None:
-            put(img, f"rep {e['rep'] + 1}: model {e.get('model_score', float('nan')):.1f} | "
-                     f"Module III {e['score']} ({e['quality']})", (10, y), 0.55, YELLOW)
+            put(img, f"rep {e['rep'] + 1}: assessment (Module III) {e['score']} ({e['quality']}) | "
+                     f"suppl. model {e.get('model_score', float('nan')):.1f}", (10, y), 0.55, YELLOW)
         else:
             put(img, "no completed rep yet", (10, y), 0.5, GREY)
         # the trail as a table: the latest reps that fit
         rows = max(0, (H - (y + 40)) // 20)
         if sess.entries and rows:
             y += 32
-            put(img, "rep   model   Module III   distance", (10, y), 0.45, GREY)
+            put(img, "rep   Module III   suppl. model   distance", (10, y), 0.45, GREY)
             for e in sess.entries[-rows:]:
                 y += 20
                 dd = (e.get("embedding_distance") or {}).get("cosine_centred")
-                put(img, f"{e['rep'] + 1:>3}   {e.get('model_score', float('nan')):5.1f}   {str(e['score']):>10}   "
+                put(img, f"{e['rep'] + 1:>3}   {str(e['score']):>10}   {e.get('model_score', float('nan')):12.1f}   "
                          + (f"{dd:8.2f}" if dd is not None else "       -"), (10, y), 0.45,
                     YELLOW if e is sess.entries[-1] else WHITE)
         self._key, self._img = key, img

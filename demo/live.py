@@ -3,8 +3,9 @@ stream (no physical webcam on this machine, X1; ``--source 0`` opens a webcam wh
 
 The window shows the frame with the skeleton overlay (hand landmarks for E06; joints named by the last rep's errors in
 red), the exercise and camera view, the rep counter, after each rep its Module III score, quality and raw errors
-(type · joint · deviation · frames), the model's rep score and the distance to the PT reference when a checkpoint is
-loaded, the set score at the end (the model's video head if loaded, else Module III), a live plot of the main angle
+(type · joint · deviation · frames), the set score at the end (always Module III's: with the Proposed model loaded,
+the completed Module III that aligns and compares in the CVDC embedding space, X11; otherwise the rule-based Module III),
+the model's own score labelled as supplementary (the instrument used to compare the models), a live plot of the main angle
 and the last rep against its template band, FPS and the loaded checkpoint. No coaching text (spec scope). The side
 panel shows the PT reference (X6, X7): the PT's own rep from rest to rest, at rest while the patient rests (nothing
 compared), phase-aligned during a rep with the live angle differences per joint; ``--ghost`` draws it on the patient
@@ -231,10 +232,17 @@ def plot_inset(img, x0, y0, w, h, series, title, ylim=None):
 def error_lines(entry, n=4):
     out = []
     for e in (entry or {}).get("errors", [])[:n]:
-        dev = e.get("deviation_deg", e.get("deviation_s"))
-        unit = "deg" if "deviation_deg" in e else "s"
+        if "deviation_deg" in e:
+            dev, unit = f"{e['deviation_deg']:+.1f}", "deg"
+        elif "deviation_s" in e:
+            dev, unit = f"{e['deviation_s']:+.2f}", "s"
+        elif "deviation" in e:  # M19 / M20 channels: deg/s or cosine distance
+            dev, unit = (f"{e['deviation']:+.3f}" if e.get("unit") == "cosine distance" else f"{e['deviation']:+.0f}",
+                         e.get("unit", ""))
+        else:
+            dev, unit = "", ""
         fr = e.get("frames")
-        out.append(f"{e['type']} . {e.get('joint', '')} . {dev:+.1f} {unit}" + (f" . frames {fr[0]}-{fr[1]}" if fr else "")
+        out.append(f"{e['type']} . {e.get('joint', '')} . {dev} {unit}" + (f" . frames {fr[0]}-{fr[1]}" if fr else "")
                    + f" ({e['severity']})")
     return out
 
@@ -426,8 +434,8 @@ def main():
                 last_update = t
                 for e in sess.update(pose):
                     last_entry = e
-                    print(f"rep {e['rep'] + 1}{' (updated)' if e.get('updated') else ''}: score {e['score']} "
-                          f"({e['quality']})" + (f", model {e['model_score']}" if "model_score" in e else "")
+                    print(f"rep {e['rep'] + 1}{' (updated)' if e.get('updated') else ''}: Module III score {e['score']} "
+                          f"({e['quality']})" + (f" [supplementary model score {e['model_score']}]" if "model_score" in e else "")
                           + (f", distance {e['embedding_distance']['cosine_centred']}" if e.get("embedding_distance") else "")
                           + "".join(f"\n    {x}" for x in error_lines(e, 9)))
                 if live_ref is not None:
@@ -445,13 +453,14 @@ def main():
             for s in (f"{ex} {cfg['exercises'][ex]['name']} | view {view} | t {t:5.1f} s | "
                       + ("offline render" if a.export4 else f"{fps:4.1f} FPS"),
                       f"reps: {len(sess.entries)}" + (" | in a rep" if rs["in_rep"] else " | at rest")
-                      + (f" | model: {model.method} fold {model.fold}" if model else
-                         " | Module III only (no checkpoint)")):
+                      + (" | Module III with CVDC model " + f"{model.method} fold {model.fold}"
+                         if sess.mode == "completed" else " | Module III, rule-based"
+                         + (f" (model {model.method} fold {model.fold}: supplementary)" if model else ""))):
                 text(canvas, s, (10, y))
                 y += 24
             if last_entry:
-                text(canvas, f"rep {last_entry['rep'] + 1}: {last_entry['score']} ({last_entry['quality']})"
-                     + (f" | model {last_entry['model_score']}" if "model_score" in last_entry else "")
+                text(canvas, f"rep {last_entry['rep'] + 1}: assessment {last_entry['score']} ({last_entry['quality']})"
+                     + (f" | suppl. model {last_entry['model_score']}" if "model_score" in last_entry else "")
                      + (f" | dist {last_entry['embedding_distance']['cosine_centred']}"
                         if last_entry.get("embedding_distance") else ""), (10, y), 0.6, YELLOW)
                 y += 22
@@ -534,8 +543,9 @@ def main():
                     time.sleep(lag)
         for e in sess.update(pose, final=True):
             last_entry = e
-            print(f"rep {e['rep'] + 1}{' (updated)' if e.get('updated') else ''} (final pass): score {e['score']} "
-                  f"({e['quality']})" + (f", model {e['model_score']}" if "model_score" in e else ""))
+            print(f"rep {e['rep'] + 1}{' (updated)' if e.get('updated') else ''} (final pass): Module III score "
+                  f"{e['score']} ({e['quality']})"
+                  + (f" [supplementary model score {e['model_score']}]" if "model_score" in e else ""))
     finally:
         pose.close()
         if writer is not None:
@@ -547,9 +557,11 @@ def main():
             cv2.destroyAllWindows()
     rep = sess.set_report(video_id or "")
     ms = rep.get("model", {}).get("set_score")
-    print(f"set: {rep['n_reps']} reps | Module III set score {rep['set_score']} ({rep['set_quality']})"
-          + (f" | model set score {ms:.1f}, MQ {rep['model'].get('movement_quality', float('nan')):.1f}" if ms is not None else "")
-          + (f" | set errors {rep['set_errors']}" if rep["set_errors"] else ""))
+    print(f"set: {rep['n_reps']} reps | ASSESSMENT (pipeline output, {rep['pipeline']}): set score {rep['set_score']} "
+          f"({rep['set_quality']})" + (f" | set errors {rep['set_errors']}" if rep["set_errors"] else ""))
+    if ms is not None:
+        print(f"supplementary (the model's learned score head, for comparing the models): set score {ms:.1f}, MQ "
+              f"{rep['model'].get('movement_quality', float('nan')):.1f}")
     print("report:", save_report(rep, out_dir, f"{ex}_{video_id}"))
 
 

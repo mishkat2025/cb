@@ -26,17 +26,22 @@ SEVERITY_RULE = ("How far the movement went outside the range the high-scoring e
                  "SD beyond it, Moderate = 1 to 2 SD, Severe = more than 2 SD.")
 
 NO_MODEL = "none (Module III only)"
+# X11: the assessment is always Module III's score; a network's own learned score is a supplementary output
 MODELS = {
-    "proposed_j1": ("Proposed model (default)",
-                    "Learned that the same rep filmed by different cameras is the same movement, then trained on "
-                    "the physiotherapists' scores."),
-    "b1": ("Baseline model (B1)", "The same network trained from scratch on 2D keypoints, without the "
-                                   "cross-camera step. For comparison."),
-    "proposed_lp": ("Proposed model, frozen", "The cross-camera network kept fixed; only the small scoring layer was "
-                                               "trained."),
-    NO_MODEL: ("No model: rule-based check only", "Only Module III (each rep compared with the physiotherapist's "
-                                                  "demo). Needs no trained model."),
+    "proposed_j1": ("Proposed CVDC model (default)",
+                    "The proposal's pipeline: Module III lines each rep up with the physiotherapist's demo in this "
+                    "network's camera-independent (CVDC) representation and scores it. The network's own learned score "
+                    "is shown separately as a supplementary output."),
+    "b1": ("Baseline network (B1)", "For comparison: the assessment is the rule-based Module III; this network (2D, "
+                                     "no cross-camera step) adds only a supplementary score."),
+    "proposed_lp": ("Proposed network, frozen", "For comparison: the assessment is the rule-based Module III; this "
+                                                 "network adds only a supplementary score."),
+    NO_MODEL: ("No network: rule-based Module III", "Each rep compared with the physiotherapist's demo by joint "
+                                                     "angles only. Needs no trained model."),
 }
+ASSESSMENT = {"completed": "Module III with the CVDC model, the proposal's pipeline",
+              "rules": "Module III, rule-based, with no network in the score"}
+ASSESSMENT_SHORT = {"completed": "Module III with the CVDC model", "rules": "rule-based Module III"}
 
 # Module III angle channels (configs/exercises/EXX.yaml, cvdc/assess/angles.py), all in degrees
 CHANNELS = {
@@ -56,6 +61,8 @@ CHANNELS = {
     "knee_flexion_both": "Knee bend (both legs)",
     "hip_flexion_asymmetry": "Hip difference, left vs right",
     "knee_flexion_asymmetry": "Knee difference, left vs right",
+    "angvel": "Angular speed of the main movement (deg/s)",
+    "emb_dist": "Movement pattern vs the demo (CVDC model)",
 }
 
 # the main movement named in each "<movement>_range_insufficient" error type
@@ -86,6 +93,11 @@ ERRORS = {
     "too_fast": ("Too fast", "This repetition was quicker than the experts do it."),
     "too_slow": ("Too slow", "This repetition was slower than the experts do it."),
     "too_few_reps": ("Too few repetitions", "The set has fewer repetitions than the exercise asks for."),
+    "angular_velocity_deviation": ("Speed profile off", "The main movement was faster or slower than the high-scoring "
+                                                        "experts' at this point of the repetition."),
+    "movement_pattern_deviation": ("Movement pattern differs from the demo",
+                                   "The CVDC model sees this part of the repetition as further from the "
+                                   "physiotherapist's demo than the high-scoring experts' repetitions are."),
 }
 
 # EAAQ items (Physiotherapist Exercise Marking.csv: 4 primary factors, 3 control factors; PROGRESS.md §3, D5, D11)
@@ -115,9 +127,16 @@ MEASURES = {
     "angular_velocity_dev_deg_s": ("Speed-profile difference", "deg/s", "Average difference between this "
                                                                          "repetition's angular speed and the "
                                                                          "target's, moment by moment."),
+    "velocity_channel_dev_deg_s": ("Angular-speed difference from the experts", "deg/s",
+                                   "Average difference between this repetition's angular speed and the high-scoring "
+                                   "experts', moment by moment (a scored part)."),
+    "embedding_distance_vs_experts": ("Movement-pattern distance vs the experts", "",
+                                      "How much further from the demo this repetition looks to the CVDC model than "
+                                      "the high-scoring experts' do, on average (0 = as close as they are)."),
 }
 
-SCORE_PARTS = {"angle": "Posture angles", "rom": "Range of motion", "speed": "Speed", "symmetry": "Left-right symmetry"}
+SCORE_PARTS = {"angle": "Posture angles", "rom": "Range of motion", "speed": "Speed", "symmetry": "Left-right symmetry",
+               "velocity": "Angular speed profile", "embedding": "Movement pattern (CVDC model)"}
 
 PANELS = ("**Top left:** the patient video with the detected skeleton (faces blurred). Joints with a problem in the "
           "last repetition turn red. Labels at the joints show the patient's angle minus the target, green inside "
@@ -162,6 +181,13 @@ def error_sentence(e, fps=30.0):
     if e.get("frames"):
         a, b = (x / fps for x in e["frames"])
         when = f" At {a:.1f} s." if abs(b - a) < 0.05 else f" From {a:.1f} s to {b:.1f} s."
+    if e.get("unit") == "deg/s":  # M20
+        return (f"The {joint(e.get('joint')) or 'main joint'} moved at {e['measured']:.0f}°/s where the experts move "
+                f"at about {e['target']:.0f}°/s ({abs(e['deviation']):.0f}°/s "
+                f"{'faster' if e['deviation'] > 0 else 'slower'}).{when}")
+    if e.get("unit") == "cosine distance":  # M19
+        return (f"The movement looked further from the physiotherapist's demo than the experts' repetitions do "
+                f"(distance {e['measured']:.2f} against their {e['target']:.2f}).{when}")
     if "measured_s" in e:  # speed rules
         return (f"This repetition took {e['measured_s']:.2f} s; experts take about {e['target_s']:.2f} s "
                 f"({abs(e['deviation_s']):.2f} s {'shorter' if e['deviation_s'] < 0 else 'longer'}).{when}")

@@ -86,7 +86,10 @@ python -m cvdc.train.run_per_exercise --exercises E07 --methods b1    # a subset
 
 No webcam on this machine: video files play at real-time speed (`--source 0` opens a webcam where one exists). One
 model per exercise (T17): give the exercise, or pick a dataset video by its fields (the model fold that held its
-subject out is loaded; otherwise a leakage warning is shown). Without a checkpoint it runs Module III only.
+subject out is loaded; otherwise a leakage warning is shown). **The assessment is always Module III's score**
+(X11): with the Proposed model it is the proposal's pipeline (Module III aligns and compares each rep in that fold's
+CVDC embedding space, M19 + M20); without a checkpoint, or with another network, the rule-based Module III. A
+network's own learned score is shown separately, labelled supplementary.
 
 ```bash
 python -m demo.live --list E03                                   # dataset videos of an exercise
@@ -289,9 +292,9 @@ Measured runtimes (one job at a time): cross-view 3.9 h (Proposed 2.4 h, each ba
 
 ## Proposal completion (2026-10-22)
 
-The items of the proposal that were missing or partial (`reports/FINAL_REPORT_E01_E04.md` §8, tables
+The items of the proposal that were missing or partial (`reports/FINAL_REPORT_E01_E04.md` §4–§7, tables
 `reports/completion_tables.md`, decisions D19, A11, M19, M20, E31, E32). All commands from the repo root; the full
-list with run times is in the final report §8.5.
+list is in the final report §9.
 
 ```bash
 python scripts/full/completion/classification_conditions.py   # precision / recall / F1 / accuracy, recording conditions

@@ -254,6 +254,13 @@ def main():
         for p in plans:
             al_fold[p["fold"]] = fold_alignment(p)
             libs[p["fold"]], g = library(p["train"], al_fold[p["fold"]])
+            if join_tag and not a.loso:  # X11: the demo's completed Module III uses the library of its model's fold
+                save_library(resolve(tc["library_dir"]) / f"{ex}_fold{p['fold']}", ref, libs[p["fold"]],
+                             {"exercise": ex, "file": ref_file, "fitted_on": f"fold {p['fold']} training subjects",
+                              "min_score": tc["min_score"], "fold": int(p["fold"]), "test_subjects": list(p["test"]),
+                              "alignment": f"cvdc_embedding ({cfg['eval']['proposed_default']}, {join_tag} fold "
+                                           f"{p['fold']})", "n_videos": int(g.video_id.nunique()),
+                              "n_subjects": int(g.subject.nunique())})
             for v in cfg["data"]["views"]:
                 gv = g[g.view == v]
                 count_rows.append(dict(exercise=ex, fold=p["fold"], view=v, reps=len(gv), videos=gv.video_id.nunique(),

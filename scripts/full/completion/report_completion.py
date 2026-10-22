@@ -33,7 +33,9 @@ def main():
     L = ["# Proposal completion: generated tables (E01–E04)\n",
          f"Assembled by `scripts/full/completion/report_completion.py` on {time.strftime('%Y-%m-%d %H:%M')} from the "
          f"summaries in `outputs/full/results/completion/`. Narrative and decisions: "
-         f"[`FINAL_REPORT_E01_E04.md`](FINAL_REPORT_E01_E04.md) §8, `DESIGN_DECISIONS.md` D19, M19, M20, A11, E31, E32.\n"]
+         f"[`FINAL_REPORT_E01_E04.md`](FINAL_REPORT_E01_E04.md) §4–§7, `DESIGN_DECISIONS.md` D19, M19, M20, A11, E31, "
+         f"E32, X11. The pipeline's output (Module III's score) has its own tables: "
+         f"[`pipeline_tables.md`](pipeline_tables.md).\n"]
     for folder, title in PARTS:
         p = base / folder / "summary.md"
         L.append(f"\n---\n\n# {title}\n")
