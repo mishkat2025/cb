@@ -23,7 +23,8 @@ Added for LOSO:
   the encoder check (C7) of every CVDC run, read back from done.json and the encoder's run_info.json
 
 usage: python scripts/loso/report_loso.py [--config configs/per_exercise_loso.yaml] [--tag perex_loso] [--boot 2000]
-Writes CSV tables and summary.md to <eval.results_dir>/<tag>/.
+Writes CSV tables and summary.md to <eval.results_dir>/<tag>/ and (not for smoke runs) the committed copy
+reports/final_E01_E04_loso_tables.md.
 """
 import argparse
 import json
@@ -568,7 +569,10 @@ def write_summary(out, S, D, T, SG, DG, TG, C, V, VG, VGp, VS_, VSG, TR, checks,
     w("Tables: `score_metrics.csv`, `paired_deltas.csv`, `subject_tests.csv`, `video_predictions.csv`, `vci.csv`, "
       "`distance_view_stability.csv`, `encoder_checks.csv`, `stopping_runtime.csv`, `loso_vs_gkf.csv`, and the "
       "GroupKFold-5 reference recomputed on the same draws (`gkf_reference_*.csv`).")
-    (out / "summary.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    text = "\n".join(L) + "\n"
+    (out / "summary.md").write_text(text, encoding="utf-8")
+    if not smoke:  # committed copy next to the GroupKFold-5 tables (reports/final_E01_E04_tables.md)
+        (REPO / "reports" / "final_E01_E04_loso_tables.md").write_text(text, encoding="utf-8")
 
 
 def _pub(VGp, m, stage, st):

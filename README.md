@@ -5,7 +5,9 @@ Cross-View Depth-Consistency Learning" on the MobiPhysio dataset (doi 10.7910/DV
 
 **Final report (final scope E01–E04, 2026-10-21): [`reports/FINAL_REPORT_E01_E04.md`](reports/FINAL_REPORT_E01_E04.md)**,
 full tables in [`reports/final_E01_E04_tables.md`](reports/final_E01_E04_tables.md) (E05–E09 as a supplementary
-appendix). The status notes below are the earlier history.
+appendix). **LOSO per exercise (2026-10-22)** is §7 of that report, tables in
+[`reports/final_E01_E04_loso_tables.md`](reports/final_E01_E04_loso_tables.md); how to run, check and resume it:
+[`scripts/loso/README.md`](scripts/loso/README.md). The status notes below are the earlier history.
 
 - **Scope:** all nine exercises since 2026-10-20 (`configs/data_full.yaml`, every input and output under
   `data/full/`, `outputs/full/`, `runs/full/`). The E01/E02 **pilot** (`configs/data.yaml`, the default config) and
