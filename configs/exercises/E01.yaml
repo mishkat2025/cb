@@ -11,7 +11,7 @@ primary_angle:                   # drives rep segmentation (P6)
   name: shoulder_elevation       # angle between upper arm and trunk line (0 = arm at side, 180 = overhead)
   source: world                  # world (3D MediaPipe world landmarks) | image (2D)
   side: auto                     # auto = the arm with the larger range in the video
-reps:                            # P6: chosen by cross-view rep-count agreement (scripts/phase1/rep_signal_check.py)
+reps:                            # P6: chosen by cross-view rep-count agreement (scripts/pilot/phase1/rep_signal_check.py)
   polarity: peak                 # rep = rest -> peak elevation -> rest
   prominence: 30                 # deg
   min_amplitude: 30              # deg
@@ -23,7 +23,7 @@ eaaq:                            # M5, from the E01 questionnaire
 assess:                          # Module III (Phase 4); supervisor answers 1, 2, 4 (2026-10-17)
   angle: shoulder_elevation      # joint angle assessed (3D, world landmarks)
   mirror_left_arm: true          # left-arm performances are mirrored and assessed normally
-  flag_arm_side: false           # left-arm scores not significantly lower (scripts/phase1/left_arm_scores.py)
+  flag_arm_side: false           # left-arm scores not significantly lower (scripts/pilot/phase1/left_arm_scores.py)
   speed:
     source: expert_data          # expert_data | eaaq
     expert_min_score: 95         # tolerances from reps of expert videos scoring >= this

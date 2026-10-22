@@ -1,6 +1,6 @@
 # Tables: final scope E01–E04 (D18), E05–E09 as a supplementary appendix
 
-Generated 2026-10-21 01:30 by `scripts/final/report_final.py` from the step-1 tables (`outputs/full/results/final_E01_E04/step1`), the cross-view tables (`outputs/full/results/perex_crossview`) and Module III (`outputs/full/phase4`). Within groups, video level, 95% subject-bootstrap CIs; **bold** = a paired CI that excludes 0; ⚠ = fewer than 15 subjects.
+Generated 2026-10-21 01:30 by `scripts/full/final/report_final.py` from the step-1 tables (`outputs/full/results/final_E01_E04/step1`), the cross-view tables (`outputs/full/results/perex_crossview`) and Module III (`outputs/full/phase4`). Within groups, video level, 95% subject-bootstrap CIs; **bold** = a paired CI that excludes 0; ⚠ = fewer than 15 subjects.
 
 ## 1. Score prediction within groups (step 1: one model per exercise, GroupKFold-5)
 

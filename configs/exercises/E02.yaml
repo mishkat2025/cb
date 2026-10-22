@@ -10,7 +10,7 @@ references:
 primary_angle:                   # P6: rep signal. E02 is cross-body adduction with the arm low (elevation
   name: wrist_path_pc1           # ~10-45 deg); its direction changes with the view, so no single angle segments
   source: world                  # it consistently. PC1 of the wrist path in the trunk frame, oriented toward the
-  side: auto                     # midline, gave the best cross-view agreement (scripts/phase1/rep_*_check.py).
+  side: auto                     # midline, gave the best cross-view agreement (scripts/pilot/phase1/rep_*_check.py).
                                  # Not a joint angle: flagged to the supervisor.
 reps:
   polarity: peak
@@ -22,7 +22,7 @@ assess:                          # Module III (Phase 4); supervisor answers 1, 2
   angle: horizontal_adduction    # 3D: upper arm vs shoulder line in the transverse plane (not the rep signal)
   angle_min_proj: 0.25           # NaN where the upper arm is within ~14.5 deg of vertical (angle unstable)
   mirror_left_arm: true
-  flag_arm_side: false           # left-arm scores not significantly lower (scripts/phase1/left_arm_scores.py)
+  flag_arm_side: false           # left-arm scores not significantly lower (scripts/pilot/phase1/left_arm_scores.py)
   speed:
     source: expert_data
     expert_min_score: 95

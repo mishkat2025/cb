@@ -26,7 +26,8 @@ def test_full_config_moves_every_output_and_keeps_the_pilot_config():
     pilot, full = load_config("configs/data.yaml"), load_config("configs/data_full.yaml")
     assert pilot["data"]["include_exercises"] == ["E01", "E02"] and pilot["data"]["index_csv"] == "data/index.csv"
     assert not pilot["sync"]["meta"].get("start_time_rule") and "signals" not in pilot["sync"]["motion"]
-    assert full["data"]["include_exercises"] == [] and video_root(full).name == "mobiphysio"
+    # 2026-10-22 file-structure cleanup: the videos moved from D:\cb\mobiphysio to D:\cb\dataset\videos
+    assert full["data"]["include_exercises"] == [] and video_root(full).parts[-2:] == ("dataset", "videos")
     assert full["train"]["cvdc_init_from"] is None
     # no full-scope path may point at a pilot location
     paths = [full["data"][k] for k in ("index_csv", "ref_index_csv", "reps_csv", "reps_perview_csv", "reps_ref_csv")]

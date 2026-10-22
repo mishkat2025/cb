@@ -7,7 +7,7 @@ Cross-View Depth-Consistency Learning" on the MobiPhysio dataset (doi 10.7910/DV
 full tables in [`reports/final_E01_E04_tables.md`](reports/final_E01_E04_tables.md) (E05–E09 as a supplementary
 appendix). **LOSO per exercise (2026-10-22)** is §7 of that report, tables in
 [`reports/final_E01_E04_loso_tables.md`](reports/final_E01_E04_loso_tables.md); how to run, check and resume it:
-[`scripts/loso/README.md`](scripts/loso/README.md). The status notes below are the earlier history.
+[`scripts/full/loso/README.md`](scripts/full/loso/README.md). The status notes below are the earlier history.
 
 - **Scope:** all nine exercises since 2026-10-20 (`configs/data_full.yaml`, every input and output under
   `data/full/`, `outputs/full/`, `runs/full/`). The E01/E02 **pilot** (`configs/data.yaml`, the default config) and
@@ -37,29 +37,36 @@ MediaPipe models (Tasks API; `mediapipe==1.1.1` has no `solutions` module), plac
 and for E06 `hand_landmarker.task` (Apache 2.0) from
 `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task`.
 
-Dataset root = the folder that contains this repo (override with the env variable `MOBIPHYSIO_ROOT`). It must
-hold the exercise folders (`E01(Abduction)`, ...), `Reference-Model Videos by PTs/` and
-`Physiotherapist Exercise Marking.csv`. The raw dataset is never modified.
+**Folder layout (since 2026-10-22).** Everything lives under `D:\cb`:
 
-**Video root (2026-10-20):** the full download put the nine exercise folders in `D:\cb\mobiphysio\`, while the CSV
-and the reference folder stay in `D:\cb`. `data.video_root` (D1; env `MOBIPHYSIO_VIDEO_ROOT`) points at the exercise
-folders; `configs/data_full.yaml` sets it to `../mobiphysio`. The pilot config keeps the old layout (it ran on the
-partial download). The full-dataset Step 0 check: `scripts/step0_full/README.md`, results in `PROGRESS.md` §3.7.
+```
+D:\cb\
+  cvdc-physio\     this repository (code, configs, docs, reports; data/ outputs/ runs/ are gitignored artefacts)
+  dataset\         the MobiPhysio dataset, never modified
+    videos\        the nine exercise folders E01(Abduction) ... E09(Back _Extension)   (data.video_root)
+    Reference-Model Videos by PTs\, Physiotherapist Exercise Marking.csv, MobiPhysio.md   (data.root)
+  docs\            the research proposal, the MobiPhysio Data in Brief paper, the implementation brief
+  .venv\           the Python environment
+```
+
+`data.root` (env `MOBIPHYSIO_ROOT`) is `../dataset` and `data.video_root` (D1; env `MOBIPHYSIO_VIDEO_ROOT`) is
+`../dataset/videos`, in both the pilot and the full-scope configs. The full-dataset Step 0 check:
+`scripts/full/step0/README.md`, results in `PROGRESS.md` §3.7.
 
 ## Full scope (all nine exercises): Phase 1
 
 Every command takes `--config configs/data_full.yaml`; nothing of the pilot is written (D15). Order, reuse of the
-pilot's keypoints and the extra checks: `scripts/phase1_full/README.md`; results in `PROGRESS.md` §5b.
+pilot's keypoints and the extra checks: `scripts/full/phase1/README.md`; results in `PROGRESS.md` §5b.
 
 ```bash
 python scripts/run_phase1.py --config configs/data_full.yaml --to pack      # index ... packs (resumable)
 python scripts/run_phase1.py --config configs/data_full.yaml --from lift    # KTPFormer lifting (GPU), lifted packs, checks, report
-python scripts/phase1_full/hands_check.py                                    # E06: MediaPipe Hands wrist angle
-python scripts/phase1_full/pf1_motion_check.py --exercise E05                # E05 PF1 = 0 non-experts: wrong exercise?
-python scripts/phase1_full/compare_pilot.py                                  # E01/E02 vs the pilot, E03-E09 vs Step 0
-python scripts/phase1_full/rep_signal_compare.py                             # E03/E06/E09 rep signals by cross-view agreement
+python scripts/full/phase1/hands_check.py                                    # E06: MediaPipe Hands wrist angle
+python scripts/full/phase1/pf1_motion_check.py --exercise E05                # E05 PF1 = 0 non-experts: wrong exercise?
+python scripts/full/phase1/compare_pilot.py                                  # E01/E02 vs the pilot, E03-E09 vs Step 0
+python scripts/full/phase1/rep_signal_compare.py                             # E03/E06/E09 rep signals by cross-view agreement
 python -m cvdc.data.pairs --config configs/data_full.yaml                    # CVDC pairs (per-exercise DTW angles)
-python scripts/phase1_full/dtw_angle_check.py                                # known-warp test of the DTW angles
+python scripts/full/phase1/dtw_angle_check.py                                # known-warp test of the DTW angles
 ```
 
 ## Full scope: Phase 3, one model per exercise (T17)
@@ -69,7 +76,7 @@ Supervisor decision (2026-10-20): every exercise E01–E09 gets its own models, 
 results in `PROGRESS.md` §6h. A shared all-exercise run was stopped and is archived in `runs/full/aborted_shared_model/`.
 
 ```bash
-python scripts/phase3_full/runtime_estimate_perex.py                 # runtime estimates (nothing trained)
+python scripts/full/phase3/runtime_estimate_perex.py                 # runtime estimates (nothing trained)
 python -m cvdc.train.run_per_exercise --smoke                         # smoke test: fold 0 of every exercise, 2 epochs (~1 min)
 python -m cvdc.train.run_per_exercise                                 # B1, B2-KTPFormer, Proposed (lambda 1.0), frozen Proposed (~8 h)
 python -m cvdc.train.run_per_exercise --exercises E07 --methods b1    # a subset
@@ -115,17 +122,17 @@ Or step by step (all read `configs/data.yaml`):
 | reps | `python -m cvdc.data.reps` (after sync) | `data/reps.csv` (one row per rep; synced groups share `rep_uid` and boundaries across views), `data/reps_perview.csv` (each view on its own, for comparison), `outputs/phase1/reps_per_video.csv` |
 | packs | `python -m cvdc.data.pack` | `data/cache/packs/reps_coco17_T64.npz`, `videos_coco17_T300.npz` (+ index CSVs) |
 | checks | `python -m cvdc.viz.checks` | skeleton-only PNGs in `outputs/checks/` |
-| report | `python scripts/phase1/report.py` | summary tables in `outputs/phase1/` |
+| report | `python scripts/pilot/phase1/report.py` | summary tables in `outputs/phase1/` |
 
 Measured runtimes (Ryzen 7 7700, 12-14 processes): keypoint extraction 37.6 min for 941 videos + 3 PT demos
 (cached afterwards); preprocessing 7 s; reps 4 s; sync 24 s once audio lags are cached (the first run also decodes
 the audio of ~830 videos); packs 18 s; checks 8 s. A re-run with all caches takes ~1.5 min.
 
-Phase 1 checks: `scripts/phase1/pose_settings_check.py` (P2/P3: resolution and square padding),
-`scripts/phase1/rep_signal_check.py` (P6: rep-count agreement across views per candidate signal),
-`scripts/phase1/rep_alignment_check.py` (P6: do rep peaks coincide across synced views),
-`scripts/phase1/e02_angle_check.py` (E02 horizontal adduction angle on the data) and
-`scripts/phase1/left_arm_scores.py` (expert scores of left- vs right-arm performances).
+Phase 1 checks: `scripts/pilot/phase1/pose_settings_check.py` (P2/P3: resolution and square padding),
+`scripts/pilot/phase1/rep_signal_check.py` (P6: rep-count agreement across views per candidate signal),
+`scripts/pilot/phase1/rep_alignment_check.py` (P6: do rep peaks coincide across synced views),
+`scripts/pilot/phase1/e02_angle_check.py` (E02 horizontal adduction angle on the data) and
+`scripts/pilot/phase1/left_arm_scores.py` (expert scores of left- vs right-arm performances).
 Results and open questions: `PROGRESS.md` §5 and §8.
 
 ## Phase 2: models, CVDC loss and pairs
@@ -136,9 +143,9 @@ Config: `configs/model.yaml` (merged with `configs/data.yaml`; pair weights stay
 python -m cvdc.data.pairs                     # rep-level CVDC pairs from the Phase 1 caches (~12 s)
 python -m cvdc.models.lifter                  # KTPFormer 3D for B2, all videos (~13 min; see below)
 python -m cvdc.data.pack --lift ktpformer     # lifted 3D packs (same items as the main packs)
-python scripts/phase2/smoke.py                # smoke run on E01 + E02 (~4 min on an RTX 4060 Ti)
-python scripts/phase2/lifter_check.py --all   # view consistency of MediaPipe vs KTPFormer 3D angles
-python scripts/phase2/bench.py                # bf16/fp32 step times and the Phase 3 runtime estimate (idle GPU)
+python scripts/pilot/phase2/smoke.py                # smoke run on E01 + E02 (~4 min on an RTX 4060 Ti)
+python scripts/pilot/phase2/lifter_check.py --all   # view consistency of MediaPipe vs KTPFormer 3D angles
+python scripts/pilot/phase2/bench.py                # bf16/fp32 step times and the Phase 3 runtime estimate (idle GPU)
 ```
 
 **KTPFormer (B2's second 3D source; no licence: local non-commercial research use only, never committed or shared).**
@@ -177,7 +184,7 @@ predictions, embeddings) go to `runs/` (gitignored); tables to `outputs/results/
 ```bash
 python -m cvdc.train.run --smoke                  # smoke test: fold 0, 3 training subjects, 2 epochs, all 4 methods (~1 min)
 python -m cvdc.train.run                          # GroupKFold-5: B1, B2-MediaPipe, B2-KTPFormer, Proposed (background job)
-python scripts/phase3/report_phase3a.py           # metrics, baselines, VCI, bootstrap CIs -> outputs/results/phase3a/
+python scripts/pilot/phase3/report_phase3a.py           # metrics, baselines, VCI, bootstrap CIs -> outputs/results/phase3a/
 tensorboard --logdir runs/phase3a
 ```
 
@@ -195,7 +202,7 @@ Single stages: `python -m cvdc.train.pretrain_cvdc --fold K` (CVDC pretraining o
 | supervised | `cvdc/train/train_supervised.py` | rep level (T1), standardised targets (T7), full fine-tuning or linear probe (T10) |
 | runner | `cvdc/train/run.py` | all methods x folds, resumable (`done.json`) |
 | metrics | `cvdc/eval/metrics.py` | RMSE / MAE / Pearson / Spearman, macro F1 / kappa, VCI sums, subject-level bootstrap (E17) |
-| report | `scripts/phase3/report_phase3a.py` | within-group and pooled tables at video (headline, E15) and rep level, baselines (E16), VCI, stopping epochs, runtimes |
+| report | `scripts/pilot/phase3/report_phase3a.py` | within-group and pooled tables at video (headline, E15) and rep level, baselines (E16), VCI, stopping epochs, runtimes |
 
 ### Step (a2): score setup (label diagnostics, video head, T6 weighting, stabilised early stopping)
 
@@ -204,10 +211,10 @@ step (a) CVDC encoders (`train.cvdc_init_from: phase3a`), so `runs/phase3a/propo
 it to `null` to pretrain again).
 
 ```bash
-python scripts/phase3/label_diagnostics.py        # no training: item variances, score decomposition, set features, set-level baselines (~30 s)
+python scripts/pilot/phase3/label_diagnostics.py        # no training: item variances, score decomposition, set features, set-level baselines (~30 s)
 python -m cvdc.train.run --smoke --force          # smoke test of the a2 setup (all 7 methods, ~2 min)
 python -m cvdc.train.run                          # GroupKFold-5: B1, Proposed (iii)/(i)/(ii) λ 0.1, 1.0, B2-MediaPipe, B2-KTPFormer (~2 h, background job)
-python scripts/phase3/report_phase3a2.py          # within-group tables (video and rep heads), baselines, deltas, VCI, epochs
+python scripts/pilot/phase3/report_phase3a2.py          # within-group tables (video and rep heads), baselines, deltas, VCI, epochs
 ```
 
 | Piece | Code | Notes |
@@ -216,7 +223,7 @@ python scripts/phase3/report_phase3a2.py          # within-group tables (video a
 | video head | `cvdc/models/heads.py` (`VideoHead`) | mean + attention pooling of a video's rep embeddings + set rep count → score and items (T13) |
 | supervised | `cvdc/train/train_supervised.py` | video batches, per-video rep weights (T6), item masks (T14), EMA / min-epoch early stopping (T8b), optional + λ·L_cvdc |
 | runner | `cvdc/train/run.py` | methods `b1`, `proposed`, `proposed_lp`, `proposed_j01`, `proposed_j1`, `b2_mediapipe`, `b2_ktpformer`; reuses checked CVDC encoders |
-| report | `scripts/phase3/report_phase3a2.py`, `scripts/phase3/label_diagnostics.py` | `summary.md`, `label_diagnostics.md` and CSVs |
+| report | `scripts/pilot/phase3/report_phase3a2.py`, `scripts/pilot/phase3/label_diagnostics.py` | `summary.md`, `label_diagnostics.md` and CSVs |
 
 ## Phase 4: Module III (reference-based assessment) and the embedding distance
 
@@ -229,11 +236,11 @@ degrees, severity). Posture checks (elbow, other arm, trunk, shoulder symmetry) 
 embedding distance.
 
 ```bash
-python scripts/phase4/embedding_distance.py   # encode all reps + the PT demo per method and fold (~1 min, GPU)
+python scripts/pilot/phase4/embedding_distance.py   # encode all reps + the PT demo per method and fold (~1 min, GPU)
 python -m cvdc.assess.run                       # Module III: templates, per-fold libraries, scores, errors, JSON (~20 s)
 python -m cvdc.assess.run --posture-centre pt_demo --out outputs/phase4/posture_pt --no-json   # the first run (before M14)
-python scripts/phase4/recording_noise.py        # item 6: reps contained in each view vs PF3 / PF4 (~45 s)
-python scripts/phase4/report_phase4.py          # agreement, components, errors, distance tracking, view stability,
+python scripts/pilot/phase4/recording_noise.py        # item 6: reps contained in each view vs PF3 / PF4 (~45 s)
+python scripts/pilot/phase4/report_phase4.py          # agreement, components, errors, distance tracking, view stability,
                                                 # posture before / after (M14), exploratory demo-centred speed (M15) (~40 s)
 ```
 
@@ -243,9 +250,9 @@ python scripts/phase4/report_phase4.py          # agreement, components, errors,
 | template | `cvdc/assess/template.py` | arm-direction DTW alignment, PT reference (one DBA step), per-view library (bias, bands, ROM / speed tolerances), save / load |
 | Module III | `cvdc/assess/module3.py` | deviations, score (M11), rule-based errors (M12), per-video JSON and its validator (M13), `Assessor` for single reps (demo) |
 | runner | `cvdc/assess/run.py` | per-fold libraries (training subjects only), `module3_{reps,videos,errors}.csv`, `json/<video>.json`, `library/<EX>.{npz,json}` (all subjects, for the demo) |
-| distance | `scripts/phase4/embedding_distance.py` | centred-cosine and L2 distance to the PT reference embedding for B1, B2, Proposed (λ 1.0), frozen CVDC, random init |
-| recording | `cvdc/eval/recording.py`, `scripts/phase4/recording_noise.py` | reps fully / half contained in each view of a synced performance |
-| report | `scripts/phase4/report_phase4.py` | `summary.md`, CSVs, `figs/template_<EX>.png`, `figs/agreement_scatter.png`; ICC with bootstrap in `cvdc/eval/metrics.py` |
+| distance | `scripts/pilot/phase4/embedding_distance.py` | centred-cosine and L2 distance to the PT reference embedding for B1, B2, Proposed (λ 1.0), frozen CVDC, random init |
+| recording | `cvdc/eval/recording.py`, `scripts/pilot/phase4/recording_noise.py` | reps fully / half contained in each view of a synced performance |
+| report | `scripts/pilot/phase4/report_phase4.py` | `summary.md`, CSVs, `figs/template_<EX>.png`, `figs/agreement_scatter.png`; ICC with bootstrap in `cvdc/eval/metrics.py` |
 
 ## Phase 5: evaluation (cross-view protocol, pair-source ablation, LOSO estimate)
 
@@ -258,16 +265,16 @@ jobs one at a time**: two processes sharing the RTX 4060 Ti were slower than run
 python -m cvdc.eval.cross_view --smoke --force                 # plumbing check (~1 min)
 python -m cvdc.eval.cross_view --methods proposed_j1           # CVDC on the two training views + joint fine-tuning (~2.9 h)
 python -m cvdc.eval.cross_view --methods b1 b2_mediapipe b2_ktpformer   # (~1.5 h)
-python scripts/phase5/crossview_distance.py                    # embedding distance to the PT reference per model (~6 min)
-python scripts/phase5/report_crossview.py                      # exercise, MQ, VCI, distance view stability -> outputs/results/phase5_crossview/
+python scripts/pilot/phase5/crossview_distance.py                    # embedding distance to the PT reference per model (~6 min)
+python scripts/pilot/phase5/report_crossview.py                      # exercise, MQ, VCI, distance view stability -> outputs/results/phase5_crossview/
 
 # B. CVDC pair-source ablation, pretraining only, held-out within-group VCI ((d) = the step (a) encoders, reused)
-python scripts/phase5/pair_sources.py --smoke --force           # plumbing check
-python scripts/phase5/pair_sources.py                           # sync / +audio / +rep / all - rep / synthetic only x 5 folds
-python scripts/phase5/report_pair_sources.py                    # VCI, paired differences, pair counts -> outputs/results/phase5_sources/
+python scripts/pilot/phase5/pair_sources.py --smoke --force           # plumbing check
+python scripts/pilot/phase5/pair_sources.py                           # sync / +audio / +rep / all - rep / synthetic only x 5 folds
+python scripts/pilot/phase5/report_pair_sources.py                    # VCI, paired differences, pair counts -> outputs/results/phase5_sources/
 
 # LOSO runtime estimate (nothing is trained)
-python scripts/phase5/loso_estimate.py                          # -> outputs/results/phase5_loso_estimate/
+python scripts/pilot/phase5/loso_estimate.py                          # -> outputs/results/phase5_loso_estimate/
 ```
 
 | Piece | Code | Notes |
@@ -275,7 +282,7 @@ python scripts/phase5/loso_estimate.py                          # -> outputs/res
 | view restriction | `cvdc/train/trainer.py` (`with_views`), `PackData.subject_mask(subjects, views)` | every training input from the training views only (E24) |
 | cross-view runner | `cvdc/eval/cross_view.py` | 3 rotations × methods × folds, resumable; CVDC always pretrained on the two training views |
 | VCI pooling | `cvdc/eval/consistency.py` (`pooled_vci`) | within-stratum VCI over folds with bootstrap replicates and an optional pair filter |
-| reports | `scripts/phase5/report_crossview.py`, `report_pair_sources.py` | `summary.md` + CSVs; `--smoke` reads the smoke runs |
+| reports | `scripts/pilot/phase5/report_crossview.py`, `report_pair_sources.py` | `summary.md` + CSVs; `--smoke` reads the smoke runs |
 
 Measured runtimes (one job at a time): cross-view 3.9 h (Proposed 2.4 h, each baseline ~0.5 h), pair sources 1.8 h
 (the 'all' setting reuses the step (a) encoders), distance + reports ~8 min. Results: `PROGRESS.md` §6e–6g.
@@ -299,9 +306,27 @@ cvdc/eval/          consistency (VCI, pooled within-stratum VCI), splits, metric
                     features, video-level baselines), recording (reps contained per view), cross_view (Phase 5 runner)
 cvdc/train/         trainer, pretrain_cvdc, train_supervised, run (GroupKFold runner)
 cvdc/viz/           skeleton drawing, Phase 1 checks
-scripts/            run_phase1.py, phase1/ checks and report, phase2/ (smoke, lifter_check, bench), phase3/ (reports, label
-                    diagnostics), phase4/ (embedding distance, recording noise, report), phase5/ (pair-source runner,
-                    cross-view distance, reports, LOSO estimate), step0/
+scripts/            run_phase1.py (Phase 1 for both scopes)
+  pilot/            the E01/E02 pilot (frozen, D15): step0/, phase1/ checks and report, phase2/ (smoke, lifter_check,
+                    bench), phase3/ (reports, label diagnostics), phase4/ (embedding distance, recording noise,
+                    report), phase5/ (pair-source runner, cross-view distance, reports, LOSO estimate)
+  full/             the per-exercise full scope: step0/ (full-data check), phase1/ checks, phase3/ (per-exercise
+                    reports, embedding distance, group probe, cross-view), phase4/ (Module III report, rule
+                    calibration), phase6/ (demo checks), loso/ (LOSO launch, status, report), final/ (final tables),
+                    completion/ (the remaining proposal items, 2026-10-22)
+demo/               live.py, app.py (Streamlit), export4.py, reference.py, readable.py
+reports/            the final report and its generated tables
 third_party/        local clones used by wrappers (gitignored)
 tests/              pytest
+data/  outputs/  runs/   gitignored artefacts: the pilot's at the top level (data/index.csv, outputs/phase*, runs/phase*),
+                    the full scope's under full/ (D15)
 ```
+
+**Removed in the 2026-10-22 cleanup** (moved to `D:\cb\_to_delete\`, not deleted; empty that folder when you no longer
+need it): the smoke-test runs and their outputs (`runs/full/*_smoke`, `runs/phase*_smoke`,
+`outputs/full/results/*_smoke`), the stopped shared-model run (`runs/full/aborted_shared_model`,
+`outputs/full/results/aborted_shared_model`), the E09 pair backup (`data/full/backup_pairs_e09_trunk`), the
+full-resolution Hands test cache (`data/full/cache/hands_test_fullres`), the download-error markers of the first
+partial download and the pytest caches. Only `scripts/full/loso/runtime_estimate.py` and
+`scripts/full/phase3/runtime_estimate_perex.py` read any of them (their estimates are already saved); move the
+folders back from `_to_delete` to re-run those two.

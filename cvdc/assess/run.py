@@ -8,7 +8,7 @@
      compared, scored and checked for errors with it (M2, M8-M12). The deployable library is fitted on all subjects
      and saved to templates.library_dir (demo).
   4. Per-video JSON reports (M13), with the embedding-to-reference distance of ``eval.proposed_default`` if
-     outputs/phase4/embedding_distance_reps.csv exists (scripts/phase4/embedding_distance.py, run first).
+     outputs/phase4/embedding_distance_reps.csv exists (scripts/pilot/phase4/embedding_distance.py, run first).
 
 Full scope (M17): with ``configs/per_exercise.yaml`` (T17) the folds are each exercise's own GroupKFold-5 (the folds
 of the per-exercise models), every discovered exercise is assessed (``--exercises`` for a subset), E03's template

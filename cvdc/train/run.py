@@ -12,7 +12,7 @@ encoder):
   4. test_predictions.csv (rep level; the report aggregates to video level), test_predictions_video.csv (video head,
      T13), embeddings_final.npz, done.json (stopping epochs, wall times, peak GPU memory)
 Everything lives under runs/<tag>/<method>/fold<k>/ (gitignored). Finished folds (done.json) are skipped unless
---force. Evaluation and tables: scripts/phase3/report_phase3a2.py (step a: report_phase3a.py).
+--force. Evaluation and tables: scripts/pilot/phase3/report_phase3a2.py (step a: report_phase3a.py).
 
 usage: python -m cvdc.train.run [--config C] [--model-config M] [--methods b1 proposed proposed_lp ...]
        [--folds 0 1 2 3 4] [--tag phase3a2] [--smoke] [--linear-probe] [--force]

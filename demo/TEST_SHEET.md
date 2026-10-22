@@ -60,7 +60,7 @@ the PT's peak). During a hold at the top, the PT stays at the start of its own h
 | E04 side view | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E04 P10 L FL --ghost` | fold 1; ghost off (`not the reference's oblique view`); 9 reps; 76.1 / 79.6 (PT 81.9) |
 | Module III only | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P03 F FL --no-model` | no checkpoint needed (X3); 9 reps; Module III 84.7; no model scores |
 | Leakage warning | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --select E01 P11 F FL --fold 0` | prints `WARNING: LEAKAGE: subject P11 was in the training split of E01 proposed_j1 fold 0 ...` (red line in the window) |
-| A video file | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --source "D:\cb\mobiphysio\E01(Abduction)\E01_P03_AF_VFL_GM.mp4" --exercise E01 --view F --ghost` | the same as the first E01 row (the subject is looked up, so the held-out fold is used) |
+| A video file | `.venv\Scripts\python.exe cvdc-physio\demo\live.py --source "D:\cb\dataset\videos\E01(Abduction)\E01_P03_AF_VFL_GM.mp4" --exercise E01 --view F --ghost` | the same as the first E01 row (the subject is looked up, so the held-out fold is used) |
 
 `--list E03` lists an exercise's dataset videos (subject, group, view, variation, score).
 
@@ -120,8 +120,8 @@ Problems check (video toggle off, ~30 s): `E02 · Aduction`, **Front**, **Medium
 ## 6. Automated checks
 
 ```
-.venv\Scripts\python.exe cvdc-physio\scripts\phase6\verify_pt_keypoints.py
-.venv\Scripts\python.exe cvdc-physio\scripts\phase6\check_reference_display.py
+.venv\Scripts\python.exe cvdc-physio\scripts\full\phase6\verify_pt_keypoints.py
+.venv\Scripts\python.exe cvdc-physio\scripts\full\phase6\check_reference_display.py
 cd cvdc-physio
 ..\.venv\Scripts\python.exe -m pytest -q tests\test_demo.py
 cd ..

@@ -21,7 +21,7 @@ On Windows the process asks the OS not to sleep while it runs (SetThreadExecutio
 
 usage: python -m cvdc.train.run_loso [--config configs/per_exercise_loso.yaml] [--exercises E01 ...]
        [--methods b1 b2_ktpformer proposed_j1 proposed_lp] [--tag perex_loso] [--smoke] [--dry-run] [--force]
-Detached launch, status and stop: scripts/loso/README.md.
+Detached launch, status and stop: scripts/full/loso/README.md.
 """
 import argparse
 import json

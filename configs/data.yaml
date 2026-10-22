@@ -3,7 +3,8 @@
 # Decision IDs (D*, P*, S*) refer to DESIGN_DECISIONS.md.
 
 data:
-  root: ..                              # D1: the folder that contains this repo
+  root: ../dataset                      # D1: scores CSV, MobiPhysio.md and the PT reference folder (D:\cb\dataset)
+  video_root: ../dataset/videos         # D1: the exercise folders E0x(...) (moved 2026-10-22, file-structure cleanup)
   exercise_dir_regex: '^E\d{2}\('       # D1: exercise folders are discovered at runtime
   skip_dir_prefix: '__'                 # D1: download-error marker folders
   include_exercises: [E01, E02]         # D0; an empty list means every discovered exercise

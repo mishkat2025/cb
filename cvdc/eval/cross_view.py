@@ -10,8 +10,8 @@ two training views: ``train.cvdc_init_from`` is switched off, because the step (
 (``reuse_cvdc`` also refuses an encoder trained on other views).
 
 Runs: runs/<tag>/heldout_<V>/<method>/fold<k>/ (same files as cvdc.train.run; finished folds are skipped unless
---force). Then: scripts/phase5/crossview_distance.py (embedding distance to the PT reference) and
-scripts/phase5/report_crossview.py (tables).
+--force). Then: scripts/pilot/phase5/crossview_distance.py (embedding distance to the PT reference) and
+scripts/pilot/phase5/report_crossview.py (tables).
 
 One model per exercise (T17; twelfth review item 6): with ``configs/per_exercise.yaml`` (``eval.per_exercise_methods``
 set) the protocol runs per exercise, on that exercise's videos and its own GroupKFold-5 folds

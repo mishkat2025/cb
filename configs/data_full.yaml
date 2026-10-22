@@ -5,7 +5,7 @@
 extends: data.yaml
 
 data:
-  video_root: ../mobiphysio             # D1 (user answer 3, 2026-10-20): the exercise folders E0x(...); CSV and demos stay in root
+  video_root: ../dataset/videos         # D1 (user answer 3, 2026-10-20; moved 2026-10-22): the exercise folders E0x(...)
   include_exercises: []                 # D0 (user answer 1): every discovered exercise, E01-E09
   index_csv: data/full/index.csv
   ref_index_csv: data/full/index_ref.csv
@@ -16,7 +16,7 @@ data:
   # D8 / D14 (user answer 5): excluded from templates and from the exercise labels only where the movement shows a
   # wrong exercise; PF1 = 0 alone is no reason. Kept in score regression.
   template_exclude_subjects: {E03: [P02]}
-  exercise_label_exclude: {E03: [P02]}  # + the result of the E05 PF1 motion check (scripts/phase1_full/pf1_motion_check.py)
+  exercise_label_exclude: {E03: [P02]}  # + the result of the E05 PF1 motion check (scripts/full/phase1/pf1_motion_check.py)
 
 pose:
   kp_dir: data/full/cache/kp

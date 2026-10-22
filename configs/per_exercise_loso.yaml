@@ -1,7 +1,7 @@
 # LOSO per exercise for the final scope E01-E04 (user, 2026-10-22; DESIGN_DECISIONS E1, T17, C7, E30).
 # Same settings as the GroupKFold-5 per-exercise runs (configs/per_exercise.yaml); only the split changes, and it is
 # set by the runner, not here: eval.split / eval.k below stay the GroupKFold-5 folds whose CVDC encoders LOSO reuses.
-# python -m cvdc.train.run_loso   (detached launch, status, stop: scripts/loso/README.md)
+# python -m cvdc.train.run_loso   (detached launch, status, stop: scripts/full/loso/README.md)
 extends: per_exercise.yaml
 
 eval:

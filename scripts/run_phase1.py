@@ -4,7 +4,7 @@ usage: python scripts/run_phase1.py [--config configs/data.yaml] [--workers 12] 
 Each step is resumable (cached keypoints and audio lags are skipped). Steps: index extract preprocess sync reps pack
 lift pack_lift checks report. ``lift`` / ``pack_lift`` are the KTPFormer 2D -> 3D lifting for B2 (A10; GPU) and its
 fixed-length packs; the pilot ran them in Phase 2. The full-scope run (configs/data_full.yaml) adds the checks in
-scripts/phase1_full/ (README there).
+scripts/full/phase1/ (README there).
 """
 import argparse
 import subprocess
@@ -34,7 +34,7 @@ def main():
         "lift": ["-m", "cvdc.models.lifter", *cfg, "--skip-existing"],
         "pack_lift": ["-m", "cvdc.data.pack", *cfg, "--lift", "ktpformer"],
         "checks": ["-m", "cvdc.viz.checks", *cfg],
-        "report": ["scripts/phase1/report.py", *cfg],
+        "report": ["scripts/pilot/phase1/report.py", *cfg],
     }
     for step in STEPS[STEPS.index(a.start):STEPS.index(a.stop) + 1]:
         t0 = time.time()
