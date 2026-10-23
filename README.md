@@ -82,12 +82,14 @@ Only skeletons (keypoints), tables and model weights: no video frames or faces.
 |---|---|---|
 | Trained models: the Proposed ST-GCN + CVDC (λ 1.0), one per exercise and per fold (9 × 5) | `runs/full/perex_gkf5/E0x/proposed_j1/fold<k>/finetune/best.pt`, with `embeddings_final.npz` (the training embeddings: centring and the app's plot) | 610 MB |
 | Module III reference libraries | `outputs/full/phase4/library/` (rule-based, E01–E09), `outputs/full/results/completion/module3/library/` (with the CVDC model, E01–E04, per fold) | 2 MB |
+| The four-panel video's embedding map (PCA of each fold's training embeddings) | `outputs/full/demo/pca/` | 3 MB |
 | Physiotherapist demo skeletons | `data/full/cache/pre_ref/` | 3 MB |
 | Video index and repetition tables | `data/full/index.csv`, `index_ref.csv`, `reps.csv`, `reps_ref.csv` | 9 MB |
 | MediaPipe Pose, and Hands for E06 (Apache-2.0, Google) | `data/models/pose_landmarker_full.task`, `hand_landmarker.task` | 17 MB |
 
 Retraining or reproducing the results needs the dataset and the steps in the sections below (they start from the
-keypoint extraction). Tests: `python -m pytest -q tests`.
+keypoint extraction). Tests: `python -m pytest -q tests` (on a fresh clone 14 are skipped: they need the dataset's
+keypoint caches or KTPFormer).
 
 ## Project history and full documentation
 

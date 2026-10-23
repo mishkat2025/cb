@@ -62,6 +62,12 @@ __pycache__/
 /outputs/full/results/completion/module3/*
 !/outputs/full/results/completion/module3/library/
 !/outputs/full/results/completion/module3/library/**
+# the four-panel video's embedding panel: PCA of each fold's training embeddings (building it needs the 600 MB rep pack)
+!/outputs/full/demo/
+/outputs/full/demo/*
+!/outputs/full/demo/pca/
+/outputs/full/demo/pca/*
+!/outputs/full/demo/pca/E0?_proposed_j1_fold?.npz
 # trained weights of the demo's model: Proposed (CVDC, lambda 1.0), one per exercise and GroupKFold-5 fold
 !/runs/full/
 /runs/full/*
