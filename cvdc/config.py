@@ -54,10 +54,15 @@ def resolve(p) -> Path:
     return p if p.is_absolute() else (REPO / p).resolve()
 
 
+def _dataset_dir(configured: Path, inside: Path) -> Path:
+    """The configured dataset folder, or the same folder inside the repo (``dataset/``) when only that one exists."""
+    return inside if not configured.exists() and inside.exists() else configured
+
+
 def data_root(cfg) -> Path:
     """Folder with the scores CSV, the dataset README and the PT reference folder (D1)."""
     env = os.environ.get("MOBIPHYSIO_ROOT")
-    return Path(env).resolve() if env else resolve(cfg["data"]["root"])
+    return Path(env).resolve() if env else _dataset_dir(resolve(cfg["data"]["root"]), REPO / "dataset")
 
 
 def video_root(cfg) -> Path:
@@ -66,7 +71,7 @@ def video_root(cfg) -> Path:
     if env:
         return Path(env).resolve()
     vr = cfg["data"].get("video_root")
-    return resolve(vr) if vr else data_root(cfg)
+    return _dataset_dir(resolve(vr), REPO / "dataset" / "videos") if vr else data_root(cfg)
 
 
 def data_path(cfg, key) -> Path:

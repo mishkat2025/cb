@@ -574,6 +574,12 @@ def main():
                 st.markdown("Selected: " + describe_row(ex, row))
                 st.markdown(f"Physiotherapists' score **{row['PT score']:.1f} / 100** ({verdict(row.quality).lower()})"
                             f" · file `{row.File}`")
+            if not (video_root(cfg) / row.rel_path).exists():
+                st.error(f"This video is not on this computer (looked for `{video_root(cfg) / row.rel_path}`). Put "
+                         "the MobiPhysio dataset next to this folder (`../dataset/videos/E01(Abduction)/...`) or "
+                         "inside it (`dataset/videos/...`), or set `MOBIPHYSIO_VIDEO_ROOT` (see the README). Or "
+                         "choose **Upload my own video**.")
+                row = None
         else:
             st.info("Tick a row in the table to choose a video.")
     else:

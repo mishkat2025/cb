@@ -3,6 +3,94 @@
 Implementation of the proposal "AI-Guided Physiotherapy Assessment for Low-Resource Telehealth through
 Cross-View Depth-Consistency Learning" on the MobiPhysio dataset (doi 10.7910/DVN/XSI0QN).
 
+From one phone video of a patient doing an exercise: 2D pose (MediaPipe) → an ST-GCN encoder trained with Cross-View
+Depth-Consistency (CVDC) learning → Module III compares every repetition with a physiotherapist's demo → a 0–100 score
+per repetition and the problems found (for example "elbow bent", "trunk leaning").
+
+## Quick start
+
+The trained weights are part of the repository, so there is nothing else to download to run the demo.
+
+**You need:** Python 3.11, git, and about 4 GB of free disk space for PyTorch and the other packages. A GPU is not
+needed: the demo runs on the CPU.
+
+```bash
+git clone https://github.com/mishkat2025/cb.git
+cd cb
+python -m venv .venv
+.venv\Scripts\activate             # Windows; on macOS / Linux: source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+**macOS:** `requirements.txt` pins the CUDA build of PyTorch (`torch==2.14.1+cu126`), which has no macOS version.
+Change that line to `torch==2.14.1` before `pip install`.
+
+### Run the app
+
+```bash
+streamlit run demo/app.py
+```
+
+It opens in your browser (http://localhost:8501). Choose **Upload my own video**, pick the exercise and where the
+camera stood, upload the video and press **Assess this video**. After about a minute you get a score for every
+repetition, the problems found, plots, and a four-panel video (faces blurred) saved in `outputs/full/demo/app/`.
+
+| Code | Exercise | | Code | Exercise | | Code | Exercise |
+|---|---|---|---|---|---|---|---|
+| E01 | Abduction | | E04 | Medial rotation | | E07 | Hip joint flexion |
+| E02 | Adduction | | E05 | Circumduction | | E08 | Both leg flexion |
+| E03 | Lateral rotation | | E06 | Wrist extension | | E09 | Back extension |
+
+Camera position: `F` front, `L` left side, `R` right side. The final scope of the study is E01–E04; for E05–E09 the
+score is the rule-based Module III (joint angles against the physiotherapist's demo), with the network's score shown
+as a supplementary output.
+
+### Run from the command line (no browser)
+
+```bash
+python -m demo.live --source my_video.mp4 --exercise E01 --view F --headless --no-realtime --save-mp4 out.mp4
+```
+
+Prints one line per repetition (score and problems) and writes `out.mp4` with the skeleton drawn and faces blurred.
+Leave out `--headless --no-realtime` to watch it in a window at normal speed; `--source 0` uses a webcam.
+
+### The dataset
+
+The MobiPhysio dataset is not in this repository: use your own copy (Harvard Dataverse,
+[doi:10.7910/DVN/XSI0QN](https://doi.org/10.7910/DVN/XSI0QN)). The app finds it in either of these places:
+
+```
+cb/                     this repository (the dataset may also go inside it, as cb/dataset/)
+dataset/                next to it
+  Physiotherapist Exercise Marking.csv
+  Reference-Model Videos by PTs/
+  videos/
+    E01(Abduction)/  E02(Aduction)/  ...  E09(Back _Extension)/     the dataset's exercise folders, as downloaded
+```
+
+Anywhere else: set `MOBIPHYSIO_ROOT` to the folder with the CSV and `MOBIPHYSIO_VIDEO_ROOT` to the folder with the
+exercise folders. With the dataset in place, **From the dataset** in the app lists every video with its participant,
+camera and recording condition; the model loaded is the one whose training left that participant out, so the result
+is a fair test. On the command line: `python -m demo.live --list E01`, then
+`python -m demo.live --select E01 P05 F FL`.
+
+### What is included
+
+Only skeletons (keypoints), tables and model weights: no video frames or faces.
+
+| What | Where | Size |
+|---|---|---|
+| Trained models: the Proposed ST-GCN + CVDC (λ 1.0), one per exercise and per fold (9 × 5) | `runs/full/perex_gkf5/E0x/proposed_j1/fold<k>/finetune/best.pt`, with `embeddings_final.npz` (the training embeddings: centring and the app's plot) | 610 MB |
+| Module III reference libraries | `outputs/full/phase4/library/` (rule-based, E01–E09), `outputs/full/results/completion/module3/library/` (with the CVDC model, E01–E04, per fold) | 2 MB |
+| Physiotherapist demo skeletons | `data/full/cache/pre_ref/` | 3 MB |
+| Video index and repetition tables | `data/full/index.csv`, `index_ref.csv`, `reps.csv`, `reps_ref.csv` | 9 MB |
+| MediaPipe Pose, and Hands for E06 (Apache-2.0, Google) | `data/models/pose_landmarker_full.task`, `hand_landmarker.task` | 17 MB |
+
+Retraining or reproducing the results needs the dataset and the steps in the sections below (they start from the
+keypoint extraction). Tests: `python -m pytest -q tests`.
+
+## Project history and full documentation
+
 **Final report (final scope E01–E04, 2026-10-21): [`reports/FINAL_REPORT_E01_E04.md`](reports/FINAL_REPORT_E01_E04.md)**,
 full tables in [`reports/final_E01_E04_tables.md`](reports/final_E01_E04_tables.md) (E05–E09 as a supplementary
 appendix). **LOSO per exercise (2026-10-22)** is §7 of that report, tables in
@@ -19,11 +107,13 @@ appendix). **LOSO per exercise (2026-10-22)** is §7 of that report, tables in
   variants) and Phase 4 (Module III: PT-demo reference templates, DTW deviations, rule-based errors, the reference
   score, the embedding-to-reference distance) are done; the ablations (b) and the LOSO table (c) wait for review.
   See `PROGRESS.md` for the state and the phase checklist, and `DESIGN_DECISIONS.md` for every open choice.
-- **Privacy:** the videos show faces. Only keypoints are stored; renders are skeleton-only; `data/` and
-  `outputs/` are gitignored. Audio is decoded in memory for synchronization and never written; GPS tags in
+- **Privacy:** the videos show faces. Only keypoints are stored; renders are skeleton-only; `data/`, `outputs/` and `runs/` are gitignored except
+  the demo's files (Quick start, "What is included": keypoints, tables and weights only). Audio is decoded in memory for synchronization and never written; GPS tags in
   the video containers are never read.
 
-## Setup
+## Setup (the author's machine)
+
+For a fresh clone, the Quick start above is enough. The author's own setup:
 
 ```bash
 # Python 3.11 venv one level above the repo (D:\cb\.venv), created with uv
@@ -31,7 +121,8 @@ uv venv ../.venv --python 3.11
 uv pip install --python ../.venv/Scripts/python.exe -r requirements.txt
 ```
 
-MediaPipe models (Tasks API; `mediapipe==1.1.1` has no `solutions` module), placed in `data/models/`:
+MediaPipe models (Tasks API; `mediapipe==1.1.1` has no `solutions` module), in `data/models/` (both are included in
+the repository):
 `pose_landmarker_full.task` from
 `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task`,
 and for E06 `hand_landmarker.task` (Apache 2.0) from
@@ -346,7 +437,7 @@ demo/               live.py, app.py (Streamlit), export4.py, reference.py, reada
 reports/            the final report and its generated tables
 third_party/        local clones used by wrappers (gitignored)
 tests/              pytest
-data/  outputs/  runs/   gitignored artefacts: the pilot's at the top level (data/index.csv, outputs/phase*, runs/phase*),
+data/  outputs/  runs/   gitignored artefacts except the demo's files (Quick start): the pilot's at the top level (data/index.csv, outputs/phase*, runs/phase*),
                     the full scope's under full/ (D15)
 ```
 
