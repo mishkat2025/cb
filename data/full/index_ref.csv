@@ -1,0 +1,13 @@
+exercise,role,file,ref_id,rel_path,exists,kp_path,hand_path,pre_path
+E01,primary,Abduction .mp4,Abduction,Reference-Model Videos by PTs/Abduction .mp4,True,data/full/cache/kp_ref/Abduction.npz,,data/full/cache/pre_ref/Abduction.npz
+E01,backup,Abduction Adduction.mp4,Abduction_Adduction,Reference-Model Videos by PTs/Abduction Adduction.mp4,True,data/full/cache/kp_ref/Abduction_Adduction.npz,,data/full/cache/pre_ref/Abduction_Adduction.npz
+E02,primary,Aduction.mp4,Aduction,Reference-Model Videos by PTs/Aduction.mp4,True,data/full/cache/kp_ref/Aduction.npz,,data/full/cache/pre_ref/Aduction.npz
+E02,backup,Abduction Adduction.mp4,Abduction_Adduction,Reference-Model Videos by PTs/Abduction Adduction.mp4,True,data/full/cache/kp_ref/Abduction_Adduction.npz,,data/full/cache/pre_ref/Abduction_Adduction.npz
+E03,primary,Later Rotation V3.mp4,Later_Rotation_V3,Reference-Model Videos by PTs/Later Rotation V3.mp4,True,data/full/cache/kp_ref/Later_Rotation_V3.npz,,data/full/cache/pre_ref/Later_Rotation_V3.npz
+E03,backup,Lateral Rotation.mp4,Lateral_Rotation,Reference-Model Videos by PTs/Lateral Rotation.mp4,True,data/full/cache/kp_ref/Lateral_Rotation.npz,,data/full/cache/pre_ref/Lateral_Rotation.npz
+E04,primary,Medial Rotation.mp4,Medial_Rotation,Reference-Model Videos by PTs/Medial Rotation.mp4,True,data/full/cache/kp_ref/Medial_Rotation.npz,,data/full/cache/pre_ref/Medial_Rotation.npz
+E05,primary,Circumduction.mp4,Circumduction,Reference-Model Videos by PTs/Circumduction.mp4,True,data/full/cache/kp_ref/Circumduction.npz,,data/full/cache/pre_ref/Circumduction.npz
+E06,primary,Wrist Extension.mp4,Wrist_Extension,Reference-Model Videos by PTs/Wrist Extension.mp4,True,data/full/cache/kp_ref/Wrist_Extension.npz,data/full/cache/hands_ref/Wrist_Extension.npz,data/full/cache/pre_ref/Wrist_Extension.npz
+E07,primary,Hip Joint Flection.mp4,Hip_Joint_Flection,Reference-Model Videos by PTs/Hip Joint Flection.mp4,True,data/full/cache/kp_ref/Hip_Joint_Flection.npz,,data/full/cache/pre_ref/Hip_Joint_Flection.npz
+E08,primary,Both Leg Flection.mp4,Both_Leg_Flection,Reference-Model Videos by PTs/Both Leg Flection.mp4,True,data/full/cache/kp_ref/Both_Leg_Flection.npz,,data/full/cache/pre_ref/Both_Leg_Flection.npz
+E09,primary,Back Extension.mp4,Back_Extension,Reference-Model Videos by PTs/Back Extension.mp4,True,data/full/cache/kp_ref/Back_Extension.npz,,data/full/cache/pre_ref/Back_Extension.npz

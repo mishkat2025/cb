@@ -1,0 +1,76 @@
+{
+ "ref": {
+  "n": 124,
+  "duration_s": 4.1,
+  "channels": [
+   "forearm_elevation",
+   "shoulder_elevation",
+   "elbow_extension",
+   "trunk_lateral_lean",
+   "angvel",
+   "emb_dist"
+  ],
+  "main": "forearm_elevation",
+  "rom": 147.20277163276072,
+  "excursion": 61.861049882326725,
+  "peak": 147.3640187756571,
+  "n_pt_reps": 1,
+  "pt_durations_s": [
+   4.1
+  ],
+  "file": "Medial Rotation.mp4",
+  "ref_id": "Medial_Rotation",
+  "side": "right",
+  "pt_reps_used": 1,
+  "pt_pre_path": "data/full/cache/pre_ref/Medial_Rotation.npz",
+  "spans": [
+   [
+    64,
+    187,
+    "right"
+   ]
+  ]
+ },
+ "lib": {
+  "F": {
+   "n_reps": 68,
+   "rom_mu": 151.4044899195156,
+   "rom_sd": 10.317936650708727,
+   "speed_mu": 1.1333664641589658,
+   "speed_sd": 0.27813559224623696,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 42,
+   "rom_mu": 157.12592793450833,
+   "rom_sd": 10.957522837099003,
+   "speed_mu": 1.1933450947984237,
+   "speed_sd": 0.223974520014184,
+   "rom_bias": 5.721438014992714
+  },
+  "R": {
+   "n_reps": 51,
+   "rom_mu": 162.49105609508442,
+   "rom_sd": 10.255816342698262,
+   "speed_mu": 1.1753443662642686,
+   "speed_sd": 0.21869176309389893,
+   "rom_bias": 11.086566175568805
+  }
+ },
+ "meta": {
+  "exercise": "E04",
+  "file": "Medial Rotation.mp4",
+  "fitted_on": "fold 4 training subjects",
+  "min_score": 95,
+  "fold": 4,
+  "test_subjects": [
+   "P04",
+   "P12",
+   "P13",
+   "P18"
+  ],
+  "alignment": "cvdc_embedding (proposed_j1, perex_gkf5 fold 4)",
+  "n_videos": 19,
+  "n_subjects": 7
+ }
+}

@@ -1,0 +1,58 @@
+{
+ "ref": {
+  "n": 176,
+  "duration_s": 5.833333333333333,
+  "channels": [
+   "trunk_thigh_angle",
+   "knee_flexion_both",
+   "hip_flexion_asymmetry"
+  ],
+  "main": "trunk_thigh_angle",
+  "rom": 48.85714900995946,
+  "excursion": 45.67429433558931,
+  "peak": 48.8342384271841,
+  "n_pt_reps": 2,
+  "pt_durations_s": [
+   6.166666666666667,
+   5.5
+  ],
+  "file": "Back Extension.mp4",
+  "ref_id": "Back_Extension",
+  "side": "right",
+  "pt_reps_used": 2
+ },
+ "lib": {
+  "F": {
+   "n_reps": 329,
+   "rom_mu": 43.634192921071474,
+   "rom_sd": 14.495267501294581,
+   "speed_mu": 0.7041848373736167,
+   "speed_sd": 0.3882179550331335,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 308,
+   "rom_mu": 62.367040404899676,
+   "rom_sd": 36.43980183516658,
+   "speed_mu": 0.6807952306196077,
+   "speed_sd": 0.3742998800785617,
+   "rom_bias": 18.732847483828202
+  },
+  "R": {
+   "n_reps": 310,
+   "rom_mu": 45.24965838662692,
+   "rom_sd": 17.63339409678847,
+   "speed_mu": 0.6894461957669202,
+   "speed_sd": 0.377263317321584,
+   "rom_bias": 1.6154654655554452
+  }
+ },
+ "meta": {
+  "exercise": "E09",
+  "file": "Back Extension.mp4",
+  "fitted_on": "all subjects",
+  "min_score": 95,
+  "n_videos": 101,
+  "n_subjects": 11
+ }
+}

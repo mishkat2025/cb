@@ -1,1 +1,6 @@
 *.sh text eol=lf
+
+# shipped model weights and arrays (README "What is included"): never line-ending converted or diffed
+*.pt binary
+*.npz binary
+*.task binary

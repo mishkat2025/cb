@@ -1,0 +1,101 @@
+{
+ "ref": {
+  "n": 119,
+  "duration_s": 3.933333333333333,
+  "channels": [
+   "forearm_elevation",
+   "shoulder_elevation",
+   "elbow_extension",
+   "trunk_lateral_lean",
+   "shoulder_asymmetry",
+   "angvel",
+   "emb_dist"
+  ],
+  "main": "forearm_elevation",
+  "rom": 19.049390462054355,
+  "excursion": 99.4382888007281,
+  "peak": 18.819956290109786,
+  "n_pt_reps": 4,
+  "pt_durations_s": [
+   4.233333333333333,
+   4.233333333333333,
+   3.6666666666666665,
+   3.6333333333333333
+  ],
+  "file": "Later Rotation V3.mp4",
+  "ref_id": "Later_Rotation_V3",
+  "side": "right",
+  "pt_reps_used": 4,
+  "pt_pre_path": "data/full/cache/pre_ref/Later_Rotation_V3.npz",
+  "spans": [
+   [
+    25,
+    152,
+    "right"
+   ],
+   [
+    25,
+    152,
+    "left"
+   ],
+   [
+    201,
+    311,
+    "right"
+   ],
+   [
+    202,
+    311,
+    "left"
+   ]
+  ]
+ },
+ "lib": {
+  "F": {
+   "n_reps": 137,
+   "rom_mu": 30.957324816619114,
+   "rom_sd": 6.329087576069061,
+   "speed_mu": 0.7720028017992251,
+   "speed_sd": 0.4185982524608976,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 30,
+   "rom_mu": 29.641506365468693,
+   "rom_sd": 5.1247784912018695,
+   "speed_mu": 0.8697205937453353,
+   "speed_sd": 0.5975359309710018,
+   "rom_bias": -1.3158184511504203
+  },
+  "R": {
+   "n_reps": 74,
+   "rom_mu": 38.362510343808005,
+   "rom_sd": 14.549053263603463,
+   "speed_mu": 0.9279090730401488,
+   "speed_sd": 0.442058629075623,
+   "rom_bias": 7.405185527188891
+  }
+ },
+ "meta": {
+  "exercise": "E03",
+  "file": "Later Rotation V3.mp4",
+  "fitted_on": "fold 2 training subjects",
+  "min_score": 95,
+  "fold": 2,
+  "test_subjects": [
+   "P01",
+   "P02",
+   "P07",
+   "P08",
+   "P22",
+   "P43",
+   "P47",
+   "P53",
+   "P56",
+   "P58"
+  ],
+  "alignment": "cvdc_embedding (proposed_j1, perex_gkf5 fold 2)",
+  "n_videos": 27,
+  "n_subjects": 11
+ }
+}

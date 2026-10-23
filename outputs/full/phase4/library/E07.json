@@ -1,0 +1,59 @@
+{
+ "ref": {
+  "n": 122,
+  "duration_s": 4.033333333333333,
+  "channels": [
+   "hip_flexion",
+   "knee_flexion",
+   "contralateral_hip_flexion",
+   "contralateral_knee_flexion"
+  ],
+  "main": "hip_flexion",
+  "rom": 124.72425281627679,
+  "excursion": 112.8021115395885,
+  "peak": 124.29434000108216,
+  "n_pt_reps": 2,
+  "pt_durations_s": [
+   3.966666666666667,
+   4.066666666666666
+  ],
+  "file": "Hip Joint Flection.mp4",
+  "ref_id": "Hip_Joint_Flection",
+  "side": "right",
+  "pt_reps_used": 2
+ },
+ "lib": {
+  "F": {
+   "n_reps": 130,
+   "rom_mu": 123.83744215056963,
+   "rom_sd": 15.977326711026308,
+   "speed_mu": 0.09344910558713745,
+   "speed_sd": 0.25058322980471354,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 121,
+   "rom_mu": 105.57356424188801,
+   "rom_sd": 18.55724262641543,
+   "speed_mu": 0.06392702574913604,
+   "speed_sd": 0.23839001629998974,
+   "rom_bias": -18.26387790868162
+  },
+  "R": {
+   "n_reps": 130,
+   "rom_mu": 113.56543208486005,
+   "rom_sd": 19.213728552472062,
+   "speed_mu": 0.09288774555909858,
+   "speed_sd": 0.2507184875621327,
+   "rom_bias": -10.27201006570958
+  }
+ },
+ "meta": {
+  "exercise": "E07",
+  "file": "Hip Joint Flection.mp4",
+  "fitted_on": "all subjects",
+  "min_score": 95,
+  "n_videos": 44,
+  "n_subjects": 7
+ }
+}

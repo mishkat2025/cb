@@ -1,0 +1,62 @@
+{
+ "ref": {
+  "n": 119,
+  "duration_s": 3.933333333333333,
+  "channels": [
+   "forearm_elevation",
+   "shoulder_elevation",
+   "elbow_extension",
+   "trunk_lateral_lean",
+   "shoulder_asymmetry"
+  ],
+  "main": "forearm_elevation",
+  "rom": 19.049390462054355,
+  "excursion": 99.4382888007281,
+  "peak": 18.819956290109786,
+  "n_pt_reps": 4,
+  "pt_durations_s": [
+   4.233333333333333,
+   4.233333333333333,
+   3.6666666666666665,
+   3.6333333333333333
+  ],
+  "file": "Later Rotation V3.mp4",
+  "ref_id": "Later_Rotation_V3",
+  "side": "right",
+  "pt_reps_used": 4
+ },
+ "lib": {
+  "F": {
+   "n_reps": 155,
+   "rom_mu": 31.761579680784685,
+   "rom_sd": 6.383338256970738,
+   "speed_mu": 0.771274500531744,
+   "speed_sd": 0.3974665068827991,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 38,
+   "rom_mu": 36.07514062283673,
+   "rom_sd": 13.528518474014632,
+   "speed_mu": 0.8883547959526414,
+   "speed_sd": 0.5322185435379714,
+   "rom_bias": 4.313560942052042
+  },
+  "R": {
+   "n_reps": 83,
+   "rom_mu": 37.96459474837597,
+   "rom_sd": 13.819126310152086,
+   "speed_mu": 0.9201692857387532,
+   "speed_sd": 0.4190395878257464,
+   "rom_bias": 6.203015067591288
+  }
+ },
+ "meta": {
+  "exercise": "E03",
+  "file": "Later Rotation V3.mp4",
+  "fitted_on": "all subjects",
+  "min_score": 95,
+  "n_videos": 31,
+  "n_subjects": 13
+ }
+}

@@ -1,0 +1,61 @@
+{
+ "ref": {
+  "n": 84,
+  "duration_s": 2.7666666666666666,
+  "channels": [
+   "shoulder_elevation",
+   "elbow_extension",
+   "trunk_lateral_lean",
+   "shoulder_asymmetry"
+  ],
+  "main": "shoulder_elevation",
+  "rom": 153.98205873679166,
+  "excursion": 133.0685306218504,
+  "peak": 152.9951804777416,
+  "n_pt_reps": 4,
+  "pt_durations_s": [
+   3.066666666666667,
+   2.8,
+   2.6,
+   2.6666666666666665
+  ],
+  "file": "Circumduction.mp4",
+  "ref_id": "Circumduction",
+  "side": "right",
+  "pt_reps_used": 4
+ },
+ "lib": {
+  "F": {
+   "n_reps": 412,
+   "rom_mu": 157.02170930676866,
+   "rom_sd": 11.160139482353653,
+   "speed_mu": 0.6410216821801878,
+   "speed_sd": 0.30236020652881285,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 390,
+   "rom_mu": 149.99851624198894,
+   "rom_sd": 16.120139793637186,
+   "speed_mu": 0.6112714676645301,
+   "speed_sd": 0.3202685585516359,
+   "rom_bias": -7.0231930647797185
+  },
+  "R": {
+   "n_reps": 421,
+   "rom_mu": 141.28349432739634,
+   "rom_sd": 14.702445891426873,
+   "speed_mu": 0.6606172340733647,
+   "speed_sd": 0.32376170868920356,
+   "rom_bias": -15.738214979372316
+  }
+ },
+ "meta": {
+  "exercise": "E05",
+  "file": "Circumduction.mp4",
+  "fitted_on": "all subjects",
+  "min_score": 95,
+  "n_videos": 131,
+  "n_subjects": 15
+ }
+}

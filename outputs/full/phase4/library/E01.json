@@ -1,0 +1,60 @@
+{
+ "ref": {
+  "n": 112,
+  "duration_s": 3.7,
+  "channels": [
+   "shoulder_elevation",
+   "elbow_extension",
+   "contralateral_elevation",
+   "trunk_lateral_lean",
+   "shoulder_asymmetry"
+  ],
+  "main": "shoulder_elevation",
+  "rom": 161.27897616511189,
+  "excursion": 142.37496265578773,
+  "peak": 160.26416650138063,
+  "n_pt_reps": 2,
+  "pt_durations_s": [
+   4.233333333333333,
+   3.2
+  ],
+  "file": "Abduction .mp4",
+  "ref_id": "Abduction",
+  "side": "right",
+  "pt_reps_used": 2
+ },
+ "lib": {
+  "F": {
+   "n_reps": 195,
+   "rom_mu": 163.62925257543057,
+   "rom_sd": 7.713996329831872,
+   "speed_mu": 0.6144787456379731,
+   "speed_sd": 0.2985214303607003,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 124,
+   "rom_mu": 151.36157210338826,
+   "rom_sd": 26.873852461589742,
+   "speed_mu": 0.5660757761487618,
+   "speed_sd": 0.19435771476906438,
+   "rom_bias": -12.267680472042315
+  },
+  "R": {
+   "n_reps": 121,
+   "rom_mu": 137.1661965919663,
+   "rom_sd": 36.174549474012096,
+   "speed_mu": 0.630038313519789,
+   "speed_sd": 0.2764770441588078,
+   "rom_bias": -26.463055983464272
+  }
+ },
+ "meta": {
+  "exercise": "E01",
+  "file": "Abduction .mp4",
+  "fitted_on": "all subjects",
+  "min_score": 95,
+  "n_videos": 47,
+  "n_subjects": 18
+ }
+}

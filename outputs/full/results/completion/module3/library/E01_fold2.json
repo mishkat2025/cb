@@ -1,0 +1,89 @@
+{
+ "ref": {
+  "n": 112,
+  "duration_s": 3.7,
+  "channels": [
+   "shoulder_elevation",
+   "elbow_extension",
+   "contralateral_elevation",
+   "trunk_lateral_lean",
+   "shoulder_asymmetry",
+   "angvel",
+   "emb_dist"
+  ],
+  "main": "shoulder_elevation",
+  "rom": 161.27897616511189,
+  "excursion": 142.37496265578773,
+  "peak": 160.26416650138063,
+  "n_pt_reps": 2,
+  "pt_durations_s": [
+   4.233333333333333,
+   3.2
+  ],
+  "file": "Abduction .mp4",
+  "ref_id": "Abduction",
+  "side": "right",
+  "pt_reps_used": 2,
+  "pt_pre_path": "data/full/cache/pre_ref/Abduction.npz",
+  "spans": [
+   [
+    12,
+    139,
+    "right"
+   ],
+   [
+    174,
+    270,
+    "right"
+   ]
+  ]
+ },
+ "lib": {
+  "F": {
+   "n_reps": 138,
+   "rom_mu": 163.83622429065602,
+   "rom_sd": 9.046095972086666,
+   "speed_mu": 0.6318266713002622,
+   "speed_sd": 0.3337390348480722,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 104,
+   "rom_mu": 150.0659534006493,
+   "rom_sd": 29.080169187175084,
+   "speed_mu": 0.5818253793893013,
+   "speed_sd": 0.19765092718315044,
+   "rom_bias": -13.770270890006714
+  },
+  "R": {
+   "n_reps": 101,
+   "rom_mu": 133.91567452246642,
+   "rom_sd": 38.74809703378252,
+   "speed_mu": 0.662105785517775,
+   "speed_sd": 0.2849958646776809,
+   "rom_bias": -29.920549768189602
+  }
+ },
+ "meta": {
+  "exercise": "E01",
+  "file": "Abduction .mp4",
+  "fitted_on": "fold 2 training subjects",
+  "min_score": 95,
+  "fold": 2,
+  "test_subjects": [
+   "P01",
+   "P02",
+   "P07",
+   "P08",
+   "P22",
+   "P27",
+   "P32",
+   "P34",
+   "P52",
+   "P62"
+  ],
+  "alignment": "cvdc_embedding (proposed_j1, perex_gkf5 fold 2)",
+  "n_videos": 37,
+  "n_subjects": 14
+ }
+}

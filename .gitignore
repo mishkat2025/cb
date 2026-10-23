@@ -1,7 +1,8 @@
-# data, keypoints, model weights, run artefacts: never committed (videos show faces)
-/data/
-/outputs/
-/runs/
+# data, keypoints, model weights, run artefacts: not committed (videos show faces), except the files the demo needs,
+# allow-listed at the end of this file
+/data/*
+/outputs/*
+/runs/*
 /checkpoints/
 *.mp4
 *.avi
@@ -15,6 +16,9 @@
 *.tflite
 *.onnx
 
+# the MobiPhysio dataset, if placed inside the repo (README "Dataset"): never committed
+/dataset/
+
 # python / tooling
 __pycache__/
 *.pyc
@@ -25,3 +29,49 @@ __pycache__/
 
 # third-party code fetched for wrappers (no licence / not ours): never committed
 /third_party/
+
+# ---- shipped so a fresh clone runs the demo out of the box (README "Quick start"); keypoints and tables only ----
+# MediaPipe Pose and Hands models (Apache-2.0, Google)
+!/data/models/
+/data/models/*
+!/data/models/pose_landmarker_full.task
+!/data/models/hand_landmarker.task
+# video index, rep tables and the PT demos' preprocessed skeletons (derived from MobiPhysio, CC0)
+!/data/full/
+/data/full/*
+!/data/full/index.csv
+!/data/full/index_ref.csv
+!/data/full/reps.csv
+!/data/full/reps_ref.csv
+!/data/full/cache/
+/data/full/cache/*
+!/data/full/cache/pre_ref/
+!/data/full/cache/pre_ref/*.npz
+# Module III libraries: rule-based (E01-E09) and the completed one with the CVDC model (E01-E04, one per fold)
+!/outputs/full/
+/outputs/full/*
+!/outputs/full/phase4/
+/outputs/full/phase4/*
+!/outputs/full/phase4/library/
+!/outputs/full/phase4/library/**
+!/outputs/full/results/
+/outputs/full/results/*
+!/outputs/full/results/completion/
+/outputs/full/results/completion/*
+!/outputs/full/results/completion/module3/
+/outputs/full/results/completion/module3/*
+!/outputs/full/results/completion/module3/library/
+!/outputs/full/results/completion/module3/library/**
+# trained weights of the demo's model: Proposed (CVDC, lambda 1.0), one per exercise and GroupKFold-5 fold
+!/runs/full/
+/runs/full/*
+!/runs/full/perex_gkf5/
+/runs/full/perex_gkf5/*
+!/runs/full/perex_gkf5/E0?/
+/runs/full/perex_gkf5/E0?/*
+!/runs/full/perex_gkf5/E0?/proposed_j1/
+/runs/full/perex_gkf5/E0?/proposed_j1/*/*
+!/runs/full/perex_gkf5/E0?/proposed_j1/fold?/embeddings_final.npz
+!/runs/full/perex_gkf5/E0?/proposed_j1/fold?/finetune/
+/runs/full/perex_gkf5/E0?/proposed_j1/fold?/finetune/*
+!/runs/full/perex_gkf5/E0?/proposed_j1/fold?/finetune/best.pt

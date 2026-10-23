@@ -1,0 +1,85 @@
+{
+ "ref": {
+  "n": 68,
+  "duration_s": 2.2333333333333334,
+  "channels": [
+   "horizontal_adduction",
+   "shoulder_elevation",
+   "elbow_extension",
+   "contralateral_elevation",
+   "trunk_lateral_lean",
+   "shoulder_asymmetry",
+   "angvel",
+   "emb_dist"
+  ],
+  "main": "horizontal_adduction",
+  "rom": 150.94403946647958,
+  "excursion": 185.10694731752508,
+  "peak": 150.73750221290067,
+  "n_pt_reps": 2,
+  "pt_durations_s": [
+   2.2666666666666666,
+   2.2
+  ],
+  "file": "Aduction.mp4",
+  "ref_id": "Aduction",
+  "side": "right",
+  "pt_reps_used": 2,
+  "pt_pre_path": "data/full/cache/pre_ref/Aduction.npz",
+  "spans": [
+   [
+    3,
+    71,
+    "right"
+   ],
+   [
+    104,
+    170,
+    "right"
+   ]
+  ]
+ },
+ "lib": {
+  "F": {
+   "n_reps": 214,
+   "rom_mu": 139.95997904316326,
+   "rom_sd": 13.276785622797878,
+   "speed_mu": 0.2835866600031658,
+   "speed_sd": 0.2564891836804174,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 116,
+   "rom_mu": 97.50297469891913,
+   "rom_sd": 13.767479465910629,
+   "speed_mu": 0.28283283578223384,
+   "speed_sd": 0.22560927330217517,
+   "rom_bias": -42.457004344244126
+  },
+  "R": {
+   "n_reps": 70,
+   "rom_mu": 48.729442552176856,
+   "rom_sd": 54.55082441459222,
+   "speed_mu": 0.1515581351742973,
+   "speed_sd": 0.2635247075663243,
+   "rom_bias": -91.2305364909864
+  }
+ },
+ "meta": {
+  "exercise": "E02",
+  "file": "Aduction.mp4",
+  "fitted_on": "fold 2 training subjects",
+  "min_score": 95,
+  "fold": 2,
+  "test_subjects": [
+   "P01",
+   "P02",
+   "P07",
+   "P08",
+   "P22"
+  ],
+  "alignment": "cvdc_embedding (proposed_j1, perex_gkf5 fold 2)",
+  "n_videos": 45,
+  "n_subjects": 11
+ }
+}

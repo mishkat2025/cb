@@ -1,0 +1,58 @@
+{
+ "ref": {
+  "n": 360,
+  "duration_s": 11.966666666666667,
+  "channels": [
+   "wrist_extension",
+   "elbow_extension",
+   "shoulder_elevation"
+  ],
+  "main": "wrist_extension",
+  "rom": 74.27081929029163,
+  "excursion": 71.74936572006786,
+  "peak": 59.46038703882222,
+  "n_pt_reps": 2,
+  "pt_durations_s": [
+   14.066666666666666,
+   9.9
+  ],
+  "file": "Wrist Extension.mp4",
+  "ref_id": "Wrist_Extension",
+  "side": "left",
+  "pt_reps_used": 2
+ },
+ "lib": {
+  "F": {
+   "n_reps": 711,
+   "rom_mu": NaN,
+   "rom_sd": NaN,
+   "speed_mu": 2.215764549871242,
+   "speed_sd": 0.4130548216319779,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 595,
+   "rom_mu": 62.090722788957585,
+   "rom_sd": 25.37629481647459,
+   "speed_mu": 2.2014921035034996,
+   "speed_sd": 0.41610783579653077,
+   "rom_bias": NaN
+  },
+  "R": {
+   "n_reps": 670,
+   "rom_mu": 61.751077608884955,
+   "rom_sd": 30.160667436423513,
+   "speed_mu": 2.21656489448313,
+   "speed_sd": 0.39620181273209937,
+   "rom_bias": NaN
+  }
+ },
+ "meta": {
+  "exercise": "E06",
+  "file": "Wrist Extension.mp4",
+  "fitted_on": "all subjects",
+  "min_score": 95,
+  "n_videos": 243,
+  "n_subjects": 22
+ }
+}

@@ -1,0 +1,59 @@
+{
+ "ref": {
+  "n": 178,
+  "duration_s": 5.9,
+  "channels": [
+   "hip_flexion",
+   "knee_flexion",
+   "hip_flexion_asymmetry",
+   "knee_flexion_asymmetry"
+  ],
+  "main": "hip_flexion",
+  "rom": 127.61415147516271,
+  "excursion": 116.92728284776427,
+  "peak": 127.57566984160496,
+  "n_pt_reps": 2,
+  "pt_durations_s": [
+   5.933333333333334,
+   5.866666666666666
+  ],
+  "file": "Both Leg Flection.mp4",
+  "ref_id": "Both_Leg_Flection",
+  "side": "right",
+  "pt_reps_used": 2
+ },
+ "lib": {
+  "F": {
+   "n_reps": 578,
+   "rom_mu": 137.50286749339176,
+   "rom_sd": 14.825560680700779,
+   "speed_mu": 0.7562508739606343,
+   "speed_sd": 0.38433775401151954,
+   "rom_bias": 0.0
+  },
+  "L": {
+   "n_reps": 467,
+   "rom_mu": 129.58815069783185,
+   "rom_sd": 18.151409576746836,
+   "speed_mu": 0.7600843117125643,
+   "speed_sd": 0.3876441321877672,
+   "rom_bias": -7.914716795559912
+  },
+  "R": {
+   "n_reps": 521,
+   "rom_mu": 128.94767577899222,
+   "rom_sd": 16.39851526139687,
+   "speed_mu": 0.7640514399496546,
+   "speed_sd": 0.36746768646572053,
+   "rom_bias": -8.555191714399541
+  }
+ },
+ "meta": {
+  "exercise": "E08",
+  "file": "Both Leg Flection.mp4",
+  "fitted_on": "all subjects",
+  "min_score": 95,
+  "n_videos": 165,
+  "n_subjects": 14
+ }
+}
