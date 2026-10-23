@@ -286,7 +286,7 @@ python scripts/pilot/phase3/report_phase3a.py           # metrics, baselines, VC
 tensorboard --logdir runs/phase3a
 ```
 
-Step (a) ran at commit `05b196d`. Step (a2) changed the config defaults (video head, video batches, T6 weights,
+Step (a) ran at commit `fdf6244`. Step (a2) changed the config defaults (video head, video batches, T6 weights,
 item masks, early-stopping rule, method list, tag `phase3a2`), so reproduce step (a) from that commit.
 
 Single stages: `python -m cvdc.train.pretrain_cvdc --fold K` (CVDC pretraining of one fold) and
