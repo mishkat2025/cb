@@ -18,7 +18,6 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 import tempfile
 import time
@@ -37,6 +36,7 @@ sys.path.insert(0, str(REPO))
 from cvdc.config import load_config, resolve, video_root  # noqa: E402
 from cvdc.data.video import iter_frames  # noqa: E402
 from demo import readable as R  # noqa: E402
+from demo.export_jobs import Registry, check_video  # noqa: E402
 from demo.pipeline import ExerciseModel, OnlineSession, PoseStream, dataset_subject  # noqa: E402
 
 CONFIG = REPO / "configs" / "per_exercise.yaml"
@@ -124,36 +124,46 @@ def assess(path, cfg, ex, view, model, bar):
     return sess
 
 
-def start_export(src, ex, view, model, ghost, out):
-    """demo/live.py --export4 in a separate process (X9), written to a .part file and renamed when it succeeds."""
-    out.parent.mkdir(parents=True, exist_ok=True)
-    part, log = out.with_name(out.stem + ".part.mp4"), out.with_suffix(".log")
+@st.cache_resource
+def exports():
+    """The background exports of this server (X13): one per video at a time, shared by reruns, clicks and tabs."""
+    return Registry()
+
+
+@st.cache_data(show_spinner=False)
+def saved_video_ok(path, mtime_ns, size):
+    """check_video of a saved video, once per version of the file (X13)."""
+    return check_video(path)
+
+
+def export_cmd(src, ex, view, model, ghost):
+    """demo/live.py --export4 (X9); the registry adds the run's own .part file and runs it in a separate process."""
     cmd = [sys.executable, str(REPO / "demo" / "live.py"), "--config", str(CONFIG), "--source", str(src),
-           "--exercise", ex, "--view", view, "--export4", str(part)]
+           "--exercise", ex, "--view", view]
     cmd += ["--method", model.method, "--fold", str(model.fold)] if model is not None else ["--no-model"]
     if ghost:
         cmd.append("--ghost")
-    f = open(log, "w", encoding="utf-8")
-    p = subprocess.Popen(cmd, cwd=str(REPO), stdout=f, stderr=subprocess.STDOUT,
-                         env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"})
-    return {"proc": p, "log_file": f, "part": part, "log": log, "out": out, "t0": time.time()}
+    return cmd
+
+
+def start_export(src, ex, view, model, ghost, out):
+    """(job, started): the export of `out` already under way, or a new one (X13)."""
+    return exports().start(out, export_cmd(src, ex, view, model, ghost), cwd=str(REPO),
+                           env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"})
 
 
 def finish_export(job, status):
-    p = job["proc"]
-    while p.poll() is None:
-        text = job["log"].read_text(encoding="utf-8", errors="replace")
+    """Wait for the export, check that its video decodes, put it in place: (video, error)."""
+    def waiting(j):
+        try:
+            text = j.log.read_text(encoding="utf-8", errors="replace")
+        except OSError:  # renamed by a finished check in another rerun
+            return
         n = max([int(x) for x in re.findall(r"^rep (\d+)", text, re.M)] or [0])
-        status.update(label=f"Making the four-panel video: {time.time() - job['t0']:.0f} s so far, "
-                            f"{n} repetitions drawn")
-        time.sleep(1.0)
-    job["log_file"].close()
-    if p.returncode == 0 and job["part"].exists():
-        job["part"].replace(job["out"])
-        return job["out"], None
-    job["part"].unlink(missing_ok=True)
-    tail = job["log"].read_text(encoding="utf-8", errors="replace").splitlines()[-15:]
-    return None, "\n".join(tail)
+        status.update(label=f"Making the four-panel video: {time.time() - j.t0:.0f} s so far, {n} repetitions drawn")
+
+    return exports().finish(job, on_wait=waiting,
+                            on_check=lambda j: status.update(label="Checking that the four-panel video plays"))
 
 
 EXPORT_VERSION = "x11"  # in the file name, so a video made before the X11 / X12 assessment is never reused
@@ -611,11 +621,22 @@ def main():
                      else "Model: missing (rule-based Module III only)")
             out = resolve(cfg["outputs"]["phase1"]).parent / "demo" / "app" / video_name(name, model, ghost)
             job, video, reused = None, None, False
-            if make_video and out.exists():
-                video, reused = out, True
-            elif make_video:
-                job = start_export(src, ex, view, model, ghost, out)
-                st.write("Four-panel video: started in the background")
+            waiting_note = "Four-panel video: already being made (from an earlier click); waiting for it"
+            if make_video:  # X13: never a second export of a video that is being made; a saved video must decode
+                job = exports().running(out)
+                if job is not None:
+                    st.write(waiting_note)
+                elif out.exists():
+                    stat = out.stat()
+                    ok, msg = saved_video_ok(str(out), stat.st_mtime_ns, stat.st_size)
+                    if ok:
+                        video, reused = out, True
+                    else:
+                        out.unlink(missing_ok=True)
+                        st.write(f"Four-panel video: the saved one is damaged ({msg}), so it is made again")
+                if job is None and video is None:
+                    job, started = start_export(src, ex, view, model, ghost, out)
+                    st.write("Four-panel video: started in the background" if started else waiting_note)
             bar = st.progress(0.0, text="Starting")
             sess = assess(src, cfg, ex, view, model, bar)
             st.write(f"Assessment done: {len(sess.entries)} repetitions")

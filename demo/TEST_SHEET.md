@@ -116,6 +116,11 @@ up to the rep score, angle differences, the network's own outputs marked supplem
 plots, the **Supplementary** section at the end (the network's set score 80.2, its answers and the embedding map; X11),
 the JSON download and the glossary. The app has no model menu (X12): it always runs the proposal's pipeline.
 
+Double-click check (X13, 2026-10-24): pick a video whose four-panel video is not saved yet, press **Assess this
+video**, and press it again ~10 s later. Expected: the second run says `Four-panel video: already being made (from an
+earlier click); waiting for it`, only one report JSON is written to `outputs\full\demo\`, and the saved video plays
+from 0 s. A saved video that does not decode is deleted and made again (`the saved one is damaged ...`).
+
 Problems check (video toggle off, ~30 s): `E02 · Aduction`, **Front**, **Medium light**, **P07** → 14 reps,
 73.3 / model 95.5 (PT 47.6); reps 3, 8, 11 and 13 show `Movement too small (arm movement across the body)` (severe) with
 `Arm height off` and `Too fast`.
